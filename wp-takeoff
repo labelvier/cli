@@ -3,7 +3,7 @@
 # Helper script to run all kind of scripts and commands for the Label Vier Starter Kit (WP Takeoff)
 # Copyright 2022 labelvier
 
-main_function="wp-pilot"
+main_function="wp-takeoff"
 
 # load all functions from the includes directory
 __dir="$(dirname "$0")"
@@ -12,12 +12,13 @@ for file in "$__dir"/inc/*.sh; do
 done
 
 function main() {
-  # check if the script has any arguments. Check if the first argument name matches an existing function. If not, show all possible commands
+  # check if the script has any arguments. Check if the first argument name matches an existing function. If not, show all possible commands except the main function or any function starting with an underscore.
   if [ $# -eq 0 ] || ! declare -f "$1" > /dev/null; then
+    echo "This is the Label Vier Starter Kit (WP Takeoff) cli tool. It helps you to setup a new WordPress project from scratch."
     echo "Usage: $main_function <command> [arguments]"
     echo
     echo "Possible commands:"
-    declare -F | awk '{print $3}' | grep -v main
+    declare -F | awk '{print $3}' | grep -v "^_" | grep -v "^main$" | sed 's/^/  /'
     exit 1
   else
     # run the function with the same name as the first argument

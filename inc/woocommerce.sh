@@ -2,14 +2,10 @@
 
 # Enable woocommerce scss compilation.
 function woocommerce() {
-  # Check if we are in the right directory
-  if [ ! -f "./wp-content/themes/labelvier/src/main.scss" ]; then
-    echo "You are not in the right directory. Please run this command from the root of your theme."
-    exit 1
-  fi
+  _needs_active_wptakeoff_project
 
-  # If second argument is 'add' or 'remove', add or remove the woocommerce styling
-  if [ "$1" = "add" ]; then
+  local possible_arguments=( "add" "remove" )
+  if [ "$1" = ${possible_arguments[0]} ]; then
     echo "Adding woocommerce styling"
     # Remove optionally orphan folder
     git submodule deinit -f ./wp-content/themes/labelvier/src/scss/g-plugins/woocommerce/upstream &> /dev/null || true
@@ -46,7 +42,7 @@ function woocommerce() {
       npm pkg set scripts.dev "git submodule update --remote && $DEV_SCRIPT"
     fi
 
-  elif [ "$1" = "remove" ]; then
+  elif [ "$1" = ${possible_arguments[1]} ]; then
     echo "Removing woocommerce styling"
     # Remove woocommerce styling from the scss file
     # Remove the submodule
@@ -63,7 +59,8 @@ function woocommerce() {
       npm pkg set scripts.dev "${DEV_SCRIPT/git submodule update --remote && /}"
     fi
   else
-    echo "Usage: $main_function woocommerce <add|remove>"
+    # Echo all possible cases for the second argument seperated by a pipe
+    echo "woocommerce | Add or remove woocommerce styling. This will add a submodule to the theme folder. Possible arguments: ${possible_arguments[*]}"
     exit 1
   fi
 }
