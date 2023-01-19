@@ -71,5 +71,29 @@ core() (
     fi
   }
 
+  # @function install
+  # @description Install the CLI on the system
+  function install() {
+    # Check if the CLI is already located in ~/.wp-takeoff
+    if [ -d "$HOME/.wp-takeoff" ]; then
+      echo "The CLI is already installed in $HOME/.wp-takeoff"
+    else
+      # move the CLI to ~/.wp-takeoff
+      mv "$PWD" "$HOME/.wp-takeoff"
+      # Check if the CLI is already in the PATH
+      if [[ ":$PATH:" != *":$HOME/.wp-takeoff:"* ]]; then
+        # Add the CLI to the PATH, check which shell is used
+        if [ -n "$BASH_VERSION" ]; then
+          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >> "$HOME/.bashrc"
+        elif [ -n "$ZSH_VERSION" ]; then
+          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >> "$HOME/.zshrc"
+        fi
+      else
+        echo "The CLI is already present in the PATH"
+      fi
+      echo "The CLI is now installed in $HOME/.wp-takeoff"
+    fi
+  }
+
   main "$@"
 )
