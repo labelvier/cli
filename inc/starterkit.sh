@@ -40,11 +40,13 @@ starterkit() (
     cd $project_name || exit 1
     rm -rf .git
 
-    # Rename the theme folder wp-content/themes/labelvier to the theme name
-    mv wp-content/themes/labelvier wp-content/themes/$theme_name
+    # Rename the theme folder wp-content/themes/labelvier to the theme name (if it's not labelvier)
+    if [[ "$theme_name" != "labelvier" ]]; then
+      mv wp-content/themes/labelvier wp-content/themes/$theme_name
+      # in the example.env file replace the theme name for the lines which start with THEME_FOLDER_NAME DEV_THEME_PATH
+      sed -i '' "s/labelvier/$theme_name/g" example.env
+    fi
 
-    # in the example.env file replace the theme name for the lines which start with THEME_FOLDER_NAME DEV_THEME_PATH
-    sed -i '' "s/labelvier/$theme_name/g" example.env
 
     # Copy the example.env file to .env
     cp example.env .env
@@ -57,6 +59,17 @@ starterkit() (
     git init
     git add .
     git commit -m "Initial commit" > /dev/null
+
+    # Ask if the user already has a remote repository
+    read -p "Do you already have an empty remote repository? (y/n) " remote_repo
+    if [[ "$remote_repo" == "y" ]]; then
+      # Ask for the remote repository url
+      read -p "What is the url of your empty remote repository? " remote_repo_url
+      # Add the remote repository
+      git remote add origin $remote_repo_url
+      # Push the code to the remote repository
+      git push -u origin master
+    fi
 
     echo "Installation complete"
   }
