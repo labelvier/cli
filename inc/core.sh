@@ -49,13 +49,13 @@ core() (
       REMOTE=$(git rev-parse "$UPSTREAM")
       BASE=$(git merge-base @ "$UPSTREAM")
       if [ $LOCAL = $REMOTE ]; then
-          echo "Up-to-date"
+        echo "Up-to-date"
       elif [ $LOCAL = $BASE ]; then
-          echo "Need to pull"
+        echo "Need to pull"
       elif [ $REMOTE = $BASE ]; then
-          echo "Need to push"
+        echo "Need to push"
       else
-          echo "Diverged"
+        echo "Diverged"
       fi
 
       # Check if there are updates available from git and ask if we should pull them
@@ -80,18 +80,46 @@ core() (
     else
       # move the CLI to ~/.wp-takeoff
       mv "$PWD" "$HOME/.wp-takeoff"
-      # Check if the CLI is already in the PATH
-      if [[ ":$PATH:" != *":$HOME/.wp-takeoff:"* ]]; then
-        # Add the CLI to the PATH, check which shell is used
-        if [ -n "$BASH_VERSION" ]; then
-          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >> "$HOME/.bashrc"
-        elif [ -n "$ZSH_VERSION" ]; then
-          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >> "$HOME/.zshrc"
-        fi
+      echo "The CLI is installed in $HOME/.wp-takeoff"
+    fi
+
+    # Check if the CLI is already in the PATH
+    if [[ ":$PATH:" == *"$HOME/.wp-takeoff:"* ]]; then
+      echo "wp-takeoff is already present in the \$PATH variable"
+    else
+      local added_to_path=false
+      # Ask if the user wants to add the CLI to the PATH. Let the user select the shell to add it to.
+      options=("Bash" "Zsh" "Fish" "Cancel")
+      echo "To which shell do you want to add the CLI to the \$PATH variable?"
+      select opt in "${options[@]}"; do
+        case $opt in
+        "Bash")
+          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >>~/.bashrc
+          added_to_path="bash"
+          break
+          ;;
+        "Zsh")
+          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >>~/.zshrc
+          added_to_path="zsh"
+          break
+          ;;
+        "Fish")
+          echo "set -gx PATH \$PATH \$HOME/.wp-takeoff" >>~/.config/fish/config.fish
+          added_to_path="fish"
+          break
+          ;;
+        "Cancel")
+          break
+          ;;
+        *) echo "invalid option $REPLY" ;;
+        esac
+      done
+
+      if [ "$added_to_path" != false ]; then
+        echo "The CLI is added to the \$PATH variable, now restart your $added_to_path shell to use the CLI."
       else
-        echo "The CLI is already present in the PATH"
+        echo "The CLI is not added to the \$PATH variable"
       fi
-      echo "The CLI is now installed in $HOME/.wp-takeoff"
     fi
   }
 
