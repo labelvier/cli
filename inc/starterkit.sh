@@ -32,8 +32,14 @@ starterkit() (
     branch=${branch:-master}
 
     # Ask what the theme name should be
-    read -p "What should the theme name be? (default: labelvier) " theme_name
+    read -p "What should the theme name be? (default: labelvier, don't use spaces) " theme_name
     theme_name=${theme_name:-labelvier}
+
+    # Bail if the theme name has spaces
+    if [[ "$theme_name" =~ " " ]]; then
+      echo "Theme name cannot contain spaces. Exiting."
+      exit 1
+    fi
 
     # Download and install the latest version of the wp-takeoff starter kit with a depth of 1
     git clone -b $branch --single-branch --depth 1 git@bitbucket.org:labelvier/wordpress-starter-kit.git $project_name || exit 1
@@ -45,6 +51,10 @@ starterkit() (
       mv wp-content/themes/labelvier wp-content/themes/$theme_name
       # in the example.env file replace the theme name for the lines which start with THEME_FOLDER_NAME DEV_THEME_PATH
       sed -i '' "s/labelvier/$theme_name/g" example.env
+      # Rename $theme-path: "/wp-content/themes/labelvier" in _variables.scss
+      sed -i '' "s/\$theme-path: \"\/wp-content\/themes\/labelvier\"/\$theme-path: \"\/wp-content\/themes\/$theme_name\"/g" wp-content/themes/$theme_name/src/scss/a-settings/_variables.scss
+      # Rename Theme Name: Labelvier in style.scss
+      sed -i '' "s/Theme Name: Labelvier/Theme Name: $theme_name/g" wp-content/themes/$theme_name/src/scss/style.scss
     fi
 
 
