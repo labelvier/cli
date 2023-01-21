@@ -13,7 +13,7 @@ woocommerce() (
       "$1"
     else
       # if no subcommand is passed, run the documentation function
-      _echo_documentation "inc/$filename"
+      _echo_documentation "$filename"
     fi
   }
 

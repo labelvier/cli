@@ -9,8 +9,10 @@ function _needs_active_wptakeoff_project() {
 }
 
 function _echo_documentation() {
+  # get the current directory name of this file
+  local current_dir=$(dirname "${BASH_SOURCE[0]}")
   # first arguments is the name of the file
-  local contents=$(cat $1)
+  local contents=$(cat "$current_dir/$1")
   # get all lines starting with any whitespace, then # @function and the next line
   local functions=$(echo "$contents" | grep -E "^\s*# @function" -A 1)
   echo "Available functions:"
