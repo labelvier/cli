@@ -4,6 +4,8 @@ core() (
 
   # Local filename to echo the documentation.
   local filename="core.sh"
+  # get the current directory name of this file
+  local current_dir=$(dirname "${BASH_SOURCE[0]}")
 
   # Runs the command.
   function main() {
@@ -24,23 +26,34 @@ core() (
 
   function _run_update_checker() {
     # Check if there are updates available from git and ask if we should pull them
-    if [ -d ".git" ]; then
+    if [ -d "$current_dir/../.git" ]; then
       # echo date minus 12 hours, don't use -d option because it's not available on mac
-      last_update=$(date -u -r .git/FETCH_HEAD +%s)
+      last_git_check="$current_dir/../.last_git_check"
+      if [ ! -f "$last_git_check" ]; then
+        last_update=0;
+      else
+        # check the last time the .last_git_check was touched
+        last_update=$(date -r "$last_git_check" +%s)
+      fi
       now=$(date -u +%s)
       diff=$(($now - $last_update))
 
       # Don't check if we checked in the last 12 hours
-      if [ ! -f ".last_git_check" ] || [ $diff -gt 43200 ]; then
+      twelve_hours=43200;
+      twelve_hours=0
+      if [ $diff -gt $twelve_hours ]; then
         _check_and_ask_for_update
-        touch .last_git_check
+        touch "$last_git_check"
       fi
     fi
   }
 
   function _check_and_ask_for_update() {
     # Check if there are updates available from git and ask if we should pull them
-    if [ -d ".git" ]; then
+    local OLDPWD=$(pwd);
+    if [ -d "$current_dir/../.git" ]; then
+      # Open wp-takeoff dir
+      cd "$current_dir/.."
       # Fetch the latest version
       git fetch
       # Check if remote is ahead of local branch
@@ -48,6 +61,7 @@ core() (
       LOCAL=$(git rev-parse @)
       REMOTE=$(git rev-parse "$UPSTREAM")
       BASE=$(git merge-base @ "$UPSTREAM")
+      echo "Checking for updates..."
       if [ $LOCAL = $REMOTE ]; then
         echo "Up-to-date"
       elif [ $LOCAL = $BASE ]; then
@@ -66,6 +80,9 @@ core() (
           git pull
           echo "Update complete. Please restart the CLI."
           exit 0
+        else
+          # return to old PWD
+          cd "$OLDPWD"
         fi
       fi
     fi
