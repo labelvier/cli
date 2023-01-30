@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2317
 
 release() (
 
@@ -29,7 +30,53 @@ release() (
     local branch=$(git rev-parse --abbrev-ref HEAD)
     if [ $force -eq 0 ] && [ "$branch" != "develop" ]; then
         echo "You are not on the develop branch, use --force to start a release branch from $branch."
-        return 1
+        exit 1
+    fi
+
+
+    local version=0
+    # check if we have $3 and if it not a --variable
+    if [ -n "$3" ] && [[ ! $3 =~ ^--.*$ ]]; then
+        version=$3
+    else
+      echo "No version given, trying to find one."
+      version="0"
+      # check if we have an .env file
+      if [ -f .env ]; then
+        # get the DEV_THEME_PATH from the .env file
+        local dev_theme_path=$(grep DEV_THEME_PATH .env | cut -d '=' -f2)
+        # check if we have a dev_theme_path
+        if [ -n "$dev_theme_path" ]; then
+          dev_theme_path="$(pwd)$dev_theme_path"
+          # check if we have a src/scss/style.scss file in the dev_theme_path
+          if [ -f "$dev_theme_path/src/scss/style.scss" ]; then
+            # get the version from the style.scss file, format is 'Version: 1.0.0'
+            version=$(grep 'Version:' "$dev_theme_path/src/scss/style.scss")
+            # remove the 'Version: ' part with sed
+            version=$(echo $version | sed 's/Version: //')
+            # remove any whitespaces
+            version=$(echo $version | xargs)
+            # check if version is not empty
+            if [ "$version" ]; then
+              echo "Found version $version in $dev_theme_path/src/scss/style.scss"
+            else
+              echo "No version found in $dev_theme_path/src/scss/style.scss"
+            fi
+          else
+            echo "No src/scss/style.scss file found in $dev_theme_path."
+          fi
+        else
+          echo "No DEV_THEME_PATH found in .env file."
+        fi
+      else
+        echo "No .env file found."
+      fi
+
+      # check if $version is not ""
+      if [ "$version" = "0" ]; then
+        echo "No version found, exiting."
+        exit 1
+      fi
     fi
   }
 
@@ -55,7 +102,7 @@ release() (
             echo "version: $version"
         else
             echo "We are not in a release/* branch, exiting."
-            return 1
+            exit 1
         fi
     else
         local version=$1
@@ -64,7 +111,7 @@ release() (
     # Check if we have any open files in the working directory and --force is not set
     if [ $force -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
         echo "You have open files in your working directory, please commit or stash them. Or use --force to ignore this."
-        return 1
+        exit 1
     fi
 
     git checkout master
@@ -90,53 +137,6 @@ release() (
             force=1
         fi
     done
-
-    local version=0
-    # check if we have $3 and if it not a --variable
-    if [ -n "$3" ] && [[ ! $3 =~ ^--.*$ ]]; then
-        version=$3
-    else
-      echo "No version given, trying to find one."
-      version=""
-      # check if we have an .env file
-      if [ -f .env ]; then
-        # get the DEV_THEME_PATH from the .env file
-        local dev_theme_path=$(grep DEV_THEME_PATH .env | cut -d '=' -f2)
-        # check if we have a dev_theme_path
-        if [ -n "$dev_theme_path" ]; then
-          dev_theme_path="$(pwd)$dev_theme_path"
-          # check if we have a src/scss/style.scss file in the dev_theme_path
-          echo "Checking for $dev_theme_path/src/scss/style.scss"
-          if [ -f "$dev_theme_path/src/scss/style.scss" ]; then
-            # get the version from the style.scss file, format is 'Version: 1.0.0'
-            version=$(grep 'Version:' "$dev_theme_path/src/scss/style.scss")
-            # remove the 'Version: ' part with sed
-            version=$(echo $version | sed 's/Version: //')
-            # remove any whitespaces
-            version=$(echo $version | xargs)
-            # check if version is not empty
-            if [ "$version" ]; then
-              echo "Found version $version in $dev_theme_path/src/scss/style.scss"
-            else
-              echo "No version found in $dev_theme_path/src/scss/style.scss"
-            fi
-          else
-            echo "No src/scss/style.scss file found in $dev_theme_path."
-          fi
-        else
-          echo "No DEV_THEME_PATH found in .env file."
-        fi
-      else
-        echo "No .env file found."
-      fi
-
-      # check if $version is not ""
-      if [ "$version" = "" ]; then
-        echo "No version found, exiting."
-        return 1
-      fi
-    fi
-
   }
 
   main "$@"
