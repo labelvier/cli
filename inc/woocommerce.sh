@@ -19,6 +19,8 @@ woocommerce() (
 
   # @function add
   # @description Enable woocommerce scss compilation. Adds a submodule from the woocommerce repository.
+  # @todo Copy woocommerce scss files from the library folder
+  # @todo Install woocommerce as a dependency
   function add() {
     _needs_active_wptakeoff_project
 
