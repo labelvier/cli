@@ -1,9 +1,21 @@
 #!/bin/bash
 
 function _needs_active_wptakeoff_project() {
+  # check if we have an .env file
+  if [ -f .env ]; then
+    # get the DEV_THEME_PATH from the .env file
+      local dev_theme_path=$(grep DEV_THEME_PATH .env | cut -d '=' -f2)
+      # exit if the DEV_THEME_PATH is not set
+      if [ -z "$dev_theme_path" ]; then
+        echo "DEV_THEME_PATH is not set in the .env file"
+        exit 1
+      fi
+  fi
   # Check if we are in the right directory
-  if [ ! -f "./wp-content/themes/labelvier/src/main.scss" ]; then
+  style_path="./$dev_theme_path/src/scss/style.scss"
+  if [ ! -f $style_path ]; then
     echo "You are not in the right directory. Please run this command from the root of your theme."
+    echo $style_path
     exit 1
   fi
 }
