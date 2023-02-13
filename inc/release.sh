@@ -76,7 +76,27 @@ release() (
           echo "No DEV_THEME_PATH found in .env file."
         fi
       else
-        echo "No .env file found."
+        echo "No .env file found. Checking for package.json file."
+        # check if we have a package.json file
+        if [ -f package.json ]; then
+          # get the version from the package.json file
+          version=$(grep version package.json)
+          # remove the 'version: ' part with sed
+          version=$(echo $version | sed 's/"version": "//')
+          # remove the last " with sed
+          version=$(echo $version | sed 's/",//')
+          # remove any whitespaces
+          version=$(echo $version | xargs)
+          # check if version is not empty
+          if [ "$version" ]; then
+            echo "Found version $version in package.json"
+            using_package_json=1
+          else
+            echo "No version found in package.json"
+          fi
+        else
+          echo "No package.json file found."
+        fi
       fi
 
       # check if $version is not ""
@@ -123,6 +143,12 @@ release() (
         # replace the version in the style.scss file
         sed -i '' "s/Version: $oldversion/Version: $version/g" "$dev_theme_path/src/scss/style.scss"
         echo "Updated version in $dev_theme_path/src/scss/style.scss"
+      fi
+
+      if [ "$using_package_json" = "1" ]; then
+        # update the version in the package.json file
+        sed -i '' "s/\"version\": \"$oldversion\"/\"version\": \"$version\"/g" package.json
+        echo "Updated version in package.json"
       fi
 
       # checkout a new branch
