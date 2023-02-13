@@ -26,5 +26,22 @@ function _echo_documentation() {
     # print the name and description
     echo "  $function_name - $function_description"
     read -r line
-  done <<< "$functions"
+  done <<<"$functions"
+}
+
+function _flag_is_present() {
+  flag_to_check="$1"
+  shift
+
+  args=("$@")
+
+  for arg in "${args[@]}"; do
+    echo $arg
+    if [ "$arg" == "--$flag_to_check" ]; then
+      echo "true"
+      return 1
+    fi
+  done
+  echo "false"
+  return 0
 }

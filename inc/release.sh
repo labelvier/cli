@@ -23,12 +23,19 @@ release() (
   }
 
   # @function start
-  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version.
+  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch.
   function start() {
-    _check_force_flag "$@"
+
+    # check if we are in a git repository
+    if [ ! -d .git ]; then
+        echo "You are not in a git repository, exiting."
+        exit 1
+    fi
+
     # check if we are on the develop branch and --force is not set
     local branch=$(git rev-parse --abbrev-ref HEAD)
-    if [ $force -eq 0 ] && [ "$branch" != "develop" ]; then
+
+    if ! _flag_is_present "force" "$@" && [ "$branch" != "develop" ]; then
         echo "You are not on the develop branch, use --force to start a release branch from $branch."
         exit 1
     fi
@@ -77,39 +84,76 @@ release() (
         echo "No version found, exiting."
         exit 1
       fi
+
+      oldversion=$version
+      # check if --minor or --major is set
+      if _flag_is_present "minor" "$@"; then
+        # get the major version
+        local major=$(echo $version | cut -d '.' -f1)
+        # get the minor version
+        local minor=$(echo $version | cut -d '.' -f2)
+        # increase the minor version
+        minor=$((minor+1))
+        # set the version to the new version
+        version="$major.$minor.0"
+      elif _flag_is_present "major" "$@"; then
+        # get the major version
+        local major=$(echo $version | cut -d '.' -f1)
+        # increase the major version
+        major=$((major+1))
+        # set the version to the new version
+        version="$major.0.0"
+      else
+        # get the major version
+        local major=$(echo $version | cut -d '.' -f1)
+        # get the minor version
+        local minor=$(echo $version | cut -d '.' -f2)
+        # get the patch version
+        local patch=$(echo $version | cut -d '.' -f3)
+        # increase the patch version
+        patch=$((patch+1))
+        # set the version to the new version
+        version="$major.$minor.$patch"
+      fi
+
+      echo "New version: $version"
+
+      # update the version in the style.scss file
+      if [ -f "$dev_theme_path/src/scss/style.scss" ]; then
+        # replace the version in the style.scss file
+        sed -i '' "s/Version: $oldversion/Version: $version/g" "$dev_theme_path/src/scss/style.scss"
+        echo "Updated version in $dev_theme_path/src/scss/style.scss"
+      fi
+
+      # checkout a new branch
+      git checkout -b release/$version
     fi
   }
 
   # @function finish
   # @description Merges the release branch into master and develop, and tags the release.
   function finish() {
-    # Check if the force flag is set
-    echo "$@"
-    # echo all arguments
-    for word in "$@"; do echo $word; done
-    _check_force_flag "$@"
+    # check if we are in a git repository
+    if [ ! -d .git ]; then
+        echo "You are not in a git repository, exiting."
+        exit 1
+    fi
 
-
-    # check if we have a version which is not --force or empty
-    if [ -z "$1" ] || [ "$1" = "--force" ]; then
-        # If not check if we have a git branch with a version
-        local branch=$(git rev-parse --abbrev-ref HEAD)
-        echo "branch: $branch"
-        # Check if we are in a release/* branch
-        if [[ $branch =~ ^.*release\/.*$ ]]; then
-            # Extract the version from the branch name, last part after the last /
-            local version=${branch##*/}
-            echo "version: $version"
-        else
-            echo "We are not in a release/* branch, exiting."
-            exit 1
-        fi
+    # If not check if we have a git branch with a version
+    local branch=$(git rev-parse --abbrev-ref HEAD)
+    echo "branch: $branch"
+    # Check if we are in a release/* branch
+    if [[ $branch =~ ^.*release\/.*$ ]]; then
+        # Extract the version from the branch name, last part after the last /
+        local version=${branch##*/}
+        echo "version: $version"
     else
-        local version=$1
+        echo "We are not in a release/* branch, exiting."
+        exit 1
     fi
 
     # Check if we have any open files in the working directory and --force is not set
-    if [ $force -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
+    if ! _flag_is_present "force" "$@" && [ -n "$(git status --porcelain)" ]; then
         echo "You have open files in your working directory, please commit or stash them. Or use --force to ignore this."
         exit 1
     fi
@@ -125,18 +169,6 @@ release() (
     git push
 
     git branch -d $branch
-  }
-
-  _check_force_flag() {
-    # Check if the force flag is set
-    force=0
-    # loop to all arguments and check if --force is present
-    for i in "$@"
-    do
-        if [ "$i" = "--force" ]; then
-            force=1
-        fi
-    done
   }
 
   main "$@"
