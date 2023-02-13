@@ -42,18 +42,19 @@ function _echo_documentation() {
 }
 
 function _flag_is_present() {
+  # first argument is the flag we are looking for
   flag_to_check="$1"
   shift
-
   args=("$@")
 
+  # loop through all arguments
   for arg in "${args[@]}"; do
-    echo $arg
+    # check if the argument is the flag we are looking for
     if [ "$arg" == "--$flag_to_check" ]; then
-      echo "true"
-      return 1
+      # if it is, return 0 (true)
+      return 0
     fi
   done
-  echo "false"
-  return 0
+  # if we get here, the flag was not found
+  return 1
 }
