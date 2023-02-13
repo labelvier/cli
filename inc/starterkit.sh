@@ -49,12 +49,12 @@ starterkit() (
     # Rename the theme folder wp-content/themes/labelvier to the theme name (if it's not labelvier)
     if [[ "$theme_name" != "labelvier" ]]; then
       mv wp-content/themes/labelvier wp-content/themes/$theme_name
-      # in the example.env file replace the theme name for the lines which start with THEME_FOLDER_NAME DEV_THEME_PATH
-      sed -i '' "s/labelvier/$theme_name/g" example.env
+      # in the example.env file replace the theme name for the lines which start with THEME_FOLDER_NAME DEV_THEME_PATH ubuntu and mac friendly
+      sed -i.bak "s/labelvier/$theme_name/g" example.env && rm example.env.bak
       # Rename $theme-path: "/wp-content/themes/labelvier" in _variables.scss
-      sed -i '' "s/\$theme-path: \"\/wp-content\/themes\/labelvier\"/\$theme-path: \"\/wp-content\/themes\/$theme_name\"/g" wp-content/themes/$theme_name/src/scss/a-settings/_variables.scss
+      sed -i.bak "s/\$theme-path: \"\/wp-content\/themes\/labelvier\"/\$theme-path: \"\/wp-content\/themes\/$theme_name\"/g" wp-content/themes/$theme_name/src/scss/a-settings/_variables.scss && rm wp-content/themes/$theme_name/src/scss/a-settings/_variables.scss.bak
       # Rename Theme Name: Labelvier in style.scss
-      sed -i '' "s/Theme Name: Labelvier/Theme Name: $theme_name/g" wp-content/themes/$theme_name/src/scss/style.scss
+      sed -i.bak "s/Theme Name: Labelvier/Theme Name: $theme_name/g" wp-content/themes/$theme_name/src/scss/style.scss && rm wp-content/themes/$theme_name/src/scss/style.scss.bak
     fi
 
 
