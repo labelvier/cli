@@ -128,12 +128,22 @@ release() (
         local major=$(echo $version | cut -d '.' -f1)
         # get the minor version
         local minor=$(echo $version | cut -d '.' -f2)
-        # get the patch version
-        local patch=$(echo $version | cut -d '.' -f3)
-        # increase the patch version
-        patch=$((patch+1))
-        # set the version to the new version
-        version="$major.$minor.$patch"
+        # get the patch version from the last dot untill a space
+        local patch=$(echo $version | cut -d '.' -f3 | cut -d ' ' -f1)
+        # check if there is a space in the version
+        if [[ $version == *" "* ]]; then
+          # get the first part untill a space and save the remainder of the string (if there is a space)
+          local remainder=$(echo $version | cut -d ' ' -f2-)
+          # increase the patch version
+          patch=$((patch+1))
+          # set the version to the new version
+          version="$major.$minor.$patch $remainder"
+        else
+          # increase the patch version
+          patch=$((patch+1))
+          # set the version to the new version
+          version="$major.$minor.$patch"
+        fi
       fi
 
       echo "New version: $version"
@@ -151,8 +161,8 @@ release() (
         echo "Updated version in package.json"
       fi
 
-      # checkout a new branch
-      git checkout -b release/$version
+      # checkout a new branch, replace spaces with minus
+      git checkout -b "release/${version// /-}"
     fi
   }
 
