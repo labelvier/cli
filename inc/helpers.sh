@@ -58,3 +58,17 @@ function _flag_is_present() {
   # if we get here, the flag was not found
   return 1
 }
+
+function _is_semantic_version() {
+  # first argument is the version we are checking
+  local version="$1"
+  # get the first part till an optional space or dash
+  local first_part=$(echo "$version" | cut -d' ' -f1 | cut -d'-' -f1)
+  # check if the version is a semantic version
+  if [[ $first_part =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    # if it is, return 0 (true)
+    return 0
+  fi
+  # if we get here, the version is not a semantic version
+  return 1
+}

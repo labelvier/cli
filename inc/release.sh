@@ -104,6 +104,12 @@ release() (
         echo "No version found, exiting."
         exit 1
       fi
+      
+      # check if version is semantic
+      if ! _is_semantic_version "$version"; then
+        echo "Version $version is not semantic, exiting."
+        exit 1
+      fi
 
       oldversion=$version
       # check if --minor or --major is set
@@ -128,16 +134,24 @@ release() (
         local major=$(echo $version | cut -d '.' -f1)
         # get the minor version
         local minor=$(echo $version | cut -d '.' -f2)
-        # get the patch version from the last dot untill a space
-        local patch=$(echo $version | cut -d '.' -f3 | cut -d ' ' -f1)
-        # check if there is a space in the version
-        if [[ $version == *" "* ]]; then
-          # get the first part untill a space and save the remainder of the string (if there is a space)
-          local remainder=$(echo $version | cut -d ' ' -f2-)
+        # get the patch version from the last dot untill a space or dash
+        local patch=$(echo $version | cut -d '.' -f3 | cut -d ' ' -f1 | cut -d '-' -f1)
+        # check if there is a space or dash in the version
+        if [[ $version =~ .*[[:space:]].* ]] || [[ $version =~ .*-.* ]]; then
+          # get the first part untill a space and save the remainder of the string (if there is a space or dash)
+          local remainder=$(echo $version | cut -d '.' -f3 | cut -d ' ' -f2 | cut -d '-' -f2)
+          # check if the seperator is a dash or space
+          if [[ $version =~ .*-.* ]]; then
+            # set the seperator to a dash
+            local seperator="-"
+          else
+            # set the seperator to a space
+            local seperator=" "
+          fi
           # increase the patch version
           patch=$((patch+1))
           # set the version to the new version
-          version="$major.$minor.$patch $remainder"
+          version="$major.$minor.$patch$seperator$remainder"
         else
           # increase the patch version
           patch=$((patch+1))
