@@ -28,7 +28,7 @@ starterkit() (
     fi
 
     # Ask which branch to use (default master)
-    read -p "Which branch do you want to use? (default: master) " branch
+    read -p "Which branch from the starter kit do you want to use? (default: master) " branch
     branch=${branch:-master}
 
     # Ask what the theme name should be
@@ -82,7 +82,7 @@ starterkit() (
     read -p "Do you already have an empty remote repository? (y/n) " remote_repo
     if [[ "$remote_repo" == "y" ]]; then
       # Ask for the remote repository url
-      read -p "What is the url of your empty remote repository? " remote_repo_url
+      read -p "What is the url of your empty remote repository? (example: git@bitbucket.org:labelvier/example.git) " remote_repo_url
       # Add the remote repository
       git remote add origin $remote_repo_url
       # Push the code to the remote repository
