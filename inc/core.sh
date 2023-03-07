@@ -61,11 +61,11 @@ core() (
       REMOTE=$(git rev-parse "$UPSTREAM")
       BASE=$(git merge-base @ "$UPSTREAM")
       echo "Checking for updates..."
-      if [ $LOCAL = $REMOTE ]; then
+      if [ "$LOCAL" = "$REMOTE" ]; then
         echo "Up-to-date"
-      elif [ $LOCAL = $BASE ]; then
+      elif [ "$LOCAL" = "$BASE" ]; then
         echo "Need to pull"
-      elif [ $REMOTE = $BASE ]; then
+      elif [ "$REMOTE" = "$BASE" ]; then
         echo "Need to push"
       else
         echo "Diverged"
