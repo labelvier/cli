@@ -166,13 +166,21 @@ release() (
       if [ -f "$dev_theme_path/src/scss/style.scss" ]; then
         # replace the version in the style.scss file
         sed -i '' "s/Version: $oldversion/Version: $version/g" "$dev_theme_path/src/scss/style.scss"
-        echo "Updated version in $dev_theme_path/src/scss/style.scss"
+        message="Updated version in $dev_theme_path/src/scss/style.scss to $version"
+        # commit the changed file
+        git add "$dev_theme_path/src/scss/style.scss"
+        git commit -m "$message"
+        echo "$message"
       fi
 
       if [ "$using_package_json" = "1" ]; then
         # update the version in the package.json file
         sed -i '' "s/\"version\": \"$oldversion\"/\"version\": \"$version\"/g" package.json
-        echo "Updated version in package.json"
+        message="Updated version in package.json to $version"
+        # commit the changed file
+        git add package.json
+        git commit -m "$message"
+        echo "$message"
       fi
 
       # checkout a new branch, replace spaces with minus
