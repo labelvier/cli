@@ -92,5 +92,20 @@ starterkit() (
     echo "Installation complete"
   }
 
+  # @function fix-permissions
+  # @description Fixes the permissions of the project.
+  function fix-permissions() {
+    # Check if there is a docker container running with wordpress in the name
+    wordpress_container=$(docker ps -qf "name=wordpress")
+    if [[ -n "$wordpress_container" ]]; then
+      echo "Fixing permissions...";
+      # Fix the permissions
+      docker exec -it "$wordpress_container" chown -R www-data:www-data /var/www/html
+      echo "Permissions fixed.";
+    else
+      echo "There is no wordpress docker container running. Please start the docker container and try again."
+    fi
+  }
+
   main "$@"
 )
