@@ -44,7 +44,8 @@ command_name() (
   function main() {
     # try to run the subcommand passed as the second argument and that function exists
     if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
-      "$1"
+      # attach any remaining arguments to the function
+      "$1" "${@:2}"
     else
       # if no subcommand is passed, run the documentation function
       _echo_documentation "$filename"
