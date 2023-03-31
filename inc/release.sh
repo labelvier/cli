@@ -161,7 +161,7 @@ release() (
       fi
 
       echo "New version: $version"
-
+      message=""
       # update the version in the style.scss file
       if [ -f "$dev_theme_path/src/scss/style.scss" ]; then
         # replace the version in the style.scss file
@@ -169,8 +169,6 @@ release() (
         message="Updated version in $dev_theme_path/src/scss/style.scss to $version"
         # commit the changed file
         git add "$dev_theme_path/src/scss/style.scss"
-        git commit -m "$message"
-        echo "$message"
       fi
 
       if [ "$using_package_json" = "1" ]; then
@@ -179,12 +177,32 @@ release() (
         message="Updated version in package.json to $version"
         # commit the changed file
         git add package.json
-        git commit -m "$message"
-        echo "$message"
       fi
 
       # checkout a new branch, replace spaces with minus
       git checkout -b "release/${version// /-}"
+      # commit the changed file if messages is not empty
+      if [ "$message" ]; then
+        git commit -m "$message"
+        echo "$message"
+      fi
+    fi
+  }
+
+  # @function start
+  # @description Cancels the release.
+  function cancel() {
+    #check if we are in a release branch, if so delete it
+    local branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ $branch =~ ^.*release\/.*$ ]]; then
+      # ask if we want to delete the branch
+      read -p "Are you sure you want to delete the release branch $branch? [y/N] " -n 1 -r
+      # delete the branch if the answer is y
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        git checkout develop
+        git branch -D $branch
+        echo "Deleted release branch $branch"
+      fi
     fi
   }
 
