@@ -20,8 +20,11 @@ deploy() (
   }
 
   # @function staging
-  # @description deploys the staging branch to the staging environment. Use --all-features to deploy all feature/ branches to staging.
+  # @description merges the current branch to staging branch and deploys the staging branch  to the staging environment. Use --all-features to deploy all feature/ branches to staging.
   function staging() {
+    # get current branch
+    local current_branch=$(git branch --list | grep \* | sed 's/\* //g')
+
     # check if there are any uncommitted changes, if so exit with message
     if [[ $(git status | grep "Changes not staged for commit") ]]; then
       echo "There are uncommitted changes, please commit them and try again"
@@ -34,6 +37,10 @@ deploy() (
     else
       git checkout staging
     fi
+
+    # merge current branch into staging
+    echo "Merge $current_branch into staging"
+    git merge --no-ff --no-edit $current_branch
 
 
     # check if we are on the staging branch, if not exit with message
@@ -55,7 +62,10 @@ deploy() (
       for feature_branch in $feature_branches; do
         # merge the feature branch into staging
         echo "Merge feature/$feature_branch into staging"
-        git merge --no-ff --no-edit feature/$feature_branch
+        # don't merge the current branch because it is already merged
+        if [[ "$feature_branch" != "$current_branch" ]]; then
+          git merge --no-ff --no-edit feature/$feature_branch
+        fi
       done
     else
       # if not, deploy the current branch to staging
