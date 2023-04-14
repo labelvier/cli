@@ -31,6 +31,9 @@ deploy() (
       exit 1
     fi
 
+    # do a fetch to make sure we have the latest changes
+    git fetch
+
     # check if there is a staging branch, if not create it
     if [[ -z $(git branch --list staging) ]]; then
       git checkout -b staging
@@ -51,6 +54,11 @@ deploy() (
 
     # do a pull to make sure we have the latest changes
     git pull origin staging
+
+    # if origin does not have a staging branch, push the staging branch to the remote
+    if [[ -z $(git branch -r --list origin/staging) ]]; then
+      git push origin staging
+    fi
 
     # check if the --all-features flag is passed
     if [[ "$1" == "--all-features" ]]; then
