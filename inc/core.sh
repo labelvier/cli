@@ -139,5 +139,47 @@ core() (
     fi
   }
 
+  # @function alias
+  # @description Alias the CLI to a shorter name you can choose
+  function alias() {
+    # Ask what the user wants to use as an alias
+    echo "What do you want to use as an alias for the CLI?"
+    read -r alias
+    # Ask which shell to add the alias to
+    options=("Bash" "Zsh" "Cancel")
+    echo "To which shell do you want to add the alias?"
+    select opt in "${options[@]}"; do
+      case $opt in
+      "Bash")
+        _add_alias_to_shell "$alias" ".bashrc"
+        break
+        ;;
+      "Zsh")
+        _add_alias_to_shell "$alias" ".zshrc"
+        break
+        ;;
+      "Cancel")
+        break
+        ;;
+      *) echo "invalid option $REPLY" ;;
+      esac
+    done
+  }
+
+  function _add_alias_to_shell() {
+    # Get the correct file
+    local alias=$1
+    local shell_file=$2
+    # Check if the alias is already in the .bashrc or .zshrc file
+    if grep -q "alias $alias=" ~/$shell_file; then
+      echo "The alias $alias is already in use"
+    else
+      # Add the alias to the .bashrc or .zshrc file with line breaks
+      echo "" >>~/$shell_file
+      echo "alias $alias='wp-takeoff'" >>~/$shell_file
+      echo "The alias $alias is added to the $shell_file file, now restart your $shell_file shell to use the CLI."
+    fi
+  }
+
   main "$@"
 )
