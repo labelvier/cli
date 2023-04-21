@@ -189,7 +189,7 @@ release() (
     fi
   }
 
-  # @function start
+  # @function cancel
   # @description Cancels the release.
   function cancel() {
     #check if we are in a release branch, if so delete it
