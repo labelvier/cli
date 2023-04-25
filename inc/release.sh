@@ -247,5 +247,56 @@ release() (
     git branch -d $branch
   }
 
+  # @function merge-features
+  # @description Checks if there are open feature branches and asks to merge them to develop.
+  function merge-features() {
+    # check if we are in a git repository
+    if [ ! -d .git ]; then
+        echo "You are not in a git repository, exiting."
+        exit 1
+    fi
+
+    # check if we are on the develop branch
+    local branch=$(git rev-parse --abbrev-ref HEAD)
+    if [ "$branch" != "develop" ]; then
+        read -p "You are not on the develop branch, do you want to switch to the develop branch? [y/N] " -n 1 -r
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            git checkout develop
+        else
+            echo "Exiting."
+          exit 1
+        fi
+    fi
+
+    # check if we have any open files in the working directory and --force is not set
+    if ! _flag_is_present "force" "$@" && [ -n "$(git status --porcelain)" ]; then
+        echo "You have open files in your working directory, please commit or stash them. Or use --force to ignore this."
+        exit 1
+    fi
+
+    # get all the feature branches
+    local feature_branches=$(git branch | grep feature | sed 's/ //g')
+    # check if there are any feature branches
+    if [ "$feature_branches" ]; then
+        # loop through the feature branches
+        for feature_branch in $feature_branches; do
+            # ask if we want to merge the feature branch
+            echo ""
+            read -p "Do you want to merge $feature_branch to develop (and delete the feature branch)? [y/N] " -n 1 -r
+            # merge the feature branch if the answer is y
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                git checkout $feature_branch
+                git merge develop
+                git checkout develop
+                git merge $feature_branch
+                git branch -d $feature_branch
+                git push
+            fi
+        done
+    else
+        echo "There are no feature branches to merge."
+    fi
+  }
+
   main "$@"
 )
