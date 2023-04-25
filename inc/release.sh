@@ -281,16 +281,15 @@ release() (
         # loop through the feature branches
         for feature_branch in $feature_branches; do
             # ask if we want to merge the feature branch
-            echo ""
             read -p "Do you want to merge $feature_branch to develop (and delete the feature branch)? [y/N] " -n 1 -r
+            # line break
+            echo ""
             # merge the feature branch if the answer is y
             if [[ $REPLY =~ ^[Yy]$ ]]; then
-                git checkout $feature_branch
-                git merge develop
                 git checkout develop
                 git merge $feature_branch
-                git branch -d $feature_branch
                 git push
+                git branch -d $feature_branch
             fi
         done
     else
