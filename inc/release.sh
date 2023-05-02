@@ -22,8 +22,8 @@ release() (
     fi
   }
 
-  # @function start
-  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch.
+  # @function start <optional-version>
+  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file and try to get the version from there. If that fails, we'll exit.
   function start() {
 
     # check if we are in a git repository
@@ -42,9 +42,10 @@ release() (
 
 
     local version=0
-    # check if we have $3 and if it not a --variable
-    if [ -n "$3" ] && [[ ! $3 =~ ^--.*$ ]]; then
-        version=$3
+    # print all arguments
+    # check if we have $1 and if it not a --variable
+    if [ -n "$1" ] && [[ ! $1 =~ ^--.*$ ]]; then
+        version=$1
     else
       echo "No version given, trying to find one."
       version="0"
