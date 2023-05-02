@@ -76,6 +76,8 @@ core() (
         echo "There is an update available for the CLI. Do you want to update? (y/n)"
         read -r answer
         if [ "$answer" == "y" ]; then
+          # echo commits which are not in local branch but on remote
+          git -P log --pretty=oneline --abbrev-commit "$LOCAL".."$REMOTE"
           git pull
           echo "Update complete. Please restart the CLI."
           exit 0
