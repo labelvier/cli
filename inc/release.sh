@@ -45,7 +45,10 @@ release() (
     # print all arguments
     # check if we have $1 and if it not a --variable
     if [ -n "$1" ] && [[ ! $1 =~ ^--.*$ ]]; then
+        echo "Custom version given: $1"
         version=$1
+        # checkout new feature branch
+        git checkout -b "release/$version"
     else
       echo "No version given, trying to find one."
       version="0"
