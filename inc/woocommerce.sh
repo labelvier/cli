@@ -72,6 +72,8 @@ woocommerce() (
     fi
 
     echo "Done"
+    echo "Now go import the woocommerce scss files in the style.scss file"
+    echo "Examples can be found in the starter-kit _library folder"
   }
 
   # @function remove
