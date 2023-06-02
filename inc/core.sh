@@ -183,5 +183,32 @@ core() (
     fi
   }
 
+  # @function generate
+  # @description Generate a new command collection
+  function generate () {
+    # Ask for the command name
+    echo "What is the name of the command collection (i.e. core, release, deploy)?"
+    read -r command_name
+    # Check if there are any characters in the command name that are not allowed for a bash function name / file name
+    if [[ "$command_name" =~ [^a-zA-Z0-9_-] ]]; then
+      echo "The command name can only contain letters, numbers, underscores and dashes"
+      exit 1
+    fi
+    # Copy example.sh.tpl to the command name
+    cp "$current_dir/example.sh.tpl" "$current_dir/$command_name.sh"
+    # Replace the command name in the file
+    sed -i '' "s/global_command_name/$command_name/g" "$current_dir/$command_name.sh"
+    # Ask for the first command name
+    echo "What is the name of the first command (i.e. list, install, deploy)?"
+    read -r first_command_name
+    # Check if there are any characters in the command name that are not allowed for a bash function name / file name
+    if [[ "$first_command_name" =~ [^a-zA-Z0-9_-] ]]; then
+      echo "The command name can only contain letters, numbers, underscores and dashes"
+      exit 1
+    fi
+    # Replace the command name in the file
+    sed -i '' "s/first_command_name/$first_command_name/g" "$current_dir/$command_name.sh"
+  }
+
   main "$@"
 )

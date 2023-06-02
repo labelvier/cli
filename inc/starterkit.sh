@@ -7,6 +7,7 @@ starterkit() (
 
   # Runs the command.
   function main() {
+    echo "Running $this_filename"
     # try to run the subcommand passed as the second argument and that function exists
     if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
       "$1"
