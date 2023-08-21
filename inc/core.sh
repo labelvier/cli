@@ -72,7 +72,7 @@ core() (
       fi
 
       # Check if there are updates available from git and ask if we should pull them
-      if [ $LOCAL != $REMOTE ]; then
+      if [ "$LOCAL" != "$REMOTE" ]; then
         echo "There is an update available for the CLI. Do you want to update? (y/n)"
         read -r answer
         if [ "$answer" == "y" ]; then
