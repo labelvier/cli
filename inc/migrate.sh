@@ -104,12 +104,20 @@ migrate() (
     # ask the SSH credentials for the destination server
     read -p "Enter the domain of the destination server (excluding https://, leave empty for no change): " ssh_domain_destination
     read -p "Enter the SSH username for the destination server: " ssh_username_destination
-    read -p "Enter the SSH hostname for the destination server: " ssh_hostname_destination
-    ssh_hostname_destination=${ssh_hostname_destination:-c124849.sgvps.net}
+    read -p "Enter the SSH hostname for the destination server, leave empty for default (c125667.sgvps.net): " ssh_hostname_destination
+    ssh_hostname_destination=${ssh_hostname_destination:-c125667.sgvps.net}
     read -p "Enter the SSH port for the destination server, leave empty for siteground default (18765): " ssh_port_destination
     ssh_port_destination=${ssh_port_destination:-18765}
     # the default path for siteground is www/$ssh_domain_destination/public_html, where $ssh_domain_destination is excluding http(s)://
-    ssh_dir_destination_default="www/$ssh_domain_destination/public_html"
+    # if $ssh_domain_destination is empty, get the default domain from the source server
+    if [[ -z $ssh_domain_destination ]]; then
+      current_domain=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "wp option get siteurl --path=$ssh_path")
+      # remove http:// or https://
+      current_domain=$(echo "$current_domain" | sed 's/http[s]*:\/\///g')
+      ssh_dir_destination_default="www/$current_domain/public_html"
+    else
+      ssh_dir_destination_default="www/$ssh_domain_destination/public_html"
+    fi
 
     read -p "Enter the SSH path for the destination server, leave empty for siteground default ($ssh_dir_destination_default): " ssh_path_destination
     ssh_path_destination=${ssh_path_destination:-"$ssh_dir_destination_default"}
@@ -350,6 +358,44 @@ migrate() (
   # flush rewrite rules
   echo "Flushing the rewrite rules on the destination server..."
   ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp rewrite flush --path=$ssh_path_destination"
+
+  # check if we are on a multisite with wp site list doesn't return an error
+  is_multisite=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp site list --path=$ssh_path_destination")
+  # if is_multisite doesn't contain 'Error'
+  if [[ $is_multisite != *"Error"* ]]; then
+    # change the .htaccess rewrite rules for multisite
+    echo "Changing the .htaccess rewrite rules for multisite on the destination server..."
+    # change everything between # BEGIN WordPress and # END WordPress to the following
+    # get the current .htaccess file
+    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "cat $ssh_path_destination/.htaccess" >.htaccess
+    # Check if this is a subdomain or subdirectory multisite
+    is_subdomain=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp config get SUBDOMAIN_INSTALL --path=$ssh_path_destination")
+    if [[ "$is_subdomain" == "1" ]]; then
+      # replace everything between # BEGIN WordPress and # END WordPress with the above
+      sed -i '' '/# BEGIN WordPress/,/# END WordPress/c\
+      # BEGIN WordPress\
+      RewriteEngine On\
+      RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\
+      RewriteBase /\
+      RewriteRule ^index\.php$ - [L]\
+      \
+      # add a trailing slash to /wp-admin\
+      RewriteRule ^wp-admin$ wp-admin/ [R=301,L]\
+      \
+      RewriteCond %{REQUEST_FILENAME} -f [OR]\
+      RewriteCond %{REQUEST_FILENAME} -d\
+      RewriteRule ^ - [L]\
+      RewriteRule ^(wp-(content|admin|includes).*) $1 [L]\
+      RewriteRule ^(.*\.php)$ $1 [L]\
+      RewriteRule . index.php [L]\
+      # END WordPress' .htaccess
+    else
+
+    fi
+    # copy the .htaccess file to the destination server
+    scp -o StrictHostKeyChecking=no -P $ssh_port_destination .htaccess "$ssh_username_destination@$ssh_hostname_destination:$ssh_path_destination/.htaccess"
+
+  fi
 
   # ask to delete the migration_config_file file
   if [[ -f "$migration_config_file" ]]; then
