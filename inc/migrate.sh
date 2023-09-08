@@ -56,12 +56,15 @@ migrate() (
     if [[ -f $migration_config_file ]]; then
       source "$migration_config_file";
       echo "A migration is already in progress (from $ssh_hostname to $ssh_hostname_destination), do you want to continue?"
-      select yn in "Yes" "No" "View migration file" "Start new migration"; do
+      select yn in "Yes" "No" "View migration file" "Edit migration file" "Start new migration"; do
         case $yn in
         Yes) break ;;
         No) exit ;;
         "View migration file")
           cat $migration_config_file
+          ;;
+        "Edit migration file")
+          nano $migration_config_file
           ;;
         "Start new migration")
           rm $migration_config_file
@@ -288,6 +291,13 @@ migrate() (
   if [[ $warpdrive_active == "Status: Active" ]]; then
     echo "Deleting the 'warpdrive' plugin on the destination server..."
     ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin delete warpdrive --path=$ssh_path_destination"
+  fi
+
+  echo "Checking if the 'wordpress-starter' plugin is present on the destination server..."
+  wordpress_starter_present=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin list --field=name --path=$ssh_path_destination | grep -o 'wordpress-starter'")
+  if [[ $wordpress_starter_present == "wordpress-starter" ]]; then
+    echo "Deleting the 'wordpress-starter' plugin on the destination server..."
+    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin delete wordpress-starter --path=$ssh_path_destination"
   fi
 
   # loop through inactive plugins on the destination server and ask if they should be deleted, ignored or activated
