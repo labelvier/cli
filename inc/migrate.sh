@@ -282,13 +282,13 @@ migrate() (
   # replace with define( 'WP_DEBUG', false );ini_set('display_errors', '0');
   echo "Checking for display_errors = 0 in the wp-config.php file on the destination server..."
   # check if ini_set('display_errors', '0'); is already in the wp-config.php file on the destination server
-  display_errors=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "grep -o 'ini_set('display_errors', '0');' $ssh_path_destination/wp-config.php")
+  display_errors=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "grep -o \"ini_set('display_errors', 0);\" $ssh_path_destination/wp-config.php")
   if [[ -z $display_errors ]]; then
     # check if define( 'WP_DEBUG', false ); is in the wp-config.php file on the destination server
-    wp_debug=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "grep -o 'define( 'WP_DEBUG', false );' $ssh_path_destination/wp-config.php")
+    wp_debug=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "grep -o \"define( 'WP_DEBUG', false )\" $ssh_path_destination/wp-config.php")
     if [[ -n $wp_debug ]]; then
       # replace define( 'WP_DEBUG', false ); with define( 'WP_DEBUG', false );ini_set('display_errors', '0');
-      echo "Replacing define( 'WP_DEBUG', false ); with define( 'WP_DEBUG', false );ini_set('display_errors', '0'); in the wp-config.php file on the destination server..."
+      echo "Replacing define( 'WP_DEBUG', false ); with define( 'WP_DEBUG', false );ini_set('display_errors', 0); in the wp-config.php file on the destination server..."
       ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "sed -i '' 's/define( 'WP_DEBUG', false );/define( 'WP_DEBUG', false );ini_set('display_errors', '0');/g' $ssh_path_destination/wp-config.php"
     fi
   fi
@@ -361,8 +361,8 @@ migrate() (
 
   # check if we are on a multisite with wp site list doesn't return an error
   is_multisite=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp site list --path=$ssh_path_destination")
-  # if is_multisite doesn't contain 'Error'
-  if [[ $is_multisite != *"Error"* ]]; then
+  # if is_multisite doesn't contain 'Error' and is not empty
+  if [[ $is_multisite != *"Error"* ]] && [[ -n $is_multisite ]]; then
     # change the .htaccess rewrite rules for multisite
     echo "Changing the .htaccess rewrite rules for multisite on the destination server..."
     # change everything between # BEGIN WordPress and # END WordPress to the following
@@ -392,7 +392,8 @@ migrate() (
   RewriteRule ^(.*\.php)$ $1 [L]\
   RewriteRule . index.php [L]\
 \
-# END WordPress Multisite' .htaccess
+# END WordPress Multisite\
+\' .htaccess
     else
       echo "This is a subfolder multisite."
       # replace everything between # BEGIN WordPress and # END WordPress with
@@ -415,7 +416,8 @@ migrate() (
   RewriteRule ^([_0-9a-zA-Z-]+/)?(.*\.php)$ $2 [L]\
   RewriteRule . index.php [L]\
 \
-# END WordPress Multisite' .htaccess
+# END WordPress Multisite\
+\' .htaccess
     fi
     # copy the .htaccess file to the destination server
     scp -o StrictHostKeyChecking=no -P $ssh_port_destination .htaccess "$ssh_username_destination@$ssh_hostname_destination:$ssh_path_destination/.htaccess"
