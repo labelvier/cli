@@ -262,8 +262,8 @@ migrate() (
       if ! grep -q "$key" wp-config.migrated.csv; then
         # clean value, remove ,constant
         value=$(echo "$value" | sed 's/,constant//g')
-        # check if the value is not empty and we have a domain
-        if [[ -n $value ]] && [[ -n $ssh_domain_destination ]]; then
+        # check if the value is not empty and we have a domain and the key is not containing .php
+        if [[ -n $value ]] && [[ -n $ssh_domain_destination ]] && [[ $key != *".php"* ]]; then
           # replace the domain with the new domain
           value=$(echo "$value" | sed "s/$old_domain/$new_domain/g")
         fi
@@ -371,26 +371,51 @@ migrate() (
     # Check if this is a subdomain or subdirectory multisite
     is_subdomain=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp config get SUBDOMAIN_INSTALL --path=$ssh_path_destination")
     if [[ "$is_subdomain" == "1" ]]; then
+      echo "This is a subdomain multisite."
       # replace everything between # BEGIN WordPress and # END WordPress with the above
       sed -i '' '/# BEGIN WordPress/,/# END WordPress/c\
-      # BEGIN WordPress\
-      RewriteEngine On\
-      RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\
-      RewriteBase /\
-      RewriteRule ^index\.php$ - [L]\
-      \
-      # add a trailing slash to /wp-admin\
-      RewriteRule ^wp-admin$ wp-admin/ [R=301,L]\
-      \
-      RewriteCond %{REQUEST_FILENAME} -f [OR]\
-      RewriteCond %{REQUEST_FILENAME} -d\
-      RewriteRule ^ - [L]\
-      RewriteRule ^(wp-(content|admin|includes).*) $1 [L]\
-      RewriteRule ^(.*\.php)$ $1 [L]\
-      RewriteRule . index.php [L]\
-      # END WordPress' .htaccess
+# BEGIN WordPress\
+# Using subdomain network type: https://wordpress.org/documentation/article/htaccess/#multisite \
+\
+  RewriteEngine On\
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\
+  RewriteBase /\
+  RewriteRule ^index\.php$ - [L]\
+  \
+  # add a trailing slash to /wp-admin\
+  RewriteRule ^wp-admin$ wp-admin/ [R=301,L]\
+  \
+  RewriteCond %{REQUEST_FILENAME} -f [OR]\
+  RewriteCond %{REQUEST_FILENAME} -d\
+  RewriteRule ^ - [L]\
+  RewriteRule ^(wp-(content|admin|includes).*) $1 [L]\
+  RewriteRule ^(.*\.php)$ $1 [L]\
+  RewriteRule . index.php [L]\
+\
+# END WordPress Multisite' .htaccess
     else
-
+      echo "This is a subfolder multisite."
+      # replace everything between # BEGIN WordPress and # END WordPress with
+      sed -i '' '/# BEGIN WordPress/,/# END WordPress/c\
+# BEGIN WordPress\
+# Using subfolder network type: https://wordpress.org/documentation/article/htaccess/#multisite \
+\
+  RewriteEngine On\
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\
+  RewriteBase /\
+  RewriteRule ^index\.php$ - [L]\
+  \
+  # add a trailing slash to /wp-admin\
+  RewriteRule ^([_0-9a-zA-Z-]+/)?wp-admin$ $1wp-admin/ [R=301,L]\
+  \
+  RewriteCond %{REQUEST_FILENAME} -f [OR]\
+  RewriteCond %{REQUEST_FILENAME} -d\
+  RewriteRule ^ - [L]\
+  RewriteRule ^([_0-9a-zA-Z-]+/)?(wp-(content|admin|includes).*) $2 [L]\
+  RewriteRule ^([_0-9a-zA-Z-]+/)?(.*\.php)$ $2 [L]\
+  RewriteRule . index.php [L]\
+\
+# END WordPress Multisite' .htaccess
     fi
     # copy the .htaccess file to the destination server
     scp -o StrictHostKeyChecking=no -P $ssh_port_destination .htaccess "$ssh_username_destination@$ssh_hostname_destination:$ssh_path_destination/.htaccess"
