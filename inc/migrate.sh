@@ -289,7 +289,7 @@ migrate() (
     if [[ -n $wp_debug ]]; then
       # replace define( 'WP_DEBUG', false ); with define( 'WP_DEBUG', false );ini_set('display_errors', '0');
       echo "Replacing define( 'WP_DEBUG', false ); with define( 'WP_DEBUG', false );ini_set('display_errors', 0); in the wp-config.php file on the destination server..."
-      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "sed -i '' \"s/define( 'WP_DEBUG', false );/define( 'WP_DEBUG', false );ini_set('display_errors', '0');/g\" $ssh_path_destination/wp-config.php"
+      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "sed -i \"s/define( 'WP_DEBUG', false );/define( 'WP_DEBUG', false );ini_set('display_errors', '0');/g\" $ssh_path_destination/wp-config.php"
     fi
   fi
 
