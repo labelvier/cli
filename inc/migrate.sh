@@ -140,6 +140,21 @@ migrate() (
     source $migration_config_file
   fi
 
+  # ask to save the $migration_config_file file to a profile, check if $migration_profile_name is set
+  if [[ -z "$migration_profile_name" ]]; then
+    read -p "Do you want to save the migration profile? (y/n) " -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      echo ""
+      echo "Saving the migration profile..."
+      read -p "Enter a name for the migration profile: " migration_profile_name
+      echo "migration_profile_name=$migration_profile_name" >>$migration_config_file
+      # create the migration_profiles directory if it does not exist
+      mkdir -p migration_profiles
+      cp $migration_config_file "$__dir/migration_profiles/$migration_profile_name"
+      echo "migration_saved=true" >>"$__dir/migration_profiles/$migration_profile_name"
+    fi
+  fi
+
   # check if the destination server is has a pub key in the .ssh directory
   ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "ls .ssh/id_ed25519.pub" >/dev/null 2>&1
   if [[ $? -ne 0 ]]; then
@@ -154,21 +169,6 @@ migrate() (
     echo "The public key of the destination server is not added to the source server, we'll add it first."
     # add the public key of the destination server to the source server
     ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "echo \"$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "cat .ssh/id_ed25519.pub")\" >> .ssh/authorized_keys"
-  fi
-
-  # ask to save the $migration_config_file file to a profile, check if $migration_profile_name is set
-  if [[ -z "$migration_profile_name" ]]; then
-    read -p "Do you want to save the migration profile? (y/n) " -n 1 -r
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-      echo ""
-      echo "Saving the migration profile..."
-      read -p "Enter a name for the migration profile: " migration_profile_name
-      echo "migration_profile_name=$migration_profile_name" >>$migration_config_file
-      # create the migration_profiles directory if it does not exist
-      mkdir -p migration_profiles
-      cp $migration_config_file "$__dir/migration_profiles/$migration_profile_name"
-      echo "migration_saved=true" >>"$__dir/migration_profiles/$migration_profile_name"
-    fi
   fi
 
   # on the source server, create a new database dump wp db export (directory is set in the $migration_config_file file)
