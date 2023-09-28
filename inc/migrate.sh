@@ -46,6 +46,95 @@ migrate() (
         echo "The migration profile does not exist, please try again."
       fi
     done
+  }
+
+  # @function staging
+  # @description Start a new migration from the localhost to a server.
+  function staging() {
+
+    # check if we have the wordpress and database docker running
+    if [[ -z $(docker ps -q --filter "name=wordpress") ]]; then
+      echo "The wordpress docker is not running, please start it first."
+      exit 1
+    fi
+    if [[ -z $(docker ps -q --filter "name=db") ]]; then
+      echo "The database docker is not running, please start it first."
+      exit 1
+    fi
+    # check if we can run the npm run wp command
+    wp_cli=$(npm run | grep "  db:export");
+    if [[ -z "$wp_cli" ]]; then
+      echo "The npm run db:export command is not available, please run this command from a place where \`npm run db:export\` is available."
+      exit 1
+    fi
+
+    # check if we have an .env file
+    if [ ! -f .env ]; then
+      echo "We need an .env file"
+      exit 1
+    fi
+
+    # load the global variables
+    source .env
+
+    # ssh_path_destination = $DEPLOY_STAGING_SERVER_PATH minus the /wp-content/themes
+    ssh_path_destination=$(echo "$DEPLOY_STAGING_PATH" | sed 's/\/wp-content\/themes//g')
+
+    # Ask if you are sure to overwrite the currently active site on stagin (DEPLOY_STAGING_HOSTNAME)
+    read -p "Are you sure you want to overwrite from $(docker ps --filter "name=wordpress" | awk 'END {print $NF}') to the currently active site on staging ($DEPLOY_STAGING_HOSTNAME)? (y/n) " -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      echo "Let's go!"
+    else
+      exit 1
+    fi
+
+    # ask for the new domain
+    read -p "Enter the domain of the destination server (including https://): " ssh_domain_destination
+    # check if the domain is not empty
+    if [ -z $ssh_domain_destination ]; then
+      echo "We need a domain name"
+      exit 1;
+    fi
+
+    # first run a db export
+    npm run db:export
+
+
+    # copy plugins
+    echo "Copying the plugins to the destination server..."
+    rsync -av -e "ssh -p$DEPLOY_STAGING_PORT -o ConnectTimeout=10" ./wp-content/plugins $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME:$ssh_path_destination/wp-content
+    # copy uploads
+    echo "Copying the uploads to the destination server..."
+    rsync -av -e "ssh -p$DEPLOY_STAGING_PORT -o ConnectTimeout=10" ./wp-content/uploads $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME:$ssh_path_destination/wp-content
+    # copy db
+    echo "Copying the database to the destination server..."
+    rsync -az -e "ssh -p$DEPLOY_STAGING_PORT -o ConnectTimeout=10" ./wp-db-dump/db.sql $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME:$ssh_path_destination
+    # clear external database
+    echo "Clearing the database on the destination server..."
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp db reset --yes --path=$ssh_path_destination"
+    # run db import
+    echo "Importing the database on the destination server..."
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp db import $ssh_path_destination/db.sql --path=$ssh_path_destination"
+    # delete db
+    echo "Deleting the database on the destination server..."
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "rm $ssh_path_destination/db.sql"
+
+    # get the table prefix from local
+
+    echo "Setting the table prefix on the destination server to $DEV_TABLE_PREFIX"
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp config set table_prefix $DEV_TABLE_PREFIX --path=$ssh_path_destination"
+
+    # replace the domain in the database
+    echo "Replacing the domain ${DEV_HOST} on the destination server to $ssh_domain_destination..."
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp search-replace $DEV_HOST $ssh_domain_destination --path=$ssh_path_destination --all-tables"
+
+    # deploy the theme
+    echo "Deploying the theme to the destination server..."
+    npm run deploy-staging
+
+    # done!
+    echo "Done! You can now visit $ssh_domain_destination. Don't forget to reset the admin password on the destination server."
+
 
   }
 
