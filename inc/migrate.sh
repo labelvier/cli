@@ -328,6 +328,9 @@ migrate() (
       ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin activate $inactive_plugin --path=$ssh_path_destination"
       # if the plugin is sg-cachepress run some extra commands
       if [[ $inactive_plugin == "sg-cachepress" ]]; then
+        # TODO for multisite: if wp core is-installed --network ; then wp sg memcached enable && wp site list --field=blog_id --status=active | xargs -I {} sh -c 'wp sg optimize dynamic-cache enable --blog_id={} && wp sg optimize webp enable --blog_id={} && wp sg optimize file-cache enable --blog_id={}' ; else echo "This is not a multisite installation." ; fi
+
+
         # wp sg optimize webp enable
         echo "Enabling the webp optimization on the destination server..."
         ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp sg optimize webp enable --path=$ssh_path_destination"
@@ -392,8 +395,7 @@ migrate() (
   RewriteRule ^(.*\.php)$ $1 [L]\
   RewriteRule . index.php [L]\
 \
-# END WordPress Multisite\
-\' .htaccess
+# END WordPress\' .htaccess
     else
       echo "This is a subfolder multisite."
       # replace everything between # BEGIN WordPress and # END WordPress with
@@ -416,8 +418,8 @@ migrate() (
   RewriteRule ^([_0-9a-zA-Z-]+/)?(.*\.php)$ $2 [L]\
   RewriteRule . index.php [L]\
 \
-# END WordPress Multisite\
-\' .htaccess
+# END WordPress\
+' .htaccess
     fi
     # copy the .htaccess file to the destination server
     scp -o StrictHostKeyChecking=no -P $ssh_port_destination .htaccess "$ssh_username_destination@$ssh_hostname_destination:$ssh_path_destination/.htaccess"
