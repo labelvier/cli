@@ -1,63 +1,40 @@
 # README #
 
-This README would normally document whatever steps are necessary to get your application up and running.
+The WP Takeoff CLI is a command line interface for the WP Takeoff starterkit. It allows you to install the starterkit and manage your WordPress projects, do releases and more.
 
-### What is this repository for? ###
+## Install the wp-takeoff CLI
 
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
+### Run the following command to clone the repository:
 
-### How do I get set up? ###
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+`git clone git@bitbucket.org:labelvier/wp-takeoff-cli.git`
 
-### Contribution guidelines ###
+This will clone the repository to a new directory named `wp-takeoff-cli` in the current directory.
 
-* Writing tests
-* Code review
-* Other guidelines
+Note: If you don't have set up SSH keys for your Bitbucket account, you can use HTTPS instead of SSH to clone the repository. To do this, replace the SSH URL in the `git clone` command with the HTTPS URL.
 
-### Who do I talk to? ###
 
-* Repo owner or admin
-* Other community or team contact
+`git clone https://bitbucket.org/labelvier/wp-takeoff-cli.git`
 
-### Bash inc template ###
+### Install the core for the current repository by running the following command:
 
-```bash
-#!/bin/bash
+`./wp-takeoff core install`
 
-command_name() (
+After the installation you get the option to choose which $PATH variable you want to set and choose the correct option.
 
-  # Local filename to echo the documentation.
-  local filename="filename.sh"
-  # get the current directory name of this file
-  local current_dir=$(dirname "${BASH_SOURCE[0]}")
+From now on you can globally use the `wp-takeoff` command. Hint, if you want to set and alias run the following command:
 
-  # Runs the command.
-  function main() {
-    # try to run the subcommand passed as the second argument and that function exists
-    if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
-      # attach any remaining arguments to the function
-      "$1" "${@:2}"
-    else
-      # if no subcommand is passed, run the documentation function
-      _echo_documentation "$filename"
-    fi
-  }
+`wp-takeoff core alias`
 
-  # @function example
-  # @description description
-  function example() {
-    # do something
-  }
+### Documentation
 
-  main "$@"
-)
-```
+Running `wp-takeoff` will give you a list of all available commands.
+
+Running any command without any arguments will give you a list of all available options for that command. For example, running `wp-takeoff core` will give you a list of all available options for the core command.
+
+### Install the WordPress starterkit
+
+Run this from the folder where all your projects are located.
+
+`wp-takeoff starterkit install`
+

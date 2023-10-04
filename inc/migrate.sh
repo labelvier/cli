@@ -132,8 +132,13 @@ migrate() (
     echo "Deploying the theme to the destination server..."
     npm run deploy-staging
 
+    # reset all users on the external host
+    echo "Resetting all users..."
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp user update --all --user_pass=$(openssl rand -base64 12)"
+
+
     # done!
-    echo "Done! You can now visit $ssh_domain_destination. Don't forget to reset the admin password on the destination server."
+    echo "Done! You can now visit $ssh_domain_destination."\
 
 
   }
