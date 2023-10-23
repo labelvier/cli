@@ -292,7 +292,7 @@ migrate() (
   # copy the database dump to the destination server
   echo "Copying the database dump to the destination server..."
   # run the scp command from the destination server, because the source server does not have a public key for the destination server
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "scp -v -o StrictHostKeyChecking=no  -P $ssh_port $ssh_username@$ssh_hostname:migration_export.sql ./migration_export.sql"
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "scp -o StrictHostKeyChecking=no  -P $ssh_port $ssh_username@$ssh_hostname:migration_export.sql ./migration_export.sql"
   # on the destination server, create a new backup of the database
   echo "Creating a new backup of the database on the destination server..."
   ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp db export migration_backup.sql --path=$ssh_path_destination --allow-root"
