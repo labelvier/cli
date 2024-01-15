@@ -1,3 +1,4 @@
 .*
 !.gitignore
 /migration_profiles/
+/debug.sh
