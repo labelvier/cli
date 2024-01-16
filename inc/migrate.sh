@@ -378,7 +378,7 @@ migrate() (
   # replace with define( 'WP_DEBUG', false );ini_set('display_errors', '0');
   echo "Checking for display_errors = 0 in the wp-config.php file on the destination server..."
   # check if ini_set('display_errors', '0'); is already in the wp-config.php file on the destination server
-  display_errors=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "grep -o \"ini_set('display_errors', 0);\" $ssh_path_destination/wp-config.php")
+  display_errors=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "grep -o \"ini_set('display_errors', '0');\" $ssh_path_destination/wp-config.php")
   if [[ -z "$display_errors" ]]; then
     # check if define( 'WP_DEBUG', false ); is in the wp-config.php file on the destination server
     wp_debug=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "grep -o \"define( 'WP_DEBUG', false )\" $ssh_path_destination/wp-config.php")
