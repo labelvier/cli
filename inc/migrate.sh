@@ -7,6 +7,7 @@ migrate() (
   # get the current directory name of this file
   local current_dir=$(dirname "${BASH_SOURCE[0]}")
   local root_dir=$(pwd)
+  local wp="export PHP_BIN=php80 && wp --allow-root"
   local migration_config_file="$__dir/.migration";
 
   # Runs the command.
@@ -62,8 +63,8 @@ migrate() (
       exit 1
     fi
     # check if we can run the npm run wp command
-    wp_cli=$(npm run | grep "  db:export");
-    if [[ -z "$wp_cli" ]]; then
+    wp=$(npm run | grep "  db:export");
+    if [[ -z "$wp" ]]; then
       echo "The npm run db:export command is not available, please run this command from a place where \`npm run db:export\` is available."
       exit 1
     fi
@@ -111,10 +112,10 @@ migrate() (
     rsync -az -e "ssh -p$DEPLOY_STAGING_PORT -o ConnectTimeout=10" ./wp-db-dump/db.sql $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME:$ssh_path_destination
     # clear external database
     echo "Clearing the database on the destination server..."
-    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp db reset --yes --path=$ssh_path_destination --allow-root"
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "$wp db reset --yes --path=$ssh_path_destination"
     # run db import
     echo "Importing the database on the destination server..."
-    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp db import $ssh_path_destination/db.sql --path=$ssh_path_destination --allow-root"
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "$wp db import $ssh_path_destination/db.sql --path=$ssh_path_destination"
     # delete db
     echo "Deleting the database on the destination server..."
     ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "rm $ssh_path_destination/db.sql"
@@ -122,11 +123,11 @@ migrate() (
     # get the table prefix from local
 
     echo "Setting the table prefix on the destination server to $DEV_TABLE_PREFIX"
-    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp config set table_prefix $DEV_TABLE_PREFIX --path=$ssh_path_destination --allow-root"
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "$wp config set table_prefix $DEV_TABLE_PREFIX --path=$ssh_path_destination"
 
     # replace the domain in the database
     echo "Replacing the domain ${DEV_HOST} on the destination server to $ssh_domain_destination..."
-    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp search-replace $DEV_HOST $ssh_domain_destination --path=$ssh_path_destination --all-tables --allow-root"
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "$wp search-replace $DEV_HOST $ssh_domain_destination --path=$ssh_path_destination --all-tables"
 
     # deploy the theme
     echo "Deploying the theme to the destination server..."
@@ -134,7 +135,7 @@ migrate() (
 
     # reset all users on the external host
     echo "Resetting all users..."
-    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "wp user update --all --user_pass=$(openssl rand -base64 12) --allow-root"
+    ssh -p$DEPLOY_STAGING_PORT $DEPLOY_STAGING_USER@$DEPLOY_STAGING_HOSTNAME "$wp user update --all --user_pass=$(openssl rand -base64 12)"
 
 
     # done!
@@ -202,16 +203,18 @@ migrate() (
     ssh_hostname_destination=${ssh_hostname_destination:-c125667.sgvps.net}
     read -p "Enter the SSH port for the destination server, leave empty for siteground default (18765): " ssh_port_destination
     ssh_port_destination=${ssh_port_destination:-18765}
+
     # the default path for siteground is www/$ssh_domain_destination/public_html, where $ssh_domain_destination is excluding http(s)://
     # if $ssh_domain_destination is empty, get the default domain from the source server
     if [[ -z $ssh_domain_destination ]]; then
-      current_domain=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "wp option get siteurl --path=$ssh_path --allow-root")
+      current_domain=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp option get siteurl --path=$ssh_path")
       # remove http:// or https://
       current_domain=$(echo "$current_domain" | sed 's/http[s]*:\/\///g')
       ssh_dir_destination_default="www/$current_domain/public_html"
     else
       ssh_dir_destination_default="www/$ssh_domain_destination/public_html"
     fi
+    exit;
 
     read -p "Enter the SSH path for the destination server, leave empty for siteground default ($ssh_dir_destination_default): " ssh_path_destination
     ssh_path_destination=${ssh_path_destination:-"$ssh_dir_destination_default"}
@@ -270,46 +273,45 @@ migrate() (
   echo "Creating a new database dump on the source server..."
 
   # check if the wp cli is available on the source server
-  wp_cli="wp --allow-root"
-  wp_cli_version=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "wp --version --allow-root")
+  wp_version=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp --version")
   # if the wp cli version should contain WP-CLI
-  if [[ $wp_cli_version != *"WP-CLI"* ]]; then
+  if [[ $wp_version != *"WP-CLI"* ]]; then
     # try with /opt/plesk/php/8.2/bin/php  /usr/local/bin/wp
-    echo "wp CLI is not available on the source server, trying with /opt/plesk/php/8.2/bin/php  /usr/local/bin/wp --allow-root"
-    wp_cli="/opt/plesk/php/8.2/bin/php  /usr/local/bin/wp"
-    wp_cli_version=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp_cli --version")
-    if [[ $wp_cli_version != *"WP-CLI"* ]]; then
-      echo "wp CLI is not available on the source server, so we cannot start the migration."
+    echo "wp CLI is not available on the source server, trying with /opt/plesk/php/8.2/bin/php  /usr/local/bin/wp"
+    wp="/opt/plesk/php/8.2/bin/php  /usr/local/bin/wp"
+    wp_version=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp --version")
+    if [[ $wp_version != *"WP-CLI"* ]]; then
+      echo "The wp CLI is not available on the source server, so we cannot start the migration."
       exit 1
     fi
   fi
-  echo "wp CLI is available on the source server, version $wp_cli_version"
+  echo "wp CLI is available on the source server, version $wp_version"
 
   # run the wp db export command on the source server
   # check if --skip-database-export is set
   echo "Running the wp db export command on the source server..."
-  ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp_cli db export migration_export.sql --path=$ssh_path --default-character-set=utf8mb4"
+  ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp db export migration_export.sql --path=$ssh_path --default-character-set=utf8mb4"
   # copy the database dump to the destination server
   echo "Copying the database dump to the destination server..."
   # run the scp command from the destination server, because the source server does not have a public key for the destination server
   ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "scp -o StrictHostKeyChecking=no  -P $ssh_port $ssh_username@$ssh_hostname:migration_export.sql ./migration_export.sql"
   # on the destination server, create a new backup of the database
   echo "Creating a new backup of the database on the destination server..."
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp db export migration_backup.sql --path=$ssh_path_destination --allow-root"
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp db export migration_backup.sql --path=$ssh_path_destination"
   # do a wp db reset on the destination server
   echo "Resetting the database on the destination server..."
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp db reset --yes --path=\"$ssh_path_destination\" --allow-root"
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp db reset --yes --path=\"$ssh_path_destination\""
   # on the destination server, import the database dump wp db import (directory is set in the $migration_config_file file)
   echo "Importing the database dump on the destination server..."
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp db import ~/migration_export.sql --path=$ssh_path_destination --allow-root"
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp db import ~/migration_export.sql --path=$ssh_path_destination"
   # delete the database dump on the destination server
   echo "Deleting the database dump on the destination server..."
   ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "rm migration_export.sql"
   # on the destination server, set wp config set table_prefix wp_
   echo "Setting the table prefix on the destination server..."
   # get the table prefix from the source server
-  source_table_prefix=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "wp config get table_prefix --path=$ssh_path --allow-root")
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp config set table_prefix $source_table_prefix --path=$ssh_path_destination --allow-root"
+  source_table_prefix=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp config get table_prefix --path=$ssh_path")
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp config set table_prefix $source_table_prefix --path=$ssh_path_destination"
   # Sync alle thema's bestanden en dergelijke naar nieuwe server
   echo "Syncing the wp-content themes and plugins directories to the destination server..."
   # run this command on the destination server, because the destination server has the private key
@@ -318,17 +320,17 @@ migrate() (
   is_multisite="0"
   if [[ -n $ssh_domain_destination ]]; then
     # get the primary domain from the source server
-    ssh_domain=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp_cli option get siteurl --path=$ssh_path")
+    ssh_domain=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp option get siteurl --path=$ssh_path")
     # remove http:// or https://
     old_domain=$(echo "$ssh_domain" | sed 's/http[s]*:\/\///g')
     new_domain=$(echo "$ssh_domain_destination" | sed 's/\//\\\//g')
     echo "Replacing the domain ($ssh_domain) on the destination server to $ssh_domain_destination..."
-    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp search-replace $ssh_domain https://$ssh_domain_destination --path=$ssh_path_destination --all-tables --allow-root"
+    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp search-replace $ssh_domain https://$ssh_domain_destination --path=$ssh_path_destination --all-tables"
     # do another search and replace for wp_blogs if this is a multisite on the destination server
-    is_multisite=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp config get MULTISITE --path=$ssh_path_destination --allow-root")
+    is_multisite=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp config get MULTISITE --path=$ssh_path_destination")
     if [[ $is_multisite == "1" ]]; then
       echo "Replacing the domain ($ssh_domain) on the destination server to $ssh_domain_destination in the wp_blogs table..."
-      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp search-replace $old_domain $new_domain --url=$old_domain --path=$ssh_path_destination wp_blogs --allow-root"
+      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp search-replace $old_domain $new_domain --url=$old_domain --path=$ssh_path_destination wp_blogs"
     fi
   fi
 
@@ -343,11 +345,11 @@ migrate() (
   # on the destination server, check if there are any new constants in the wp-config.php file
   echo "Checking if there are any missing constants in the wp-config.php file on the destination server..."
   # get all defines from the wp-config.migrated.php file on the destination server
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp config list --format=csv --path=$ssh_path_destination --allow-root" >wp-config.migrated.csv
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp config list --format=csv --path=$ssh_path_destination" >wp-config.migrated.csv
   # get all defines from the wp-config.php file on the source server
-  ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "wp config list --format=csv --path=$ssh_path --allow-root" >wp-config.csv
+  ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp config list --format=csv --path=$ssh_path" >wp-config.csv
   # loop through the defines in the wp-config.php file on the source server
-  ssh_domain=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp_cli option get siteurl --path=$ssh_path")
+  ssh_domain=$(ssh -p "$ssh_port" "$ssh_username@$ssh_hostname" "$wp option get siteurl --path=$ssh_path")
 
   while IFS=, read -r key value; do
     # check if the key is not empty
@@ -363,7 +365,7 @@ migrate() (
         fi
         # add the key to the wp-config.migrated.php file on the destination server when value is not empty
         echo "Adding the $key constant with value $value to the wp-config.php file on the destination server..."
-        ssh -n -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp config set '$key' '$value' --type=constant --path=$ssh_path_destination --allow-root"
+        ssh -n -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp config set '$key' '$value' --type=constant --path=$ssh_path_destination"
       fi
     fi
   done <wp-config.csv
@@ -389,22 +391,22 @@ migrate() (
 
   # check if the 'warpdrive' plugin is active on the destination server, if so deactivate it
   echo "Checking if the 'warpdrive' plugin is active on the destination server..."
-  warpdrive_active=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin status warpdrive --path=$ssh_path_destination --allow-root | grep -o 'Status: Active' | sed -e 's/^[ \t]*//'")
+  warpdrive_active=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin status warpdrive --path=$ssh_path_destination --allow-root | grep -o 'Status: Active' | sed -e 's/^[ \t]*//'")
   if [[ $warpdrive_active == "Status: Active" ]]; then
     echo "Deleting the 'warpdrive' plugin on the destination server..."
-    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin delete warpdrive --path=$ssh_path_destination --allow-root"
+    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin delete warpdrive --path=$ssh_path_destination"
   fi
 
   echo "Checking if the 'wordpress-starter' plugin is present on the destination server..."
-  wordpress_starter_present=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin list --field=name --path=$ssh_path_destination --allow-root | grep -o 'wordpress-starter'")
+  wordpress_starter_present=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin list --field=name --path=$ssh_path_destination --allow-root | grep -o 'wordpress-starter'")
   if [[ $wordpress_starter_present == "wordpress-starter" ]]; then
     echo "Deleting the 'wordpress-starter' plugin on the destination server..."
-    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin delete wordpress-starter --path=$ssh_path_destination --allow-root"
+    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin delete wordpress-starter --path=$ssh_path_destination"
   fi
 
   # loop through inactive plugins on the destination server and ask if they should be deleted, ignored or activated
   # get the list of inactive plugins on the destination server
-  inactive_plugins=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin list --status=inactive --field=name --path=$ssh_path_destination --allow-root")
+  inactive_plugins=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin list --status=inactive --field=name --path=$ssh_path_destination")
   # loop through the inactive plugins
   for inactive_plugin in $inactive_plugins; do
     echo ""
@@ -414,35 +416,35 @@ migrate() (
       # delete the inactive plugin
       echo ""
       echo "Deleting the inactive plugin $inactive_plugin on the destination server..."
-      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin delete $inactive_plugin --path=$ssh_path_destination --allow-root"
+      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin delete $inactive_plugin --path=$ssh_path_destination"
     elif [[ $REPLY =~ ^[Aa]$ ]]; then
       # activate the inactive plugin
       echo ""
       echo "Activating the inactive plugin $inactive_plugin on the destination server..."
-      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin activate $inactive_plugin --path=$ssh_path_destination --allow-root"
+      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin activate $inactive_plugin --path=$ssh_path_destination"
       # if the plugin is sg-cachepress run some extra commands
       if [[ $inactive_plugin == "sg-cachepress" ]]; then
-        # TODO for multisite: if wp core is-installed --network ; then wp sg memcached enable && wp site list --field=blog_id --status=active | xargs -I {} sh -c 'wp sg optimize dynamic-cache enable --blog_id={} && wp sg optimize webp enable --blog_id={} && wp sg optimize file-cache enable --blog_id={}' ; else echo "This is not a multisite installation. --allow-root" ; fi
+        # TODO for multisite: if wp core is-installed --network ; then wp sg memcached enable && wp site list --field=blog_id --status=active | xargs -I {} sh -c 'wp sg optimize dynamic-cache enable --blog_id={} && wp sg optimize webp enable --blog_id={} && wp sg optimize file-cache enable --blog_id={}' ; else echo "This is not a multisite installation." ; fi
 
 
         # wp sg optimize webp enable
         echo "Enabling the webp optimization on the destination server..."
-        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp sg optimize webp enable --path=$ssh_path_destination --allow-root"
+        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp sg optimize webp enable --path=$ssh_path_destination"
         # wp sg optimize dynamic-cache enable
         echo "Enabling the dynamic cache on the destination server..."
-        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp sg optimize dynamic-cache enable --path=$ssh_path_destination --allow-root"
+        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp sg optimize dynamic-cache enable --path=$ssh_path_destination"
         # wp sg optimize file-cache enable
         echo "Enabling the file cache on the destination server..."
-        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp sg optimize file-cache enable --path=$ssh_path_destination --allow-root"
+        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp sg optimize file-cache enable --path=$ssh_path_destination"
         # wp sg memcached enable
         echo "Enabling the memcached on the destination server..."
-        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp sg memcached enable --path=$ssh_path_destination --allow-root"
+        ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp sg memcached enable --path=$ssh_path_destination"
       fi
     elif [[ $REPLY =~ ^[Nn]$ ]]; then
       # activate the inactive plugin network wide
       echo ""
       echo "Activating the inactive plugin $inactive_plugin network wide on the destination server..."
-      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp plugin activate $inactive_plugin --network --path=$ssh_path_destination --allow-root"
+      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp plugin activate $inactive_plugin --network --path=$ssh_path_destination"
     else
       # do nothing
       echo ""
@@ -451,13 +453,13 @@ migrate() (
 
   # on the destination server, clear cache
   echo "Clearing the cache on the destination server..."
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp cache flush --path=$ssh_path_destination --allow-root"
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp cache flush --path=$ssh_path_destination"
   # flush rewrite rules
   echo "Flushing the rewrite rules on the destination server..."
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp rewrite flush --path=$ssh_path_destination --allow-root"
+  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp rewrite flush --path=$ssh_path_destination"
 
   # check if we are on a multisite with wp site list doesn't return an error
-  is_multisite=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp site list --path=$ssh_path_destination --allow-root")
+  is_multisite=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp site list --path=$ssh_path_destination")
   # if is_multisite doesn't contain 'Error' and is not empty
   if [[ $is_multisite != *"Error"* ]] && [[ -n $is_multisite ]]; then
     # change the .htaccess rewrite rules for multisite
@@ -466,7 +468,7 @@ migrate() (
     # get the current .htaccess file
     ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "cat $ssh_path_destination/.htaccess" >.htaccess
     # Check if this is a subdomain or subdirectory multisite
-    is_subdomain=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "wp config get SUBDOMAIN_INSTALL --path=$ssh_path_destination --allow-root")
+    is_subdomain=$(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "$wp config get SUBDOMAIN_INSTALL --path=$ssh_path_destination")
     if [[ "$is_subdomain" == "1" ]]; then
       echo "This is a subdomain multisite."
       # replace everything between # BEGIN WordPress and # END WordPress with the above
