@@ -5,6 +5,14 @@
 
 main_function="wp-takeoff"
 
+# Bash color codes
+__red="\033[0;31m"
+__blue="\033[0;34m"
+__green="\033[0;32m"
+__bold="\033[1m"
+__reset="\033[0m" # Reset to default color
+
+
 # load all functions from the includes directory
 __dir="$(dirname "$0")"
 for file in "$__dir"/inc/*.sh; do
@@ -16,10 +24,13 @@ function main() {
 
   # check if the script has any arguments. Check if the first argument name matches an existing function. If not, show all possible commands except the main function or any function starting with an underscore.
   if [ $# -eq 0 ] || ! declare -f "$1" > /dev/null; then
-    echo "This is the Label Vier Starter Kit (WP Takeoff) cli tool. It helps you to setup a new WordPress project from scratch and to run all kind of scripts and commands for the Label Vier Starter Kit."
-    echo "Usage: $main_function <command> [arguments]"
+    # get the version from the package.json file
+    version=$(core _get_package_version)
+    echo -e "This is the WP Takeoff CLI tool from ${__red}Label Vier${__reset} (version $version). It helps you to setup a new WordPress project from scratch and to run all kind of scripts and commands for the Label Vier Starter Kit."
     echo
-    echo "Possible commands:"
+    echo -e "${__bold}Usage: ${__blue}$main_function <command> [arguments]${__reset}"
+    echo
+    echo -e "${__bold}Possible commands:${__reset}"
     declare -F | awk '{print $3}' | grep -v "^_" | grep -v "^main$" | sed 's/^/  /'
     exit 1
   else

@@ -27,16 +27,16 @@ function _echo_documentation() {
   local contents=$(cat "$current_dir/$1")
   # get all lines starting with any whitespace, then # @function and the next line
   local functions=$(echo "$contents" | grep -E "^\s*# @function" -A 1)
-  echo "Available functions:"
+  echo -e "${__bold}Available functions:${__reset}"
   # loop through all functions
   while read -r line; do
     # get the name of the function
     local function_name=$(echo "$line" | cut -d' ' -f3-)
     # get the description of the function (the next line)
     read -r line
-    local function_description=$(echo "$line" | cut -d' ' -f3-)
+    local function_description=$(echo -e "$line" | cut -d' ' -f3-)
     # print the name and description
-    echo "  $function_name - $function_description"
+    echo -e "  ${__bold}$function_name${__reset} - $function_description"
     read -r line
   done <<<"$functions"
 }

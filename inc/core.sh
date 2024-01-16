@@ -210,5 +210,10 @@ core() (
     sed -i '' "s/first_command_name/$first_command_name/g" "$current_dir/$command_name.sh"
   }
 
+  _get_package_version() {
+    local package_version=$(cat "$current_dir/../package.json" | grep '"version":' | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+    echo "$package_version"
+  }
+
   main "$@"
 )
