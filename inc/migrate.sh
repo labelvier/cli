@@ -214,7 +214,6 @@ migrate() (
     else
       ssh_dir_destination_default="www/$ssh_domain_destination/public_html"
     fi
-    exit;
 
     read -p "Enter the SSH path for the destination server, leave empty for siteground default ($ssh_dir_destination_default): " ssh_path_destination
     ssh_path_destination=${ssh_path_destination:-"$ssh_dir_destination_default"}
