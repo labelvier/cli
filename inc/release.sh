@@ -52,6 +52,7 @@ release() (
     else
       echo "No version given, trying to find one."
       version="0"
+      path="0"
       # check if we have an .env file
       if [ -f .env ]; then
         # get the DEV_THEME_PATH from the .env file
@@ -70,11 +71,27 @@ release() (
             # check if version is not empty
             if [ "$version" ]; then
               echo "Found version $version in $dev_theme_path/src/scss/style.scss"
+              path="$dev_theme_path/src/scss/style.scss"
             else
               echo "No version found in $dev_theme_path/src/scss/style.scss"
             fi
+          # check for style.css in $dev_theme_path
+          elif [ -f "$dev_theme_path/style.css" ]; then
+            # get the version from the style.css file, format is 'Version: 1.0.0'
+            version=$(grep 'Version:' "$dev_theme_path/style.css")
+            # remove the 'Version: ' part with sed
+            version=$(echo $version | sed 's/Version: //')
+            # remove any whitespaces
+            version=$(echo $version | xargs)
+            # check if version is not empty
+            if [ "$version" ]; then
+              echo "Found version $version in $dev_theme_path/style.css"
+              path="$dev_theme_path/style.css"
+            else
+              echo "No version found in $dev_theme_path/style.css"
+            fi
           else
-            echo "No src/scss/style.scss file found in $dev_theme_path."
+            echo "No src/scss/style.scss or style.css file found in $dev_theme_path."
           fi
         else
           echo "No DEV_THEME_PATH found in .env file."
@@ -167,12 +184,12 @@ release() (
       echo "New version: $version"
       message=""
       # update the version in the style.scss file
-      if [ -f "$dev_theme_path/src/scss/style.scss" ]; then
+      if [ -f "$path" ]; then
         # replace the version in the style.scss file
-        sed -i '' "s/Version: $oldversion/Version: $version/g" "$dev_theme_path/src/scss/style.scss"
-        message="Updated version in $dev_theme_path/src/scss/style.scss to $version"
+        sed -i '' "s/Version: $oldversion/Version: $version/g" "$path"
+        message="Updated version in $path to $version"
         # commit the changed file
-        git add "$dev_theme_path/src/scss/style.scss"
+        git add "$path"
       fi
 
       if [ "$using_package_json" = "1" ]; then
