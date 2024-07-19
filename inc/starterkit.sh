@@ -93,6 +93,41 @@ starterkit() (
     echo "Installation complete"
   }
 
+  # @function update
+  # @description Updates the starterkit dependencies.
+  function update() {
+    # Check if we have an .env file
+    if [ -f .env ]; then
+      # get the DEV_THEME_PATH from the .env file
+      local current_dir=$(pwd)
+      local dev_theme_path="$current_dir"$(grep DEV_THEME_PATH .env | cut -d '=' -f2)
+      # exit if the DEV_THEME_PATH is not set
+      if [ -z "$dev_theme_path" ]; then
+        echo "DEV_THEME_PATH is not set in the .env file"
+        exit 1
+      fi
+    else
+      echo "No .env file found"
+      exit 1
+    fi
+
+    # Check if we have an package.json file in the dev theme path
+    if [ ! -f "$dev_theme_path/package.json" ]; then
+      echo "No package.json file found in $dev_theme_path"
+      exit 1
+    fi
+
+    # Run npm update from the dev theme path
+    cd $dev_theme_path
+    echo "Installing the latest version of the starter kit engine..."
+    npm i @labelvier/starter-kit-engine@latest --save-dev
+    echo "Updating the dependencies..."
+    npm update
+
+    # Done!
+    echo "Dependencies updated."
+  }
+
   # @function fix-permissions
   # @description Fixes the permissions of the project.
   function fix-permissions() {
