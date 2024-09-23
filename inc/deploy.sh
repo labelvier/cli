@@ -41,6 +41,9 @@ deploy() (
       git checkout staging
     fi
 
+    # do a pull to make sure we have the latest changes
+    git pull origin staging
+
     # merge current branch into staging
     echo "Merge $current_branch into staging"
     git merge --no-ff --no-edit $current_branch
@@ -51,9 +54,6 @@ deploy() (
       echo "You are not on the staging branch, please check any errors and try again"
       exit 1
     fi
-
-    # do a pull to make sure we have the latest changes
-    git pull origin staging
 
     # if origin does not have a staging branch, push the staging branch to the remote
     if [[ -z $(git branch -r --list origin/staging) ]]; then
