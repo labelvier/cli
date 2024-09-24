@@ -71,7 +71,7 @@ starterkit() (
     if [[ "$woocommerce" == "y" ]]; then
       # Install woocommerce
       echo "Adding woocommerce support..."
-      woocomerce add
+      woocommerce add
     fi
 
     # Create a new git repository (don't output the output)
