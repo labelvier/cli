@@ -1,0 +1,44 @@
+#!/bin/bash
+
+cron() (
+
+  # Local filename to echo the documentation.
+  local filename="cron.sh"
+  # get the current directory name of this file
+  local current_dir=$(dirname "${BASH_SOURCE[0]}")
+
+  # Runs the command.
+  function main() {
+    # try to run the subcommand passed as the second argument and that function exists
+    if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
+      # attach any remaining arguments to the function
+      "$1" "${@:2}"
+    else
+      # if no subcommand is passed, run the documentation function
+      _echo_documentation "$filename"
+    fi
+  }
+
+  # @function deploy
+  # @description Description
+  function deploy() {
+    # Check if we have a second argument
+    if [ $# -eq 0 ]; then
+      echo "Please provide a ssh host to deploy to."
+      exit 1
+    else
+      SSH=$1
+      # try to login to $1 and travel to the project folder
+      # find the project folder
+      WP_PATH=$(ssh $SSH "find /home/customer/www/*/public_html -maxdepth 0")
+      ssh $SSH "cd $WP_PATH && wp config set DISABLE_WP_CRON true --raw"
+      # upload the run_cron_jobs.sh.tpl file to the server
+      scp $current_dir/../templates/run_cron_jobs.sh.tpl $SSH:/home/customer/
+      # echo information that you now need to add the following cronjob to the server
+      echo -e "${__green}${__bold}Success!${__reset} ${__bold}Add the following cronjob to the server:${__reset}"
+      echo -e "${__blue}*/5 * * * * /bin/bash /home/customer/run_cron_jobs.sh.tpl${__reset}"
+    fi
+  }
+
+  main "$@"
+)
