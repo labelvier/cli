@@ -185,6 +185,9 @@ release() (
       message=""
       # update the version in the style.scss file
       if [ -f "$path" ]; then
+        # make $path relative to the current directory
+        root_path=$(pwd);
+        path="${path#$root_path/}"
         # replace the version in the style.scss file
         sed -i '' "s/Version: $oldversion/Version: $version/g" "$path"
         message="Updated version in $path to $version"
