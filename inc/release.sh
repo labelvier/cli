@@ -198,7 +198,7 @@ release() (
       if [ "$using_package_json" = "1" ]; then
         # update the version in the package.json file
         sed -i '' "s/\"version\": \"$oldversion\"/\"version\": \"$version\"/g" package.json
-        message="Updated version in package.json to $version"
+        message="chore(package.json): updated version to $version"
         # commit the changed file
         git add package.json
       fi
