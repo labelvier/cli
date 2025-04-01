@@ -66,14 +66,6 @@ starterkit() (
     echo "Installing dependencies... (npm install)"
     npm run install || exit 1
 
-    # Ask if you want to install woocommerce
-    read -p "Do you want to install woocommerce? (y/n) " woocommerce
-    if [[ "$woocommerce" == "y" ]]; then
-      # Install woocommerce
-      echo "Adding woocommerce support..."
-      woocommerce add
-    fi
-
     # Create a new git repository (don't output the output)
     git init
     git add .
