@@ -78,8 +78,10 @@ starterkit() (
       read -p "What is the url of your empty remote repository? (example: git@bitbucket.org:labelvier/example.git) " remote_repo_url
       # Add the remote repository
       git remote add origin $remote_repo_url
+      # get the current branch name
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
       # Push the code to the remote repository
-      git push -u origin master
+      git push -u origin $current_branch
     fi
 
     echo "Installation complete"
