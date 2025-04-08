@@ -176,11 +176,38 @@ migrate() (
   function run() {
   # if the $migration_config_file file does not exist, ask for the credentials
   if [[ ! -f "$migration_config_file" ]]; then
-    # ask the SSH credentials for the source server
-    read -p "Enter the SSH username for the source server: " ssh_username
-    read -p "Enter the SSH hostname for the source server: " ssh_hostname
-    read -p "Enter the SSH port for the source server, leave empty for default (22): " ssh_port
-    ssh_port=${ssh_port:-22}
+    # ask if we want to use a host from the ssh config file
+    read -p "Source server: Do you want to use a host from the ssh config file? (y/n) " -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      # ask for the host
+      echo "";
+      read -p "Enter the host from the ssh config file: " ssh_config_host
+      # check if the ssh_config_host is not empty
+      if [[ -z $ssh_config_host ]]; then
+        echo "The ssh config host is empty, please try again."
+        exit 1
+      fi
+      # find the host in the ssh config
+      ssh_config=$(ssh -G "$ssh_config_host")
+      # check if the host is found
+      if [[ -z $ssh_config ]]; then
+        echo "The ssh config host is not found, please try again."
+        exit 1
+      fi
+      # get the ssh username from the ssh config
+      ssh_username=$(echo "$ssh_config" | grep "^user " | awk '{print $2}')
+      # get the ssh hostname from the ssh config
+      ssh_hostname=$(echo "$ssh_config" | grep "^hostname " | awk '{print $2}')
+      # get the ssh port from the ssh config
+      ssh_port=$(echo "$ssh_config" | grep "^port " | awk '{print $2}')
+      ssh_port=${ssh_port:-22}
+    else
+      # ask the SSH credentials for the source server
+      read -p "Enter the SSH username for the source server: " ssh_username
+      read -p "Enter the SSH hostname for the source server: " ssh_hostname
+      read -p "Enter the SSH port for the source server, leave empty for default (22): " ssh_port
+      ssh_port=${ssh_port:-22}
+    fi
     read -p "Enter the SSH path for the source server, leave empty for savvii default (wordpress/current): " ssh_path
     ssh_path=${ssh_path:-wordpress/current}
     # do a ssh-copy-id to check if the credentials are correct
@@ -198,11 +225,39 @@ migrate() (
 
     # ask the SSH credentials for the destination server
     read -p "Enter the domain of the destination server (excluding https://, leave empty for no change): " ssh_domain_destination
-    read -p "Enter the SSH username for the destination server: " ssh_username_destination
-    read -p "Enter the SSH hostname for the destination server, leave empty for default (c125667.sgvps.net): " ssh_hostname_destination
-    ssh_hostname_destination=${ssh_hostname_destination:-c125667.sgvps.net}
-    read -p "Enter the SSH port for the destination server, leave empty for siteground default (18765): " ssh_port_destination
-    ssh_port_destination=${ssh_port_destination:-18765}
+
+    # ask to use a host from the ssh config file
+    read -p "Destination server: Do you want to use a host from the ssh config file? (y/n) " -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      # ask for the host
+      echo "";
+      read -p "Enter the host from the ssh config file: " ssh_config_host_destination
+      # check if the ssh_config_host is not empty
+      if [[ -z $ssh_config_host_destination ]]; then
+        echo "The ssh config host is empty, please try again."
+        exit 1
+      fi
+      # find the host in the ssh config
+      ssh_config_destination=$(ssh -G "$ssh_config_host_destination")
+      # check if the host is found
+      if [[ -z $ssh_config_destination ]]; then
+        echo "The ssh config host is not found, please try again."
+        exit 1
+      fi
+      # get the ssh username from the ssh config
+      ssh_username_destination=$(echo "$ssh_config_destination" | grep "^user " | awk '{print $2}')
+      # get the ssh hostname from the ssh config
+      ssh_hostname_destination=$(echo "$ssh_config_destination" | grep "^hostname " | awk '{print $2}')
+      # get the ssh port from the ssh config
+      ssh_port_destination=$(echo "$ssh_config_destination" | grep "^port " | awk '{print $2}')
+      ssh_port_destination=${ssh_port_destination:-22}
+    else
+      read -p "Enter the SSH username for the destination server: " ssh_username_destination
+      read -p "Enter the SSH hostname for the destination server, leave empty for default (c125667.sgvps.net): " ssh_hostname_destination
+      ssh_hostname_destination=${ssh_hostname_destination:-c125667.sgvps.net}
+      read -p "Enter the SSH port for the destination server, leave empty for siteground default (18765): " ssh_port_destination
+      ssh_port_destination=${ssh_port_destination:-18765}
+    fi
 
     # the default path for siteground is www/$ssh_domain_destination/public_html, where $ssh_domain_destination is excluding http(s)://
     # if $ssh_domain_destination is empty, get the default domain from the source server
