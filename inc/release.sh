@@ -258,16 +258,33 @@ release() (
         exit 1
     fi
 
-    git checkout master
+    # check if we there is a master branch
+    local master_branch=$(git branch | grep master)
+    if [ -z "$master_branch" ]; then
+        echo "No master branch found, trying main."
+        # check if we there is a main branch
+        local master_branch=$(git branch | grep main)
+        if [ -z "$master_branch" ]; then
+            echo "No master or main branch found, exiting."
+            exit 1
+        fi
+    fi
+    git checkout "$master_branch"
     git merge $branch
     git tag -a "$version" -m ""
     git push
     git push --tags
 
-    git checkout develop
-    git merge $branch
-    git push
-
+    # check if we there is a develop branch
+    local develop_branch=$(git branch | grep develop)
+    if [ -z "$develop_branch" ]; then
+        echo "No develop branch found, not merging to develop."
+    else
+      git checkout develop
+      git merge $branch
+      git push
+    fi
+    # delete the release branch
     git branch -d $branch
   }
 
