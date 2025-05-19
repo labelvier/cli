@@ -269,6 +269,9 @@ release() (
             exit 1
         fi
     fi
+    #remove whitespace from $master_branch
+    local master_branch="${master_branch// /}"
+    # checkout the master branch
     git checkout "$master_branch"
     git merge $branch
     git tag -a "$version" -m ""
