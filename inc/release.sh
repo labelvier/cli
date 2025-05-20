@@ -55,8 +55,8 @@ release() (
       path="0"
       # check if we have an .env file
       if [ -f .env ]; then
-        # get the DEV_THEME_PATH from the .env file
-        local dev_theme_path=$(grep DEV_THEME_PATH .env | cut -d '=' -f2)
+        # get the lines starting with DEV_THEME_PATH from the .env file
+        local dev_theme_path=$(grep "^DEV_THEME_PATH" .env | cut -d "=" -f2)
         # check if we have a dev_theme_path
         if [ -n "$dev_theme_path" ]; then
           dev_theme_path="$(pwd)$dev_theme_path"
@@ -120,12 +120,6 @@ release() (
         fi
       fi
 
-      # check if $version is not ""
-      if [ "$version" = "0" ]; then
-        echo "No version found, exiting."
-        exit 1
-      fi
-      
       # check if version is semantic
       if ! _is_semantic_version "$version"; then
         echo "Version $version is not semantic, exiting."
