@@ -7,7 +7,7 @@ migrate() (
   # get the current directory name of this file
   local current_dir=$(dirname "${BASH_SOURCE[0]}")
   local root_dir=$(pwd)
-  local wp="export PHP_BIN=php80 && wp --allow-root"
+  local wp="export PHP_BIN=php82 && wp --allow-root"
   local migration_config_file="$__dir/.migration";
 
   # Runs the command.
