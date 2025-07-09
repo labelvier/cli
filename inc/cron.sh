@@ -30,7 +30,7 @@ cron() (
       SSH=$1
       # try to login to $1 and travel to the project folder
       # find the project folder
-      WP_PATH=$(ssh $SSH "find /home/customer/www/*/public_html -maxdepth 0")
+      WP_PATH=$(ssh $SSH "find /home/customer/www/*/public_html -maxdepth 0 | grep -E 'public_html$' | head -n 1")
       if [[ -z "$WP_PATH" ]]; then
         echo "No project folder found. Exiting."
         exit 1
