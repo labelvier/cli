@@ -20,7 +20,7 @@ cron() (
   }
 
   # @function deploy
-  # @description Description
+  # @description Deploy the cron job to a server, this will upload the run_cron_jobs.sh.tpl file to the server and set the DISABLE_WP_CRON constant to true. Argument is the SSH host to deploy to.
   function deploy() {
     # Check if we have a second argument
     if [ $# -eq 0 ]; then
