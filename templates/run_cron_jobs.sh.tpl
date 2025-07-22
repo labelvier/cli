@@ -13,12 +13,16 @@ if [ $MULTISITE -gt 1 ]; then
   for SITE in $SITES; do
     # run the cron events
     echo "Running cron events for $SITE"
-    wp action-scheduler run --url="$SITE" --path=$WP_PATH
     wp cron event run --url="$SITE" --path=$WP_PATH --due-now
+    echo "Running action scheduler for $SITE"
+    wp action-scheduler clean --url="$SITE" --path=$WP_PATH
+    wp action-scheduler run --url="$SITE" --path=$WP_PATH
   done
 else
   # run the cron events
   echo "Running cron events for $WP_PATH"
-  wp action-scheduler run --path=$WP_PATH
   wp cron event run --path=$WP_PATH --due-now
+  echo "Running action scheduler for $WP_PATH"
+  wp action-scheduler clean --path=$WP_PATH
+  wp action-scheduler run --path=$WP_PATH
 fi
