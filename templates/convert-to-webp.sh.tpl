@@ -15,6 +15,7 @@ CREATE_BACKUP=${CREATE_BACKUP:-true} # Maak backup van originelen - kan via env 
 LOG_FILE="webp_conversion_$(date +%Y%m%d_%H%M%S).log"
 PARALLEL_JOBS=${PARALLEL_JOBS:-4} # Aantal parallelle conversies - kan via env var worden gezet
 AUTO_YES=${AUTO_YES:-false} # Skip confirmation prompt - kan via env var worden gezet
+BACKGROUND_MODE=${BACKGROUND_MODE:-false} # Run in background mode (true/false/auto) - kan via env var worden gezet
 
 # Kleuren voor output
 RED='\033[0;31m'
@@ -214,6 +215,7 @@ if [ "$CREATE_BACKUP" = true ]; then
 fi
 log "  Log bestand:    $LOG_FILE"
 log "  Parallelle jobs: $PARALLEL_JOBS"
+log "  Achtergrond:    $BACKGROUND_MODE"
 echo ""
 
 # Check dependencies
@@ -234,6 +236,41 @@ else
   warning "✗ GEEN backup wordt gemaakt!"
 fi
 echo ""
+
+# Achtergrond modus detectie en setup
+BACKGROUND_MODE=${BACKGROUND_MODE:-false} # Run in background mode - kan via env var worden gezet
+BACKGROUND_LOG="webp_conversion_background_$(date +%Y%m%d_%H%M%S).log"
+
+# Als we niet interactief zijn en niet expliciet AUTO_YES is gezet, run dan op achtergrond
+if [ "$BACKGROUND_MODE" = "auto" ] && [ ! -t 0 ] && [ "$AUTO_YES" = false ]; then
+  BACKGROUND_MODE=true
+fi
+
+# Start script op achtergrond als BACKGROUND_MODE=true
+if [ "$BACKGROUND_MODE" = true ] && [ "$DRY_RUN" = false ]; then
+  # Check of we niet al in achtergrond draaien
+  if [ -z "$WEBP_BACKGROUND_RUNNING" ]; then
+    log "Achtergrond modus geactiveerd"
+    log "Script wordt verplaatst naar achtergrond en blijft draaien na SSH disconnect"
+    log "Output wordt weggeschreven naar: $BACKGROUND_LOG"
+    echo ""
+    echo "Je kunt de voortgang volgen met:"
+    echo "  tail -f $BACKGROUND_LOG"
+    echo ""
+    echo "Of het process checken met:"
+    echo "  ps aux | grep convert-to-webp"
+    echo ""
+
+    # Start script opnieuw op achtergrond met nohup
+    export WEBP_BACKGROUND_RUNNING=1
+    nohup "$0" "$@" >> "$BACKGROUND_LOG" 2>&1 &
+
+    BG_PID=$!
+    echo "Script draait nu op achtergrond met PID: $BG_PID"
+    echo "Log bestand: $BACKGROUND_LOG"
+    exit 0
+  fi
+fi
 
 # Skip interactive prompt als we niet interactief zijn (SSH/pipe), in dry-run mode, of AUTO_YES is gezet
 if [ "$DRY_RUN" = false ] && [ "$AUTO_YES" = false ]; then

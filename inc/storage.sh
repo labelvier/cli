@@ -56,6 +56,7 @@ storage() (
   # @option --parallel-jobs <num>  Number of parallel conversions (default: 4)
   # @option --path <path>          Custom path relative to public_html (default: wp-content/uploads)
   # @option --yes                  Skip confirmation prompt (auto-proceed)
+  # @option --background           Run in background mode (detaches and survives SSH disconnect)
   function convert-to-webp() {
     # Default options
     local DRY_RUN="false"
@@ -64,6 +65,7 @@ storage() (
     local PARALLEL_JOBS="4"
     local CUSTOM_PATH=""
     local AUTO_YES="false"
+    local BACKGROUND_MODE="false"
 
     # Choose a host to convert images on
     if [[ $# -eq 0 ]]; then
@@ -78,12 +80,14 @@ storage() (
       echo "  --parallel-jobs <num>  Number of parallel conversions (default: 4)"
       echo "  --path <path>          Custom path relative to public_html (default: wp-content/uploads)"
       echo "  --yes                  Skip confirmation prompt (auto-proceed)"
+      echo "  --background           Run in background mode (detaches and survives SSH disconnect)"
       echo ""
       echo "Examples:"
       echo "  ./wp-takeoff storage convert-to-webp my-host --dry-run"
       echo "  ./wp-takeoff storage convert-to-webp my-host --quality 90 --parallel-jobs 8"
       echo "  ./wp-takeoff storage convert-to-webp my-host --no-backup --yes"
       echo "  ./wp-takeoff storage convert-to-webp my-host --path wp-content/uploads/2024"
+      echo "  ./wp-takeoff storage convert-to-webp my-host --background --yes"
       exit 1
     fi
 
@@ -115,6 +119,10 @@ storage() (
           ;;
         --yes)
           AUTO_YES="true"
+          shift
+          ;;
+        --background)
+          BACKGROUND_MODE="true"
           shift
           ;;
         *)
@@ -149,6 +157,7 @@ storage() (
     echo -e "  Create backup: $CREATE_BACKUP"
     echo -e "  Parallel jobs: $PARALLEL_JOBS"
     echo -e "  Auto proceed:  $AUTO_YES"
+    echo -e "  Background:    $BACKGROUND_MODE"
     echo -e ""
 
     # Upload the convert-to-webp.sh.tpl file to the server
@@ -162,11 +171,24 @@ storage() (
     echo -e ""
 
     # Build the command with environment variables
-    local REMOTE_CMD="QUALITY=$QUALITY DRY_RUN=$DRY_RUN CREATE_BACKUP=$CREATE_BACKUP PARALLEL_JOBS=$PARALLEL_JOBS AUTO_YES=$AUTO_YES /bin/bash /home/customer/convert-to-webp.sh $TARGET_PATH"
+    local REMOTE_CMD="QUALITY=$QUALITY DRY_RUN=$DRY_RUN CREATE_BACKUP=$CREATE_BACKUP PARALLEL_JOBS=$PARALLEL_JOBS AUTO_YES=$AUTO_YES BACKGROUND_MODE=$BACKGROUND_MODE /bin/bash /home/customer/convert-to-webp.sh $TARGET_PATH"
 
     # Run the script on the server with the configured options
     echo -e "${__bold}Starting WebP conversion...${__reset}"
     echo -e ""
+
+    if [[ "$BACKGROUND_MODE" == "true" ]]; then
+      echo -e "${__yellow}Script will run in background mode on the server.${__reset}"
+      echo -e "${__yellow}You can safely close this SSH connection.${__reset}"
+      echo -e ""
+      echo -e "To monitor progress on the server, connect via SSH and run:"
+      echo -e "  tail -f ~/webp_conversion_background_*.log"
+      echo -e ""
+      echo -e "To check if the process is still running:"
+      echo -e "  ps aux | grep convert-to-webp"
+      echo -e ""
+    fi
+
     ssh "$SSH" "$REMOTE_CMD"
 
     echo -e ""
