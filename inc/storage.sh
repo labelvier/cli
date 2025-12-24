@@ -52,7 +52,7 @@ storage() (
   # @description Convert images to WebP format in the WordPress uploads folder.
   # @option --dry-run              Test run without actual conversion
   # @option --quality <0-100>      WebP quality (default: 85)
-  # @option --no-backup            Skip creating backup of original files
+  # @option --with-backup          Create backup of original files (default: no backup)
   # @option --parallel-jobs <num>  Number of parallel conversions (default: 4)
   # @option --path <path>          Custom path relative to public_html (default: wp-content/uploads)
   # @option --yes                  Skip confirmation prompt (auto-proceed)
@@ -61,7 +61,7 @@ storage() (
     # Default options
     local DRY_RUN="false"
     local QUALITY="85"
-    local CREATE_BACKUP="true"
+    local CREATE_BACKUP="false"
     local PARALLEL_JOBS="4"
     local CUSTOM_PATH=""
     local AUTO_YES="false"
@@ -76,7 +76,7 @@ storage() (
       echo "Options:"
       echo "  --dry-run              Test run without actual conversion"
       echo "  --quality <0-100>      WebP quality (default: 85)"
-      echo "  --no-backup            Skip creating backup of original files"
+      echo "  --with-backup          Create backup of original files (default: no backup)"
       echo "  --parallel-jobs <num>  Number of parallel conversions (default: 4)"
       echo "  --path <path>          Custom path relative to public_html (default: wp-content/uploads)"
       echo "  --yes                  Skip confirmation prompt (auto-proceed)"
@@ -85,7 +85,7 @@ storage() (
       echo "Examples:"
       echo "  ./wp-takeoff storage convert-to-webp my-host --dry-run"
       echo "  ./wp-takeoff storage convert-to-webp my-host --quality 90 --parallel-jobs 8"
-      echo "  ./wp-takeoff storage convert-to-webp my-host --no-backup --yes"
+      echo "  ./wp-takeoff storage convert-to-webp my-host --with-backup --yes"
       echo "  ./wp-takeoff storage convert-to-webp my-host --path wp-content/uploads/2024"
       echo "  ./wp-takeoff storage convert-to-webp my-host --background --yes"
       exit 1
@@ -105,8 +105,8 @@ storage() (
           QUALITY="$2"
           shift 2
           ;;
-        --no-backup)
-          CREATE_BACKUP="false"
+        --with-backup)
+          CREATE_BACKUP="true"
           shift
           ;;
         --parallel-jobs)
