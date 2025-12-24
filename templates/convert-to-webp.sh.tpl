@@ -100,10 +100,38 @@ backup_file() {
   fi
 }
 
+# Check of een bestand al WebP formaat is (ongeacht extensie)
+is_webp_file() {
+  local file="$1"
+
+  # Check de file signature (magic bytes) van WebP
+  # WebP bestanden beginnen met "RIFF" en hebben "WEBP" op byte 8-11
+  local header=$(head -c 12 "$file" 2>/dev/null | od -A n -t x1 2>/dev/null)
+
+  # Check of het RIFF....WEBP patroon bevat
+  if echo "$header" | grep -q "52 49 46 46.*57 45 42 50"; then
+    # Log naar skipped file voor tellen
+    echo "$(basename "$file")" >> "${LOG_FILE}.skipped"
+    return 0  # Is WebP
+  fi
+
+  return 1  # Is geen WebP
+}
+
 # Converteer JPG/PNG naar WebP maar behoud originele bestandsnaam
 convert_static_image() {
   local input_file="$1"
   local temp_webp="${input_file}.temp.webp"
+
+  # Check of het bestand al WebP formaat is
+  if is_webp_file "$input_file"; then
+    if [ "$DRY_RUN" = true ]; then
+      log "[DRY-RUN] Skip (al WebP): $input_file"
+    else
+      log "⊘ Skip (al WebP): $(basename "$input_file")"
+    fi
+    return 0
+  fi
 
   if [ "$DRY_RUN" = true ]; then
     log "[DRY-RUN] Zou converteren: $input_file (behoudt naam, WebP formaat)"
@@ -148,6 +176,16 @@ convert_static_image() {
 convert_gif_image() {
   local input_file="$1"
   local temp_webp="${input_file}.temp.webp"
+
+  # Check of het bestand al WebP formaat is
+  if is_webp_file "$input_file"; then
+    if [ "$DRY_RUN" = true ]; then
+      log "[DRY-RUN] Skip (al WebP): $input_file"
+    else
+      log "⊘ Skip (al WebP): $(basename "$input_file")"
+    fi
+    return 0
+  fi
 
   if [ "$DRY_RUN" = true ]; then
     log "[DRY-RUN] Zou converteren: $input_file (behoudt naam, WebP formaat, animated)"
@@ -228,6 +266,7 @@ log "  ✓ Behoudt de originele bestandsnaam (example.jpg blijft example.jpg)"
 log "  ✓ Vervangt de inhoud met WebP formaat"
 log "  ✓ WordPress hoeft NIET aangepast te worden"
 log "  ✓ Moderne browsers herkennen WebP aan de file signature"
+log "  ✓ Slaat bestanden over die al WebP formaat zijn"
 echo ""
 
 if [ "$CREATE_BACKUP" = true ]; then
@@ -300,6 +339,7 @@ fi
 # Maak stats file aan
 if [ "$DRY_RUN" = false ]; then
   echo "# Filename|OriginalSize|WebPSize|SavingsPercent" >"${LOG_FILE}.stats"
+  echo "# Skipped files (already WebP)" > "${LOG_FILE}.skipped"
 fi
 
 echo ""
@@ -311,12 +351,13 @@ total_jpg=0
 total_png=0
 total_gif=0
 converted_count=0
+skipped_count=0
 error_count=0
 total_original_size=0
 total_webp_size=0
 
 # Export functies voor parallel gebruik
-export -f convert_static_image convert_gif_image backup_file log success error warning
+export -f convert_static_image convert_gif_image backup_file is_webp_file log success error warning
 export QUALITY DRY_RUN CREATE_BACKUP BACKUP_DIR LOG_FILE WP_CONTENT_DIR
 export RED GREEN YELLOW BLUE NC
 
@@ -418,18 +459,25 @@ else
 fi
 echo ""
 
-# Bereken totale besparing
-if [ -f "${LOG_FILE}.stats" ] && [ "$DRY_RUN" = false ]; then
-  while IFS='|' read -r filename original_size webp_size savings; do
-    if [[ "$filename" != "#"* ]]; then
-      total_original_size=$((total_original_size + original_size))
-      total_webp_size=$((total_webp_size + webp_size))
-    fi
-  done <"${LOG_FILE}.stats"
+# Bereken totale besparing en tel overgeslagen bestanden
+if [ "$DRY_RUN" = false ]; then
+  if [ -f "${LOG_FILE}.stats" ]; then
+    while IFS='|' read -r filename original_size webp_size savings; do
+      if [[ "$filename" != "#"* ]]; then
+        total_original_size=$((total_original_size + original_size))
+        total_webp_size=$((total_webp_size + webp_size))
+      fi
+    done <"${LOG_FILE}.stats"
 
-  if [ $total_original_size -gt 0 ]; then
-    total_savings=$(((total_original_size - total_webp_size) * 100 / total_original_size))
-    total_saved_mb=$(echo "scale=2; ($total_original_size - $total_webp_size) / 1024 / 1024" | bc)
+    if [ $total_original_size -gt 0 ]; then
+      total_savings=$(((total_original_size - total_webp_size) * 100 / total_original_size))
+      total_saved_mb=$(echo "scale=2; ($total_original_size - $total_webp_size) / 1024 / 1024" | bc)
+    fi
+  fi
+
+  # Tel overgeslagen bestanden
+  if [ -f "${LOG_FILE}.skipped" ]; then
+    skipped_count=$(grep -v '^#' "${LOG_FILE}.skipped" 2>/dev/null | wc -l | tr -d ' ')
   fi
 fi
 
@@ -445,8 +493,9 @@ log "  GIF:  $total_gif"
 log "  Totaal: $((total_jpg + total_png + total_gif))"
 echo ""
 log "Resultaten:"
-log "  Succesvol: $converted_count"
-log "  Fouten:    $error_count"
+log "  Succesvol:     $converted_count"
+log "  Overgeslagen:  $skipped_count (al WebP formaat)"
+log "  Fouten:        $error_count"
 echo ""
 
 if [ -n "$total_saved_mb" ] && [ "$DRY_RUN" = false ]; then
@@ -463,6 +512,9 @@ fi
 log "✓ Conversie log: $LOG_FILE"
 if [ "$DRY_RUN" = false ]; then
   log "✓ Statistieken: ${LOG_FILE}.stats"
+  if [ "$skipped_count" -gt 0 ]; then
+    log "✓ Overgeslagen: ${LOG_FILE}.skipped"
+  fi
 fi
 echo ""
 
