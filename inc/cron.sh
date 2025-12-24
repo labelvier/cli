@@ -38,6 +38,8 @@ cron() (
       ssh $SSH "cd $WP_PATH && wp config set DISABLE_WP_CRON true --raw"
       # upload the run_cron_jobs.sh.tpl file to the server
       scp $current_dir/../templates/run_cron_jobs.sh.tpl $SSH:/home/customer/run_cron_jobs.sh
+      # add chmod +x to the uploaded file
+      ssh $SSH "chmod +x /home/customer/run_cron_jobs.sh"
       # echo information that you now need to add the following cronjob to the server
       echo -e "${__green}${__bold}Success!${__reset} ${__bold}Add the following cronjob to the server:${__reset}"
       echo -e "${__blue}*/5 * * * * /bin/bash /home/customer/run_cron_jobs.sh${__reset}"
