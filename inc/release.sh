@@ -252,34 +252,66 @@ release() (
         exit 1
     fi
 
-    # check if we there is a master branch
-    local master_branch=$(git branch | grep master)
-    if [ -z "$master_branch" ]; then
-        echo "No master branch found, trying main."
-        # check if we there is a main branch
-        local master_branch=$(git branch | grep main)
-        if [ -z "$master_branch" ]; then
-            echo "No master or main branch found, exiting."
+    # check if we there is a master branch (exact match)
+    local master_branch=""
+    if git show-ref --verify --quiet refs/heads/master; then
+        master_branch="master"
+    elif git show-ref --verify --quiet refs/heads/main; then
+        master_branch="main"
+    else
+        echo "No master or main branch found, exiting."
+        exit 1
+    fi
+
+    # checkout the master branch
+    echo "Checking out $master_branch branch..."
+    if ! git checkout "$master_branch"; then
+        echo "Error: Failed to checkout $master_branch branch."
+        exit 1
+    fi
+
+    # merge the release branch into master/main
+    echo "Merging $branch into $master_branch..."
+    if ! git merge "$branch"; then
+        echo "Error: Failed to merge $branch into $master_branch. Please resolve conflicts manually."
+        exit 1
+    fi
+
+    # create tag
+    echo "Creating tag $version..."
+    if ! git tag -a "$version" -m ""; then
+        echo "Error: Failed to create tag $version."
+        exit 1
+    fi
+
+    # push master/main and tags
+    echo "Pushing $master_branch and tags..."
+    if ! git push; then
+        echo "Error: Failed to push $master_branch branch."
+        exit 1
+    fi
+    if ! git push --tags; then
+        echo "Error: Failed to push tags."
+        exit 1
+    fi
+
+    # check if we there is a develop branch (exact match)
+    if git show-ref --verify --quiet refs/heads/develop; then
+        echo "Merging into develop branch..."
+        if ! git checkout develop; then
+            echo "Error: Failed to checkout develop branch."
             exit 1
         fi
-    fi
-    #remove whitespace from $master_branch
-    local master_branch="${master_branch// /}"
-    # checkout the master branch
-    git checkout "$master_branch"
-    git merge $branch
-    git tag -a "$version" -m ""
-    git push
-    git push --tags
-
-    # check if we there is a develop branch
-    local develop_branch=$(git branch | grep develop)
-    if [ -z "$develop_branch" ]; then
-        echo "No develop branch found, not merging to develop."
+        if ! git merge "$branch"; then
+            echo "Error: Failed to merge $branch into develop. Please resolve conflicts manually."
+            exit 1
+        fi
+        if ! git push; then
+            echo "Error: Failed to push develop branch."
+            exit 1
+        fi
     else
-      git checkout develop
-      git merge $branch
-      git push
+        echo "No develop branch found, not merging to develop."
     fi
     # delete the release branch
     git branch -d $branch
