@@ -389,12 +389,56 @@ migrate() (
   fi
 
   # lastly, sync the uploads directory
-  echo "Syncing the wp-content uploads directory to the destination server..."
-  # copy the bash script to the destination server and run it from there in the background so we can continue
-  scp -o StrictHostKeyChecking=no -P $ssh_port_destination "$current_dir/../templates/sync_uploads.sh.tpl" "$ssh_username_destination@$ssh_hostname_destination:sync_uploads.sh"
-  # run the bash script on the destination server # Usage: ./sync-uploads.sh [source] [source_port] [source_directory] [destination_directory]
-  echo "Starting the sync uploads script on the destination server... To view the status, run wt migrate sync-status"
-  ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "bash sync_uploads.sh $ssh_username $ssh_hostname $ssh_port "$ssh_path/wp-content/uploads" "$ssh_path_destination/wp-content" &" &
+  echo ""
+  read -p "Do you want to migrate the uploads folder? (y/n) " -n 1 -r
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "Syncing the wp-content uploads directory to the destination server..."
+    # copy the bash script to the destination server and run it from there in the background so we can continue
+    scp -o StrictHostKeyChecking=no -P $ssh_port_destination "$current_dir/../templates/sync_uploads.sh.tpl" "$ssh_username_destination@$ssh_hostname_destination:sync_uploads.sh"
+    # run the bash script on the destination server # Usage: ./sync-uploads.sh [source] [source_port] [source_directory] [destination_directory]
+    echo "Starting the sync uploads script on the destination server... To view the status, run wt migrate sync-status"
+    ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "bash sync_uploads.sh $ssh_username $ssh_hostname $ssh_port "$ssh_path/wp-content/uploads" "$ssh_path_destination/wp-content" &" &
+  else
+    echo ""
+    read -p "Do you want to load uploads from another domain as fallback? (y/n) " -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      echo ""
+      read -p "Enter the domain to load uploads from (e.g., https://example.com): " fallback_domain
+      # remove trailing slash from fallback_domain
+      fallback_domain=$(echo "$fallback_domain" | sed 's/\/$//')
+
+      # create .htaccess content for cross-domain fallback
+      htaccess_content="# Start crossdomain fallback
+# If a file is not found, load the same file from the same directory from another domain
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ $fallback_domain/wp-content/uploads/\$1 [L,R=302]
+</IfModule>
+# End crossdomain fallback"
+
+      # create temporary .htaccess file
+      echo "$htaccess_content" > .htaccess.uploads.tmp
+
+      # ensure uploads directory exists on destination server
+      echo "Creating uploads directory if it doesn't exist..."
+      ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "mkdir -p $ssh_path_destination/wp-content/uploads"
+
+      # copy .htaccess to destination server uploads directory
+      echo "Creating .htaccess file in uploads directory with cross-domain fallback to $fallback_domain..."
+      scp -o StrictHostKeyChecking=no -P $ssh_port_destination .htaccess.uploads.tmp "$ssh_username_destination@$ssh_hostname_destination:$ssh_path_destination/wp-content/uploads/.htaccess"
+
+      # remove temporary file
+      rm .htaccess.uploads.tmp
+
+      echo "Cross-domain fallback configured successfully."
+    else
+      echo ""
+      echo "Skipping uploads migration."
+    fi
+  fi
 
   # on the destination server, check if there are any new constants in the wp-config.php file
   echo "Checking if there are any missing constants in the wp-config.php file on the destination server..."
