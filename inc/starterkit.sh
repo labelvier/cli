@@ -43,7 +43,7 @@ starterkit() (
     fi
 
     # Download and install the latest version of the wp-takeoff starter kit with a depth of 1
-    git clone -b $branch --single-branch --depth 1 git@bitbucket.org:labelvier/wordpress-starter-kit.git $project_name || exit 1
+    git clone -b $branch --single-branch --depth 1 git@github.com:labelvier/wordpress-starterkit.git $project_name || exit 1
     cd $project_name || exit 1
     rm -rf .git
 
