@@ -47,12 +47,26 @@ core() (
     fi
   }
 
+  function _migrate_remote_if_needed() {
+    # Migrate the remote from Bitbucket to GitHub if needed
+    local current_remote
+    current_remote=$(git remote get-url origin 2>/dev/null)
+    if [[ "$current_remote" == *"bitbucket.org"* ]]; then
+      echo "Migrating the CLI remote from Bitbucket to GitHub..."
+      git remote set-url origin git@github.com:labelvier/WP-Takeoff-CLI.git
+      git remote set-url origin git@github.com:labelvier/WP-Takeoff-CLI.git --push
+      echo "Remote updated. Future updates will be fetched from GitHub."
+    fi
+  }
+
   function _check_and_ask_for_update() {
     # Check if there are updates available from git and ask if we should pull them
     local OLDPWD=$(pwd);
     if [ -d "$current_dir/../.git" ]; then
       # Open wp-takeoff dir
       cd "$current_dir/.."
+      # Migrate remote from Bitbucket to GitHub if needed
+      _migrate_remote_if_needed
       # Fetch the latest version
       git fetch
       # Check if remote is ahead of local branch
