@@ -25,29 +25,43 @@ deploy() (
     # get current branch
     local current_branch=$(git branch --list | grep \* | sed 's/\* //g')
 
-    # check if there are any uncommitted changes, if so exit with message
-    if [[ $(git status | grep "Changes not staged for commit") ]]; then
-      echo "There are uncommitted changes, please commit them and try again"
+    # on exit: stay on staging if there's a merge conflict so the user can resolve it,
+    # otherwise always switch back to the original branch
+    trap 'if git status | grep -q "both modified\|Unmerged paths"; then
+      echo "Merge conflict on staging — resolve manually, then run: git checkout $current_branch"
+    else
+      git checkout "$current_branch" 2>/dev/null
+    fi' EXIT
+
+    # check if npm run deploy-staging script exists before doing anything
+    if ! npm pkg get scripts | grep -q "deploy-staging"; then
+      echo "npm script 'deploy-staging' not found, aborting deploy"
       exit 1
     fi
 
-    # do a fetch to make sure we have the latest changes
-    git fetch
-
-    # check if there is a staging branch, if not create it
-    if [[ -z $(git branch --list staging) ]]; then
-      git checkout -b staging
-    else
-      git checkout staging
+    # check if there are any uncommitted changes (staged or unstaged), if so exit with message
+    if [[ -n $(git status --porcelain) ]]; then
+      echo "There are uncommitted changes, please commit or stash them and try again"
+      exit 1
     fi
 
-    # do a pull to make sure we have the latest changes
-    git pull origin staging
+    # fetch latest remote info; abort on failure
+    git fetch || { echo "git fetch failed, aborting deploy"; exit 1; }
+    # always delete local staging so it can never be leading
+    if git branch --list staging | grep -q staging; then
+      git branch -D staging
+    fi
 
-    # merge current branch into staging
-    echo "Merge $current_branch into staging"
-    git merge --no-ff --no-edit $current_branch
-
+    # (re)create local staging branch
+    if git branch -r --list origin/staging | grep -q "origin/staging"; then
+      # upstream staging exists: create local branch tracking it, then merge current branch in
+      git checkout -b staging origin/staging || { echo "git checkout staging failed, aborting deploy"; exit 1; }
+      echo "Merge $current_branch into staging"
+      git merge --no-ff --no-edit "$current_branch" || { echo "git merge failed, aborting deploy"; exit 1; }
+    else
+      # no upstream staging: base local staging on current branch
+      git checkout -b staging || { echo "git checkout -b staging failed, aborting deploy"; exit 1; }
+    fi
 
     # check if we are on the staging branch, if not exit with message
     if [[ $(git branch --list | grep \* | sed 's/\* //g') != "staging" ]]; then
@@ -55,29 +69,20 @@ deploy() (
       exit 1
     fi
 
-    # if origin does not have a staging branch, push the staging branch to the remote
-    if [[ -z $(git branch -r --list origin/staging) ]]; then
-      git push origin staging
-    fi
-
     # check if the --all-features flag is passed
     if [[ "$1" == "--all-features" ]]; then
       # if so, deploy all feature branches to staging
       echo "Deploying all feature branches to staging"
       # get all feature branches
-      local feature_branches=$(git branch --list feature/* | sed 's/feature\///g')
+      local feature_branches=$(git branch --list "feature/*" | sed 's/.*feature\///g')
       # loop through all feature branches
       for feature_branch in $feature_branches; do
-        # merge the feature branch into staging
-        echo "Merge feature/$feature_branch into staging"
-        # don't merge the current branch because it is already merged
-        if [[ "$feature_branch" != "$current_branch" ]]; then
-          git merge --no-ff --no-edit feature/$feature_branch
+        # merge the feature branch into staging; skip current branch (already merged above)
+        if [[ "feature/$feature_branch" != "$current_branch" ]]; then
+          echo "Merge feature/$feature_branch into staging"
+          git merge --no-ff --no-edit "feature/$feature_branch" || { echo "git merge feature/$feature_branch failed, aborting deploy"; exit 1; }
         fi
       done
-    else
-      # if not, deploy the current branch to staging
-      git merge --no-ff --no-edit
     fi
 
     # check if we have a merge conflict, if so exit with message
@@ -86,14 +91,11 @@ deploy() (
       exit 1
     fi
 
-    # push the staging branch to the remote
-    git push origin staging
+    # force-with-lease: safe force push since we always rebuild staging from origin
+    git push --force-with-lease origin staging || { echo "git push failed, aborting deploy"; exit 1; }
 
-    # check if the npm run deploy-staging exists
-    npm run deploy-staging
-
-    #switch back to the previous branch
-    git checkout -
+    # deploy to staging
+    npm run deploy-staging || { echo "npm run deploy-staging failed, aborting deploy"; exit 1; }
   }
 
   main "$@"
