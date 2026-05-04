@@ -98,6 +98,9 @@ deploy() (
 
     # deploy to staging
     npm run deploy-staging || { echo "npm run deploy-staging failed, aborting deploy"; exit 1; }
+
+    # return to original branch
+    git checkout "$current_branch" || { echo "git checkout $current_branch failed, please check the state of your repository and try again"; exit 1; }
   }
 
   main "$@"
