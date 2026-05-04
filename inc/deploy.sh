@@ -33,9 +33,11 @@ deploy() (
       git checkout "$current_branch" 2>/dev/null
     fi' EXIT
 
-    # check if npm run deploy-staging script exists before doing anything
-    if ! npm pkg get scripts | grep -q "deploy-staging"; then
+    # check if npm run deploy-staging script exists before doing anything, if --skip-deploy-staging-check is present, anywhere in the arguments, skip this check
+    # if ! npm pkg get scripts | grep -q "deploy-staging"; and [[ ! " $* " == *" --skip-deploy-staging-check "* ]]; then
+    if [[ ! " $* " == *" --skip-deploy-staging-check "* ]] && ! npm pkg get scripts | grep -q "deploy-staging"; then
       echo "npm script 'deploy-staging' not found, aborting deploy"
+      echo "override bij using --skip-deploy-staging-check the flag"
       exit 1
     fi
 
