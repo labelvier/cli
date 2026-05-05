@@ -262,7 +262,7 @@ zed() (
     fi
 
     git add .zed/settings.json composer.json composer.lock .gitignore
-    git commit -m "build: add Zed autocompletion for $provider via `wp-takeoff`"
+    git commit -m "build: add Zed autocompletion for $provider via wp-takeoff"
     echo -e "${__green}✓${__reset} Changes committed"
   }
 
