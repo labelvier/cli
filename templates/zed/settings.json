@@ -1,0 +1,29 @@
+{
+  "languages": {
+    "PHP": {
+      "language_servers": ["intelephense", "!phpactor"]
+    }
+  },
+  "lsp": {
+    "intelephense": {
+      "settings": {
+        "environment.includePaths": [
+          "autocompletion",
+          "vendor/php-stubs/wp-cli-stubs"
+        ]
+      }
+    }
+  },
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/.jj",
+    "**/CVS",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/.classpath",
+    "**/.settings",
+    "build"
+  ]
+}

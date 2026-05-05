@@ -1,0 +1,9 @@
+
+# Autocompletion files (managed by wp-takeoff zed)
+autocomplete
+vendor
+
+# Zed support
+!.zed
+.zed/*
+!.zed/settings.json

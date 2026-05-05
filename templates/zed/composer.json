@@ -1,0 +1,21 @@
+{
+  "require-dev": {
+    "johnpbloch/wordpress-core-installer": "^2.0",
+    "johnpbloch/wordpress": "^6.9",
+    "php-stubs/wp-cli-stubs": "^2.12"
+  },
+  "config": {
+    "allow-plugins": {
+      "johnpbloch/wordpress-core-installer": true
+    }
+  },
+  "extra": {
+    "wordpress-install-dir": "autocomplete/wordpress"
+  },
+  "scripts": {
+    "post-install-cmd": [
+      "rm -rf autocomplete/wordpress/wp-content",
+      "rm -rf vendor/php-stubs/wordpress-stubs"
+    ]
+  }
+}
