@@ -28,7 +28,7 @@ deploy() (
     # on exit: stay on staging if there's a merge conflict so the user can resolve it,
     # otherwise always switch back to the original branch
     trap 'if git status | grep -q "both modified\|Unmerged paths"; then
-      echo "Merge conflict on staging — resolve manually, then run: git checkout $current_branch"
+      echo -e "${__red}Merge conflict on staging — resolve manually, then push staging before switching back: git push && git checkout $current_branch${__reset}"
     else
       git checkout "$current_branch" 2>/dev/null
     fi' EXIT
