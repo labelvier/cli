@@ -78,6 +78,15 @@ zed() (
       exit 1
     fi
 
+    # create the global .zed autocomplete directory and symlink the local autocomplete directory to it, this way the autocompletion files are stored in the user's home directory and can be shared across projects
+    mkdir -p ~/.zed/autocomplete/
+    # if autocomplete already exists and is a symlink, remove it
+    if [[ -L autocomplete ]]; then
+      rm autocomplete
+    fi
+    ln -s ~/.zed/autocomplete autocomplete
+    echo -e "${__green}✓ Symlinked autocomplete directory to ~/.zed/autocomplete${__reset}"
+
     echo
     echo -e "${__green}✓ WordPress autocompletion for Zed has been set up successfully!${__reset}"
     echo -e "  Restart Zed to activate intelephense with WordPress stubs."

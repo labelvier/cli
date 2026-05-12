@@ -10,11 +10,12 @@
     }
   },
   "extra": {
-    "wordpress-install-dir": "autocomplete/wordpress"
+    "wordpress-install-dir": "/tmp/wordpress"
   },
   "scripts": {
     "post-install-cmd": [
-      "rm -rf autocomplete/wordpress/wp-content",
+      "rm -rf ~/.zed/autocomplete/wordpress",
+      "mv /tmp/wordpress ~/.zed/autocomplete/wordpress",
       "rm -rf vendor/php-stubs/wordpress-stubs"
     ]
   }
