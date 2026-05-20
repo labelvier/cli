@@ -28,6 +28,17 @@ starterkit() (
       exit 1
     fi
 
+    # Ask if the user wants to use the standard starter kit or the woocommerce starter kit, list with 2 options
+    echo "Which starter kit do you want to use?"
+    options=("Standard" "WooCommerce")
+    select opt in "${options[@]}"; do
+      case $opt in
+        "Standard") version="standard"; break ;;
+        "WooCommerce") version="woocommerce"; break ;;
+        *) echo "Invalid option" ;;
+      esac
+    done
+
     # Ask which branch to use (default master)
     read -p "Which branch from the starter kit do you want to use? (default: master) " branch
     branch=${branch:-master}
@@ -43,12 +54,17 @@ starterkit() (
     fi
 
     # Download and install the latest version of the wp-takeoff starter kit with a depth of 1
-    git clone -b $branch --single-branch --depth 1 git@github.com:labelvier/wordpress-starterkit.git $project_name || exit 1
-    cd $project_name || exit 1
+    remote_repo_url="git@github.com:labelvier/wordpress-starterkit.git"
+    if [[ "$version" == "woocommerce" ]]; then
+      remote_repo_url="git@github.com:labelvier/labelvier-starterkit-woocommerce.git"
+    fi
+    git clone -b $branch --single-branch --depth 1 "$remote_repo_url" "$project_name" || exit 1
+    cd $project_name || exit 1;
     rm -rf .git
 
     # Rename the theme folder wp-content/themes/labelvier to the theme name (if it's not labelvier)
     if [[ "$theme_name" != "labelvier" ]]; then
+      echo "Renaming theme folder to $theme_name..."
       mv wp-content/themes/labelvier wp-content/themes/$theme_name
       # in the example.env file replace the theme name for the lines which start with THEME_FOLDER_NAME DEV_THEME_PATH ubuntu and mac friendly
       sed -i.bak "s/labelvier/$theme_name/g" example.env && rm example.env.bak
@@ -56,6 +72,8 @@ starterkit() (
       sed -i.bak "s/\$theme-path: \"\/wp-content\/themes\/labelvier\"/\$theme-path: \"\/wp-content\/themes\/$theme_name\"/g" wp-content/themes/$theme_name/src/scss/a-settings/_variables.scss && rm wp-content/themes/$theme_name/src/scss/a-settings/_variables.scss.bak
       # Rename Theme Name: Labelvier in style.scss
       sed -i.bak "s/Theme Name: Labelvier/Theme Name: $theme_name/g" wp-content/themes/$theme_name/src/scss/style.scss && rm wp-content/themes/$theme_name/src/scss/style.scss.bak
+    else
+      echo "Using default theme name: labelvier"
     fi
 
 
@@ -75,7 +93,7 @@ starterkit() (
     read -p "Do you already have an empty remote repository? (y/n) " remote_repo
     if [[ "$remote_repo" == "y" ]]; then
       # Ask for the remote repository url
-      read -p "What is the url of your empty remote repository? (example: git@bitbucket.org:labelvier/example.git) " remote_repo_url
+      read -p "What is the url of your empty remote repository? (example: git@github.com:labelvier/example.git) " remote_repo_url
       # Add the remote repository
       git remote add origin $remote_repo_url
       # get the current branch name
