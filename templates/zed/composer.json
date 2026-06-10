@@ -1,8 +1,8 @@
 {
   "require-dev": {
-    "johnpbloch/wordpress-core-installer": "^2.0",
-    "johnpbloch/wordpress": "^6.9",
-    "php-stubs/wp-cli-stubs": "^2.12"
+    "johnpbloch/wordpress-core-installer": "*",
+    "johnpbloch/wordpress": "*",
+    "php-stubs/wp-cli-stubs": "*"
   },
   "config": {
     "allow-plugins": {
