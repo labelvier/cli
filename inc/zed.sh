@@ -55,8 +55,8 @@ zed() (
     echo -e "${__bold}Setting up WordPress autocompletion for Zed...${__reset}"
     echo
 
-    # Check if we are in the root of a starter kit project
-    _check_starterkit_root
+    # Check if we are in the root of a starter kit project #TODO, is this neccesary?
+    #_check_starterkit_root
 
     # Check if composer is available
     _check_composer
