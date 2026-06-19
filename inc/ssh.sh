@@ -15,7 +15,7 @@ ssh() (
     # If $1 is a known subcommand function, dispatch to it; if $1 looks like an
     # ssh flag or host (anything not a declared function), forward to the real
     # binary so that callers like migrate.sh can still use `ssh -G`, `ssh -p`, etc.
-    if [[ -n "$1" ]] && declare -f "$1" > /dev/null 2>&1; then
+    if [[ -n "$1" ]] && declare -f -- "$1" > /dev/null 2>&1; then
       "$1" "${@:2}"
     elif [[ -n "$1" ]]; then
       command ssh "$@"
