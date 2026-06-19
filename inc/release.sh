@@ -137,7 +137,8 @@ release() (
     fi
 
     # Validate the detected current version before calculating the release version.
-    if ! _is_semantic_version "$version"; then
+    # Skip when a custom version was given — the current version is only needed to bump from.
+    if [ -z "$custom_version" ] && ! _is_semantic_version "$version"; then
       echo "Version $version is not semantic, exiting."
       exit 1
     fi
