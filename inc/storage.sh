@@ -202,5 +202,105 @@ storage() (
     echo -e "  ssh $SSH 'rm /home/customer/convert-to-webp.sh'"
   }
 
+  # @function cleanup [--yes]
+  # @description Scan all SSH aliases for leftover .sql, .zip, .tar and .log files in the home directory and WordPress public_html folders, and remove them interactively.
+  # @option --yes  Skip confirmation prompts and delete all found files automatically.
+  function cleanup() {
+    local AUTO_YES="false"
+
+    while [[ $# -gt 0 ]]; do
+      case $1 in
+        --yes) AUTO_YES="true"; shift ;;
+        *) echo -e "${__red}Unknown option: $1${__reset}"; exit 1 ;;
+      esac
+    done
+
+    local ssh_config="${HOME}/.ssh/config"
+
+    if [[ ! -f "$ssh_config" ]]; then
+      echo -e "${__red}No SSH config found at ${ssh_config}.${__reset}"
+      exit 1
+    fi
+
+    local aliases
+    aliases=$(grep -iE "^[[:space:]]*Host[[:space:]]+" "$ssh_config" | awk '{print $2}' | grep -v '\*')
+
+    if [[ -z "$aliases" ]]; then
+      echo -e "${__red}No SSH aliases found in ${ssh_config}.${__reset}"
+      exit 1
+    fi
+
+    echo -e "${__bold}Scanning SSH hosts for leftover .sql, .zip, .tar and .log files...${__reset}"
+    echo ""
+
+    local total_files=0
+    local total_bytes=0
+
+    while IFS= read -r -u3 alias; do
+      echo -e "${__bold}→ ${alias}${__reset}"
+
+      local files
+      files=$(ssh -o ConnectTimeout=2 -o BatchMode=yes "$alias" "HR=\$(realpath ~); { find \$HR -maxdepth 1 \( -name '*.sql' -o -name '*.zip' -o -name '*.tar' -o -name '*.tar.gz' -o -name '*.log' \) -type f -printf '%i\t%p\n' 2>/dev/null; find \$HR/www/*/public_html -maxdepth 4 \( -name '*.sql' -o -name '*.zip' -o -name '*.tar' -o -name '*.tar.gz' -o -name '*.log' \) -type f -printf '%i\t%p\n' 2>/dev/null; } | sort -u -k1,1 | cut -f2-" </dev/null 2>/dev/null)
+
+      if [[ -z "$files" ]]; then
+        echo -e "  ${__green}Nothing found.${__reset}"
+      else
+        while IFS= read -r -u4 file; do
+          local filesize
+          filesize=$(ssh "$alias" "stat -c%s '$file' 2>/dev/null || stat -f%z '$file' 2>/dev/null" </dev/null 2>/dev/null)
+          filesize="${filesize:-0}"
+
+          local human_size
+          if [[ $filesize -ge 1073741824 ]]; then
+            human_size="$(( filesize / 1073741824 )) GB"
+          elif [[ $filesize -ge 1048576 ]]; then
+            human_size="$(( filesize / 1048576 )) MB"
+          elif [[ $filesize -ge 1024 ]]; then
+            human_size="$(( filesize / 1024 )) KB"
+          else
+            human_size="${filesize} B"
+          fi
+
+          local answer
+          if [[ "$AUTO_YES" == "true" ]]; then
+            echo -e "  Deleting ${file} (${human_size})..."
+            answer="Y"
+          else
+            read -r -p "  Delete ${file} (${human_size})? [Y/n] " answer
+            answer="${answer:-Y}"
+          fi
+          if [[ "$answer" =~ ^[Yy]$ ]]; then
+            if ssh "$alias" "rm '$file'" </dev/null 2>/dev/null; then
+              echo -e "  ${__green}Deleted.${__reset}"
+              (( total_files++ ))
+              (( total_bytes += filesize ))
+            else
+              echo -e "  ${__red}Failed to delete ${file}.${__reset}"
+            fi
+          else
+            echo -e "  Skipped."
+          fi
+        done 4<<< "$files"
+      fi
+
+      echo ""
+    done 3<<< "$aliases"
+
+    local summary_size
+    if [[ $total_bytes -ge 1073741824 ]]; then
+      summary_size="$(( total_bytes / 1073741824 )) GB"
+    elif [[ $total_bytes -ge 1048576 ]]; then
+      summary_size="$(( total_bytes / 1048576 )) MB"
+    elif [[ $total_bytes -ge 1024 ]]; then
+      summary_size="$(( total_bytes / 1024 )) KB"
+    else
+      summary_size="${total_bytes} B"
+    fi
+
+    echo -e "${__bold}${__green}Cleanup complete.${__reset}"
+    echo -e "  Files deleted: ${__bold}${total_files}${__reset}"
+    echo -e "  Space freed:   ${__bold}${summary_size}${__reset}"
+  }
+
   main "$@"
 )
