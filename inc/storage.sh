@@ -202,19 +202,9 @@ storage() (
     echo -e "  ssh $SSH 'rm /home/customer/convert-to-webp.sh'"
   }
 
-  # @function cleanup [--yes]
+  # @function cleanup
   # @description Scan all SSH aliases for leftover .sql, .zip, .tar and .log files in the home directory and WordPress public_html folders, and remove them interactively.
-  # @option --yes  Skip confirmation prompts and delete all found files automatically.
   function cleanup() {
-    local AUTO_YES="false"
-
-    while [[ $# -gt 0 ]]; do
-      case $1 in
-        --yes) AUTO_YES="true"; shift ;;
-        *) echo -e "${__red}Unknown option: $1${__reset}"; exit 1 ;;
-      esac
-    done
-
     local ssh_config="${HOME}/.ssh/config"
 
     if [[ ! -f "$ssh_config" ]]; then
@@ -261,14 +251,8 @@ storage() (
             human_size="${filesize} B"
           fi
 
-          local answer
-          if [[ "$AUTO_YES" == "true" ]]; then
-            echo -e "  Deleting ${file} (${human_size})..."
-            answer="Y"
-          else
-            read -r -p "  Delete ${file} (${human_size})? [Y/n] " answer
-            answer="${answer:-Y}"
-          fi
+          read -r -p "  Delete ${file} (${human_size})? [Y/n] " answer
+          answer="${answer:-Y}"
           if [[ "$answer" =~ ^[Yy]$ ]]; then
             if ssh "$alias" "rm '$file'" </dev/null 2>/dev/null; then
               echo -e "  ${__green}Deleted.${__reset}"
