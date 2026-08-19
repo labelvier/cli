@@ -6,6 +6,8 @@ deploy() (
   local filename="deploy.sh"
   # get the current directory name of this file
   local current_dir=$(dirname "${BASH_SOURCE[0]}")
+  # The ref holding the shared production deployment records.
+  local notes_ref="refs/notes/deploys"
 
   # Runs the command.
   function main() {
@@ -101,6 +103,152 @@ deploy() (
 
     # return to original branch
     git checkout "$current_branch" || { echo "git checkout $current_branch failed, please check the state of your repository and try again"; exit 1; }
+  }
+
+  # @function production
+  # @description Deploys the current branch to the production environment with the local `npm run deploy` script and keeps track of who deployed what and when. Only allowed from master/main or a release/* branch. Use --force to skip the branch, working directory and remote checks, --yes to skip the confirmation and --skip-deploy-check to skip the npm script check.
+  function production() {
+    # check if we are in a git repository
+    if [ ! -d .git ]; then
+      echo "You are not in a git repository, exiting."
+      exit 1
+    fi
+
+    # check if the npm run deploy script exists. Match on '"deploy":' so deploy-staging does not count as a match.
+    if ! _flag_is_present "skip-deploy-check" "$@" && ! npm pkg get scripts | grep -q '"deploy":'; then
+      echo "npm script 'deploy' not found, aborting deploy"
+      echo "override by using the --skip-deploy-check flag"
+      exit 1
+    fi
+
+    # check if there are any uncommitted changes (staged or unstaged), if so exit with message
+    if ! _flag_is_present "force" "$@" && [ -n "$(git status --porcelain)" ]; then
+      echo "There are uncommitted changes, please commit or stash them. Or use --force to ignore this."
+      exit 1
+    fi
+
+    # deploying to production is only allowed from master/main or a release branch, release.sh handles the merging
+    local branch=$(git rev-parse --abbrev-ref HEAD)
+    if ! _flag_is_present "force" "$@" \
+      && [ "$branch" != "master" ] && [ "$branch" != "main" ] \
+      && [[ ! $branch =~ ^.*release\/.*$ ]]; then
+      echo "You are on $branch. Only deploy production from master/main or a release/* branch, or use --force."
+      exit 1
+    fi
+
+    # fetch latest remote info; abort on failure
+    git fetch || { echo "git fetch failed, aborting deploy"; exit 1; }
+
+    # compare with the upstream branch when there is one. Release branches are often local only, so only warn there.
+    if git rev-parse --abbrev-ref '@{u}' > /dev/null 2>&1; then
+      if [ "$(git rev-parse HEAD)" != "$(git rev-parse '@{u}')" ] && ! _flag_is_present "force" "$@"; then
+        echo "$branch differs from its remote, please push or pull first. Or use --force to ignore this."
+        exit 1
+      fi
+    else
+      echo -e "${__red}Warning: $branch has no upstream, deploying unpushed local commits.${__reset}"
+    fi
+
+    # collect the information we want to keep track of
+    local version
+    if [[ $branch =~ ^.*release\/.*$ ]]; then
+      # the release tag is only created by 'release finish', so take the version from the branch name
+      version="${branch##*/}"
+    else
+      version=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+    fi
+    local commit=$(git rev-parse --short HEAD)
+    local deployer="$(git config user.name) <$(git config user.email)>"
+    local project=$(basename "$(pwd)")
+
+    # confirm the deployment because this goes straight to production
+    echo -e "${__bold}Deploying to the production environment:${__reset}"
+    echo -e "  Project: $project"
+    echo -e "  Version: $version"
+    echo -e "  Branch:  $branch ($commit)"
+    echo -e "  By:      $deployer"
+    if ! _flag_is_present "yes" "$@"; then
+      read -p "Deploy this to the LIVE environment? [y/N] " -n 1 -r
+      echo ""
+      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborting deploy."
+        exit 1
+      fi
+    fi
+
+    # deploy to production, but keep the exit code so a failed deployment gets logged as well
+    npm run deploy
+    local deploy_status=$?
+
+    # log the deployment. A logging problem may never change the outcome of the deployment itself.
+    if [ "$deploy_status" -eq 0 ]; then
+      _log_deploy "success" "$version" "$commit" "$branch" "$deployer"
+      echo -e "${__green}Deployed $project $version to the production environment.${__reset}"
+    else
+      _log_deploy "failed" "$version" "$commit" "$branch" "$deployer"
+      echo -e "${__red}npm run deploy failed with exit code $deploy_status.${__reset}"
+    fi
+
+    exit $deploy_status
+  }
+
+  # @function log <optional-amount>
+  # @description Shows the production deployments of this project, latest first. The default amount is 20.
+  function log() {
+    local amount="${1:-20}"
+
+    # check if we are in a git repository
+    if [ ! -d .git ]; then
+      echo "You are not in a git repository, exiting."
+      exit 1
+    fi
+
+    # notes are not fetched by default, so ask for the ref explicitly
+    _fetch_deploy_notes
+
+    # check if there is anything logged at all
+    if [ -z "$(git notes --ref=deploys list 2>/dev/null)" ]; then
+      echo "No production deployments logged for this project yet."
+      exit 0
+    fi
+
+    # every record starts with an ISO timestamp, so a reverse sort gives us the latest deployments first
+    echo -e "${__bold}Production deployments of $(basename "$(pwd)"):${__reset}"
+    git notes --ref=deploys list | awk '{print $2}' | while read -r noted_commit; do
+      git notes --ref=deploys show "$noted_commit"
+    done | sort -r | head -n "$amount"
+  }
+
+  # Fetch the notes ref, forced so a record from a parallel deploy can never be overwritten by ours.
+  function _fetch_deploy_notes() {
+    git fetch -q origin "+$notes_ref:$notes_ref" 2> /dev/null
+  }
+
+  # Append a deployment record to the shared notes ref and push it to origin.
+  function _log_deploy() {
+    local status="$1"
+    local record="$(date -u +%Y-%m-%dT%H:%M:%SZ) | production | $2 | $3 | $4 | $5 | $status"
+
+    # retry once, a deployment from a colleague can win the race for the notes ref
+    if _write_deploy_note "$record" || _write_deploy_note "$record"; then
+      return 0
+    fi
+
+    # never fail the deployment over a logging problem, hand the record to the user instead
+    echo -e "${__red}Could not store the deployment record, please pass it on manually:${__reset}"
+    echo "$record"
+  }
+
+  # Write a single record to the notes ref and publish it.
+  function _write_deploy_note() {
+    local record="$1"
+
+    _fetch_deploy_notes
+    # only append when the record is not already there, so a retry after a failed push cannot duplicate it
+    if ! git notes --ref=deploys show HEAD 2> /dev/null | grep -qF "$record"; then
+      git notes --ref=deploys append -m "$record" || return 1
+    fi
+    git push -q origin "$notes_ref" 2> /dev/null || return 1
   }
 
   main "$@"
