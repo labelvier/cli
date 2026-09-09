@@ -57,7 +57,7 @@ core() (
     # Check if there are updates available from git and ask if we should pull them
     local OLDPWD=$(pwd);
     if [ -d "$current_dir/../.git" ]; then
-      # Open wp-takeoff dir
+      # Open the CLI dir
       cd "$current_dir/.."
       # Migrate remote from Bitbucket to GitHub if needed
       _migrate_remote_if_needed
@@ -100,18 +100,18 @@ core() (
   # @function install
   # @description Install the CLI on the system
   function install() {
-    # Check if the CLI is already located in ~/.wp-takeoff
-    if [ -d "$HOME/.wp-takeoff" ]; then
-      echo "The CLI is already installed in $HOME/.wp-takeoff"
+    # Check if the CLI is already located in ~/.labelvier
+    if [ -d "$HOME/.labelvier" ]; then
+      echo "The CLI is already installed in $HOME/.labelvier"
     else
-      # move the CLI to ~/.wp-takeoff
-      mv "$PWD" "$HOME/.wp-takeoff"
-      echo "The CLI is installed in $HOME/.wp-takeoff"
+      # move the CLI to ~/.labelvier
+      mv "$PWD" "$HOME/.labelvier"
+      echo "The CLI is installed in $HOME/.labelvier"
     fi
 
     # Check if the CLI is already in the PATH
-    if [[ ":$PATH:" == *"$HOME/.wp-takeoff:"* ]]; then
-      echo "wp-takeoff is already present in the \$PATH variable"
+    if [[ ":$PATH:" == *"$HOME/.labelvier:"* ]]; then
+      echo "labelvier is already present in the \$PATH variable"
     else
       local added_to_path=false
       # Ask if the user wants to add the CLI to the PATH. Let the user select the shell to add it to.
@@ -120,17 +120,17 @@ core() (
       select opt in "${options[@]}"; do
         case $opt in
         "Bash")
-          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >>~/.bashrc
+          echo "export PATH=\$PATH:\$HOME/.labelvier" >>~/.bashrc
           added_to_path="bash"
           break
           ;;
         "Zsh")
-          echo "export PATH=\$PATH:\$HOME/.wp-takeoff" >>~/.zshrc
+          echo "export PATH=\$PATH:\$HOME/.labelvier" >>~/.zshrc
           added_to_path="zsh"
           break
           ;;
         "Fish")
-          echo "set -gx PATH \$PATH \$HOME/.wp-takeoff" >>~/.config/fish/config.fish
+          echo "set -gx PATH \$PATH \$HOME/.labelvier" >>~/.config/fish/config.fish
           added_to_path="fish"
           break
           ;;
@@ -186,7 +186,7 @@ core() (
     else
       # Add the alias to the .bashrc or .zshrc file with line breaks
       echo "" >>~/$shell_file
-      echo "alias $alias='wp-takeoff'" >>~/$shell_file
+      echo "alias $alias='labelvier'" >>~/$shell_file
       echo "The alias $alias is added to the $shell_file file, now restart your $shell_file shell to use the CLI."
     fi
   }
