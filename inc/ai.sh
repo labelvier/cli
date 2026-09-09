@@ -231,7 +231,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Check for and install everything a Label Vier dev needs in ~/.claude: the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config files, and the toon hook that shrinks basecamp CLI output. Subcommands: check, install, uninstall.
+  # @description Install everything a Label Vier dev needs in ~/.claude: the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config files, and the toon hook that shrinks basecamp CLI output. Subcommands: install, uninstall. See `ai check` for status.
   # ---------------------------------------------------------------------------
   function claude() {
     if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
@@ -251,44 +251,13 @@ ai() (
     echo -e "  - the ${__bold}toon${__reset} hook — pipes ${__blue}basecamp${__reset} CLI output through the TOON formatter so Claude reads it for fewer tokens"
     echo
     echo -e "${__bold}Available functions:${__reset}"
-    echo -e "  ${__bold}check${__reset} - Report what's present, missing or unregistered"
     echo -e "  ${__bold}install${__reset} - Create missing config files and install the toon hook. Flags: --force (overwrite config files from template), --skip-hook (skip the toon hook)"
     echo -e "  ${__bold}uninstall${__reset} - Remove the toon hook AND the config files. Warns and asks for confirmation first"
     echo
     echo -e "${__bold}Requirements for the hook:${__reset} ${__blue}jq${__reset} (via brew) and ${__blue}toon${__reset} (via npm i -g @toon-format/cli) — both are offered for install."
     echo
-    echo -e "${__bold}Usage: ${__blue}wp-takeoff ai claude check${__reset}"
-  }
-
-  # Reports present/missing for every config file, whether CLAUDE.md still
-  # references the labelvier files, and whether the toon hook is registered.
-  function check() {
-    local pair target
-    while IFS= read -r pair; do
-      target="${pair%%:*}"
-      if [ -f "$target" ]; then
-        echo -e "${__green}✓${__reset} $target"
-      else
-        echo -e "${__red}✗${__reset} $target ${__red}(missing)${__reset}"
-      fi
-    done < <(_claude_files)
-
-    if [ -f "$claude_dir/CLAUDE.md" ]; then
-      if ! grep -q '@labelvier/WORDPRESS.md' "$claude_dir/CLAUDE.md"; then
-        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/WORDPRESS.md"
-      fi
-      if ! grep -q '@labelvier/ANGULAR.md' "$claude_dir/CLAUDE.md"; then
-        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/ANGULAR.md"
-      fi
-    fi
-
-    if _hook_registered; then
-      echo -e "${__green}✓${__reset} $hook_path (toon hook, registered)"
-    elif [ -f "$hook_path" ]; then
-      echo -e "${__red}✗${__reset} $hook_path exists but is not registered in $settings_file"
-    else
-      echo -e "${__red}✗${__reset} $hook_path (toon hook, missing)"
-    fi
+    echo -e "${__bold}Usage: ${__blue}wp-takeoff ai claude install${__reset}"
+    echo -e "For status of basecamp, toon and this setup, run: ${__blue}wp-takeoff ai check${__reset}"
   }
 
   # Creates missing config files from their tpl template and installs the
@@ -367,6 +336,72 @@ ai() (
 
     echo
     echo -e "${__bold}Done.${__reset} Restart your Claude Code session to pick up the changes."
+  }
+
+  # ---------------------------------------------------------------------------
+  # @function basecamp
+  # @description Install the Basecamp CLI via curl -fsSL https://basecamp.com/install-cli | bash
+  # ---------------------------------------------------------------------------
+  function basecamp() {
+    if type -P basecamp >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} basecamp is already installed."
+      return 0
+    fi
+
+    echo "Installing the Basecamp CLI..."
+    curl -fsSL https://basecamp.com/install-cli | bash
+
+    if type -P basecamp >/dev/null 2>&1; then
+      echo -e "${__green}Installed${__reset} basecamp"
+    else
+      echo -e "${__red}basecamp is still not on your PATH after installing.${__reset} Open a new shell and try again."
+      exit 1
+    fi
+  }
+
+  # ---------------------------------------------------------------------------
+  # @function check
+  # @description Report what's present, missing or unregistered for basecamp, toon and the Claude Code setup
+  # ---------------------------------------------------------------------------
+  function check() {
+    if type -P basecamp >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} basecamp"
+    else
+      echo -e "${__red}✗${__reset} basecamp ${__red}(missing, run: wp-takeoff ai basecamp)${__reset}"
+    fi
+
+    if type -P toon >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} toon"
+    else
+      echo -e "${__red}✗${__reset} toon ${__red}(missing, run: npm i -g @toon-format/cli)${__reset}"
+    fi
+
+    local pair target
+    while IFS= read -r pair; do
+      target="${pair%%:*}"
+      if [ -f "$target" ]; then
+        echo -e "${__green}✓${__reset} $target"
+      else
+        echo -e "${__red}✗${__reset} $target ${__red}(missing)${__reset}"
+      fi
+    done < <(_claude_files)
+
+    if [ -f "$claude_dir/CLAUDE.md" ]; then
+      if ! grep -q '@labelvier/WORDPRESS.md' "$claude_dir/CLAUDE.md"; then
+        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/WORDPRESS.md"
+      fi
+      if ! grep -q '@labelvier/ANGULAR.md' "$claude_dir/CLAUDE.md"; then
+        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/ANGULAR.md"
+      fi
+    fi
+
+    if _hook_registered; then
+      echo -e "${__green}✓${__reset} $hook_path (toon hook, registered)"
+    elif [ -f "$hook_path" ]; then
+      echo -e "${__red}✗${__reset} $hook_path exists but is not registered in $settings_file"
+    else
+      echo -e "${__red}✗${__reset} $hook_path (toon hook, missing)"
+    fi
   }
 
   main "$@"
