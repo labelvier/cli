@@ -58,11 +58,16 @@ function _show_banner() {
   )
   local i
 
+  local text="Label Vier CLI"
+  local pad=$(( (32 - ${#text}) / 2 ))
+
   echo ""
   for i in "${!logo[@]}"; do
     echo -e "${c}${logo[$i]}${r}"
   done
-  echo -e "           ${b}Label Vier CLI${r}"
+  echo ""
+  printf "%${pad}s" ""
+  echo -e "${b}${text}${r}"
   echo ""
 }
 
