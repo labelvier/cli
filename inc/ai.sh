@@ -27,6 +27,44 @@ ai() (
   # Helpers
   # ---------------------------------------------------------------------------
 
+  # Offers to install Homebrew itself (via the official install script) when
+  # it's missing, so callers can fall through to `brew install <thing>`
+  # instead of just telling the user to go install <thing> by hand. Returns
+  # 1 (without exiting) when brew is still unavailable — declined, or the
+  # install failed — so callers can fall back to their own manual-install message.
+  function _require_brew() {
+    if type -P brew >/dev/null 2>&1; then
+      return 0
+    fi
+
+    echo -e "${__red}Homebrew is not installed.${__reset} It's the easiest way to install missing dependencies."
+    local answer
+    read -p "Install Homebrew now? [y/N] " answer
+    case "$answer" in
+      [yY]*) ;;
+      *) return 1 ;;
+    esac
+
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # The installer doesn't update PATH in this already-running shell — pick
+    # up brew from its known install locations ourselves.
+    if ! type -P brew >/dev/null 2>&1; then
+      local candidate
+      for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew; do
+        if [ -x "$candidate" ]; then
+          eval "$("$candidate" shellenv)"
+          break
+        fi
+      done
+    fi
+
+    if ! type -P brew >/dev/null 2>&1; then
+      echo -e "${__red}Homebrew installed but still not on your PATH in this shell.${__reset} Open a new shell and try again."
+      return 1
+    fi
+  }
+
   # jq is used to merge into settings.json without clobbering existing settings.
   # NOTE: `type -P` searches PATH only — `command -v` would also match the shell
   # functions defined in this file.
@@ -36,8 +74,8 @@ ai() (
     fi
 
     echo -e "${__red}jq is not installed.${__reset} It is needed to edit $settings_file safely."
-    if ! type -P brew >/dev/null 2>&1; then
-      echo -e "Homebrew was not found either. Install jq yourself: ${__blue}https://jqlang.github.io/jq/download/${__reset}"
+    if ! _require_brew; then
+      echo -e "Install jq yourself: ${__blue}https://jqlang.github.io/jq/download/${__reset}"
       exit 1
     fi
 
@@ -84,8 +122,8 @@ ai() (
   function _require_rtk() {
     if ! type -P rtk >/dev/null 2>&1; then
       echo -e "${__red}rtk is not installed.${__reset} It proxies commands (ls, git, ...) to cut Claude Code token usage."
-      if ! type -P brew >/dev/null 2>&1; then
-        echo -e "Homebrew was not found either. Install rtk yourself: ${__blue}https://www.rtk-ai.app/${__reset}"
+      if ! _require_brew; then
+        echo -e "Install rtk yourself: ${__blue}https://www.rtk-ai.app/${__reset}"
         exit 1
       fi
 
@@ -120,8 +158,8 @@ ai() (
     fi
 
     echo -e "${__red}The 'claude' command is not installed.${__reset} It is needed to install the caveman plugin."
-    if ! type -P brew >/dev/null 2>&1; then
-      echo -e "Homebrew was not found either. Install Claude Code yourself: ${__blue}https://claude.com/product/claude-code${__reset}"
+    if ! _require_brew; then
+      echo -e "Install Claude Code yourself: ${__blue}https://claude.com/product/claude-code${__reset}"
       exit 1
     fi
 
