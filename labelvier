@@ -23,7 +23,55 @@ for file in "$__dir"/inc/*.sh; do
   source "$file"
 done
 
+function _show_banner() {
+  # Skip the braille mark if the terminal is too narrow (logo 32 + gap 3 + text 9 = 44)
+  local cols
+  cols=$(tput cols 2>/dev/null || echo 80)
+  if [ "$cols" -lt 44 ]; then
+    return
+  fi
+
+  local b="" c="" r=""
+  if [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
+    b="$__bold"
+    c="$__blue"
+    r="$__reset"
+  fi
+
+  local logo=(
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⢤⣐⠲⠶⠤⠤⠶⠶⣂⡤⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⠀⠀⣀⢔⡪⠓⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠚⠵⡢⣄⠀⠀⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⡠⣪⠔⠁⠀⠀⠀⠀⠀⢀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠈⠲⢕⢄⠀⠀⠀⠀"
+    "⠀⠀⢀⢜⠔⠁⠀⠀⠀⠀⠀⠀⢠⢋⠭⡫⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠣⡱⡀⠀⠀"
+    "⠀⢀⢮⠊⠀⠀⠀⠀⠀⠀⠀⢠⢃⠎⠀⡇⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡕⡀⠀"
+    "⠀⣎⠇⠀⠀⠀⠀⠀⠀⠀⡰⢡⠋⠀⠀⡇⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣱⠀"
+    "⢰⡘⠀⠀⠀⠀⠀⠀⠀⡰⢡⠃⠀⠀⠀⡇⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢣⡇"
+    "⠘⡇⠀⠀⠀⠀⠀⠀⢸⠤⢇⣀⣀⣀⣀⣧⣼⣀⣀⣀⣀⣀⣀⣀⠀⠀⠀⠀⠀⠀⢸⢰"
+    "⢠⡇⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠑⡟⢻⠊⠉⠉⠉⢑⠖⡜⠀⠀⠀⠀⠀⠀⢸⠸"
+    "⠸⢣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⢸⠀⠀⠀⢠⢎⡜⠀⠀⠀⠀⠀⠀⠀⡘⡇"
+    "⠀⢏⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⢸⠀⠀⢠⢃⠎⠀⠀⠀⠀⠀⠀⠀⢠⡻⠀"
+    "⠀⠈⢞⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⢸⠀⣠⢃⠎⠀⠀⠀⠀⠀⠀⠀⢠⢣⠃⠀"
+    "⠀⠀⠈⢮⢢⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠮⠒⢡⠃⠀⠀⠀⠀⠀⠀⠀⡴⡱⠁⠀⠀"
+    "⠀⠀⠀⠀⠑⢕⠤⡀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠁⠀⠀⠀⠀⠀⢀⡤⡪⠊⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⠀⠀⠑⠪⢖⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⠤⣒⠕⠊⠀⠀⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠑⠚⠭⠶⢒⣒⣒⡒⠶⠬⠛⠊⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀"
+  )
+  local text_line=7 i
+
+  echo ""
+  for i in "${!logo[@]}"; do
+    if [ "$i" -eq "$text_line" ]; then
+      echo -e "${c}${logo[$i]}${r}   ${b}labelvier${r}"
+    else
+      echo -e "${c}${logo[$i]}${r}"
+    fi
+  done
+  echo ""
+}
+
 function _print_usage() {
+  _show_banner
+
   # get the version from the package.json file
   local version
   version=$(core _get_package_version)
