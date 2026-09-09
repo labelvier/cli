@@ -77,7 +77,7 @@ function _print_usage() {
   # get the version from the package.json file
   local version
   version=$(core _get_package_version)
-  echo -e "This is the Label Vier CLI (version $version). It helps you to setup a new WordPress project from scratch and to run all kind of scripts and commands for the Label Vier Starter Kit."
+  echo -e "This is the Label Vier CLI (version $version). A command line interface for Label Vier - from setting up new WordPress projects to AI tricks. Everything under 1 command in your terminal!"
   echo
   echo -e "${__bold}Usage: ${__blue}$main_function <command> [arguments]${__reset}"
   echo
