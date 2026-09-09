@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Claude Code PreToolUse/Bash hook — installed by `wp-takeoff ai toon add-hook`.
+# Claude Code PreToolUse/Bash hook — installed by `labelvier ai claude install`.
 #
 # Rewrites a plain `basecamp ...` command so its JSON output is piped through the
 # TOON formatter, which Claude reads with far fewer tokens than raw JSON.

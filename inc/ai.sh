@@ -308,7 +308,7 @@ ai() (
 
   # Second-level subcommand descriptions, hand-written because
   # _echo_documentation only reads the flat "# @function" list of this file,
-  # which belongs to `wp-takeoff ai` (install/uninstall must stay out of it).
+  # which belongs to `labelvier ai` (install/uninstall must stay out of it).
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
@@ -319,13 +319,13 @@ ai() (
   }
 
   function _claude_documentation() {
-    echo -e "${__bold}wp-takeoff ai claude${__reset} — Claude Code setup for Label Vier projects."
+    echo -e "${__bold}labelvier ai claude${__reset} — Claude Code setup for Label Vier projects."
     echo
     echo -e "${__bold}Available functions:${__reset}"
     echo -e "  $(_claude_subcommand_description install)"
     echo -e "  $(_claude_subcommand_description uninstall)"
     echo
-    echo -e "Run ${__blue}wp-takeoff ai check${__reset} for status."
+    echo -e "Run ${__blue}labelvier ai check${__reset} for status."
   }
 
   # Creates missing config files from their tpl template and installs the
@@ -376,7 +376,7 @@ ai() (
   # Removes the toon hook and the @labelvier/... refs it added to CLAUDE.md —
   # never the file itself, which holds personal/project edits.
   function _claude_uninstall() {
-    echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}wp-takeoff ai claude install${__reset} sets up:"
+    echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}labelvier ai claude install${__reset} sets up:"
     echo -e "  - the toon hook script and its registration in $settings_file"
     echo -e "  - the @labelvier/... and @RTK.md reference lines in CLAUDE.md (not the file itself)"
     echo -e "  - rtk's own artifacts (RTK.md, its Claude Code hook) via ${__bold}rtk init -g --uninstall${__reset}, if rtk is installed"
@@ -449,19 +449,19 @@ ai() (
     if type -P basecamp >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} basecamp"
     else
-      echo -e "${__red}✗${__reset} basecamp ${__red}(missing, run: wp-takeoff ai basecamp)${__reset}"
+      echo -e "${__red}✗${__reset} basecamp ${__red}(missing, run: labelvier ai basecamp)${__reset}"
     fi
 
     if type -P toon >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} toon"
     else
-      echo -e "${__red}✗${__reset} toon ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
+      echo -e "${__red}✗${__reset} toon ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
     if type -P rtk >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} rtk"
     else
-      echo -e "${__red}✗${__reset} rtk ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
+      echo -e "${__red}✗${__reset} rtk ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
     # Ask rtk itself whether it's fully wired into Claude Code (RTK.md, hook,
@@ -470,7 +470,7 @@ ai() (
       local rtk_status
       rtk_status=$(rtk init -g --dry-run 2>&1)
       if echo "$rtk_status" | grep -q '^\[dry-run\] would'; then
-        echo -e "${__red}✗${__reset} rtk not fully wired into Claude Code ${__red}(run: wp-takeoff ai claude install)${__reset}"
+        echo -e "${__red}✗${__reset} rtk not fully wired into Claude Code ${__red}(run: labelvier ai claude install)${__reset}"
         echo "$rtk_status" | grep '^\[dry-run\] would' | sed 's/^/    /'
       else
         echo -e "${__green}✓${__reset} rtk wired into Claude Code"
@@ -483,7 +483,7 @@ ai() (
       if [ -f "$target" ]; then
         echo -e "${__green}✓${__reset} $target"
       else
-        echo -e "${__red}✗${__reset} $target ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
+        echo -e "${__red}✗${__reset} $target ${__red}(missing, run: labelvier ai claude install)${__reset}"
       fi
     done < <(_claude_files)
 
@@ -492,19 +492,19 @@ ai() (
       local ref
       for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
         if ! grep -qxF "$ref" "$claude_dir/CLAUDE.md"; then
-          echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference $ref ${__red}(run: wp-takeoff ai claude install)${__reset}"
+          echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference $ref ${__red}(run: labelvier ai claude install)${__reset}"
         fi
       done
     else
-      echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
+      echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
     if _hook_registered; then
       echo -e "${__green}✓${__reset} $hook_path (toon hook, registered)"
     elif [ -f "$hook_path" ]; then
-      echo -e "${__red}✗${__reset} $hook_path exists but is not registered in $settings_file ${__red}(run: wp-takeoff ai claude install)${__reset}"
+      echo -e "${__red}✗${__reset} $hook_path exists but is not registered in $settings_file ${__red}(run: labelvier ai claude install)${__reset}"
     else
-      echo -e "${__red}✗${__reset} $hook_path (toon hook) ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
+      echo -e "${__red}✗${__reset} $hook_path (toon hook) ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
   }
 

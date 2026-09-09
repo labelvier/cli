@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+# Helper script to run all kind of scripts and commands for the Label Vier Starter Kit
+# Copyright 2022 labelvier
+#
+# This file is invoked as one of three names (real file + two symlinks):
+# `labelvier` (canonical), `l4` (shorthand), or `wp-takeoff` (deprecated,
+# kept working for existing installs/aliases).
+
+main_function="$(basename "$0")"
+
+# Bash color codes
+__red="\033[0;31m"
+__blue="\033[0;34m"
+__green="\033[0;32m"
+__bold="\033[1m"
+__reset="\033[0m" # Reset to default color
+
+
+# load all functions from the includes directory
+__dir="$(dirname "$0")"
+for file in "$__dir"/inc/*.sh; do
+  source "$file"
+done
+
+function _print_usage() {
+  # get the version from the package.json file
+  local version
+  version=$(core _get_package_version)
+  echo -e "This is the Label Vier CLI (version $version). It helps you to setup a new WordPress project from scratch and to run all kind of scripts and commands for the Label Vier Starter Kit."
+  echo
+  echo -e "${__bold}Usage: ${__blue}$main_function <command> [arguments]${__reset}"
+  echo
+  echo -e "${__bold}Possible commands:${__reset}"
+  declare -F | awk '{print $3}' | grep -v "^_" | grep -v "^main$" | sed 's/^/  /'
+}
+
+function main() {
+  if [ "$main_function" = "wp-takeoff" ]; then
+    echo -e "${__red}⚠${__reset}  'wp-takeoff' is deprecated, use ${__bold}labelvier${__reset} or ${__bold}l4${__reset} instead." >&2
+  fi
+
+  core _run_update_checker
+
+  # No command, or it looks like a flag (e.g. a bare `--help`) — show usage.
+  if [ $# -eq 0 ] || [[ "$1" == -* ]]; then
+    _print_usage
+    exit 1
+  fi
+
+  # A command name was typed but it doesn't exist — say so, don't just
+  # silently dump the same usage a bare call would show.
+  if ! declare -f -- "$1" > /dev/null; then
+    echo -e "${__red}✗${__reset} Unknown command: ${__bold}$1${__reset}"
+    echo
+    _print_usage
+    exit 1
+  fi
+
+  # run the function with the same name as the first argument
+  "$@"
+}
+
+main "$@"

@@ -47,7 +47,7 @@ starterkit() (
       exit 1
     fi
 
-    # Download and install the latest version of the wp-takeoff starter kit with a depth of 1
+    # Download and install the latest version of the Label Vier starter kit with a depth of 1
     remote_repo_url="git@github.com:labelvier/wordpress-starterkit.git"
     if [[ "$version" == "woocommerce" ]]; then
       remote_repo_url="git@github.com:labelvier/labelvier-starterkit-woocommerce.git"

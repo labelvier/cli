@@ -64,7 +64,7 @@ storage() (
     if [[ $# -eq 0 ]]; then
       echo "Please provide a ssh host to convert images on."
       echo ""
-      echo "Usage: ./wp-takeoff storage convert-to-webp <host> [options]"
+      echo "Usage: ./labelvier storage convert-to-webp <host> [options]"
       echo ""
       echo "Options:"
       echo "  --dry-run              Test run without actual conversion"
@@ -76,11 +76,11 @@ storage() (
       echo "  --background           Run in background mode (detaches and survives SSH disconnect)"
       echo ""
       echo "Examples:"
-      echo "  ./wp-takeoff storage convert-to-webp my-host --dry-run"
-      echo "  ./wp-takeoff storage convert-to-webp my-host --quality 90 --parallel-jobs 8"
-      echo "  ./wp-takeoff storage convert-to-webp my-host --with-backup --yes"
-      echo "  ./wp-takeoff storage convert-to-webp my-host --path wp-content/uploads/2024"
-      echo "  ./wp-takeoff storage convert-to-webp my-host --background --yes"
+      echo "  ./labelvier storage convert-to-webp my-host --dry-run"
+      echo "  ./labelvier storage convert-to-webp my-host --quality 90 --parallel-jobs 8"
+      echo "  ./labelvier storage convert-to-webp my-host --with-backup --yes"
+      echo "  ./labelvier storage convert-to-webp my-host --path wp-content/uploads/2024"
+      echo "  ./labelvier storage convert-to-webp my-host --background --yes"
       exit 1
     fi
 

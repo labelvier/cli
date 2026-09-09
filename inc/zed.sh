@@ -243,7 +243,7 @@ zed() (
     fi
 
     # Check if the additions are already present
-    if grep -q "# Autocompletion files (managed by wp-takeoff zed)" "$target_file"; then
+    if grep -q "# Autocompletion files (managed by labelvier zed)" "$target_file"; then
       echo -e "${__green}✓${__reset} .gitignore already contains autocomplete entries"
       return
     fi
@@ -264,7 +264,7 @@ zed() (
     fi
 
     git add .zed/settings.json composer.json composer.lock .gitignore
-    git commit -m "build: add Zed autocompletion for $provider via wp-takeoff"
+    git commit -m "build: add Zed autocompletion for $provider via labelvier"
     echo -e "${__green}✓${__reset} Changes committed"
   }
 
