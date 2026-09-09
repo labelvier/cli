@@ -113,6 +113,75 @@ ai() (
     fi
   }
 
+  # claude itself (the Claude Code CLI) is needed to manage plugins like caveman.
+  function _require_claude_cli() {
+    if type -P claude >/dev/null 2>&1; then
+      return 0
+    fi
+
+    echo -e "${__red}The 'claude' command is not installed.${__reset} It is needed to install the caveman plugin."
+    if ! type -P brew >/dev/null 2>&1; then
+      echo -e "Homebrew was not found either. Install Claude Code yourself: ${__blue}https://claude.com/product/claude-code${__reset}"
+      exit 1
+    fi
+
+    local answer
+    read -p "Install it now with 'brew install --cask claude-code'? [y/N] " answer
+    case "$answer" in
+      [yY]*) brew install --cask claude-code ;;
+      *) echo "Aborted."; exit 1 ;;
+    esac
+
+    if ! type -P claude >/dev/null 2>&1; then
+      echo -e "${__red}'claude' is still not on your PATH after installing.${__reset} Open a new shell and try again."
+      exit 1
+    fi
+  }
+
+  # True (0) if the caveman plugin is installed and enabled.
+  function _caveman_installed() {
+    type -P claude >/dev/null 2>&1 || return 1
+    type -P jq >/dev/null 2>&1 || return 1
+    command claude plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "caveman@caveman" and .enabled == true)' >/dev/null 2>&1
+  }
+
+  # Installs the caveman Claude Code plugin (github.com/JuliusBrussee/caveman) —
+  # ultra-compressed communication mode. Safe to re-run: skips when already installed.
+  function _install_caveman() {
+    _require_claude_cli
+    _require_jq
+
+    if _caveman_installed; then
+      echo -e "${__green}✓${__reset} caveman plugin already installed"
+      return 0
+    fi
+
+    command claude plugin marketplace add JuliusBrussee/caveman
+    command claude plugin install caveman@caveman -y -s user
+
+    if _caveman_installed; then
+      echo -e "${__green}Installed${__reset} caveman plugin"
+    else
+      echo -e "${__red}Failed to install the caveman plugin.${__reset} Run it yourself: ${__blue}claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman${__reset}"
+    fi
+  }
+
+  # Removes the caveman plugin and its marketplace registration.
+  function _remove_caveman() {
+    if ! type -P claude >/dev/null 2>&1; then
+      echo "Skipping caveman plugin removal: 'claude' is not installed."
+      return 0
+    fi
+
+    if _caveman_installed; then
+      command claude plugin uninstall caveman@caveman -y
+      echo -e "${__green}Removed${__reset} caveman plugin"
+    fi
+
+    command claude plugin marketplace remove caveman >/dev/null 2>&1 \
+      && echo -e "${__green}Removed${__reset} the caveman marketplace"
+  }
+
   # Make sure settings.json exists and holds valid JSON, then back it up.
   function _prepare_settings_file() {
     mkdir -p "$claude_dir"
@@ -281,7 +350,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the toon hook and rtk. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the toon hook, rtk and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -312,7 +381,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the toon hook and rtk. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the toon hook, rtk and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -365,6 +434,9 @@ ai() (
     echo
     _require_rtk
 
+    echo
+    _install_caveman
+
     if _flag_is_present skip-hook "$@"; then
       echo "Skipped the toon hook (--skip-hook)."
     else
@@ -380,6 +452,7 @@ ai() (
     echo -e "  - the toon hook script and its registration in $settings_file"
     echo -e "  - the @labelvier/... and @RTK.md reference lines in CLAUDE.md (not the file itself)"
     echo -e "  - rtk's own artifacts (RTK.md, its Claude Code hook) via ${__bold}rtk init -g --uninstall${__reset}, if rtk is installed"
+    echo -e "  - the caveman plugin and its marketplace registration, if installed"
 
     local pair target
     while IFS= read -r pair; do
@@ -396,6 +469,7 @@ ai() (
     esac
 
     _remove_hook
+    _remove_caveman
 
     # Delegate to rtk's own uninstall rather than reimplementing it — it
     # removes RTK.md, its settings.json hook entry, and usually the @RTK.md
@@ -443,7 +517,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, toon, rtk and the Claude Code config.
+  # @description Checks basecamp, toon, rtk, the caveman plugin and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     if type -P basecamp >/dev/null 2>&1; then
@@ -475,6 +549,12 @@ ai() (
       else
         echo -e "${__green}✓${__reset} rtk wired into Claude Code"
       fi
+    fi
+
+    if _caveman_installed; then
+      echo -e "${__green}✓${__reset} caveman plugin"
+    else
+      echo -e "${__red}✗${__reset} caveman plugin ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
     local pair target
