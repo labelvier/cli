@@ -41,6 +41,57 @@ function _echo_documentation() {
   done <<<"$functions"
 }
 
+function _echo_function_description() {
+  # first argument is the file to search, second is the subcommand name
+  local current_dir=$(dirname "${BASH_SOURCE[0]}")
+  local contents=$(cat "$current_dir/$1")
+  local target="$2"
+  local functions=$(echo "$contents" | grep -E "^\s*# @function" -A 1)
+  local function_name function_description first_word
+  while read -r line; do
+    function_name=$(echo "$line" | cut -d' ' -f3-)
+    read -r line
+    function_description=$(echo -e "$line" | cut -d' ' -f3-)
+    # the @function line may have usage args after the name (e.g. "start <version>")
+    first_word=${function_name%% *}
+    if [[ "$first_word" == "$target" ]]; then
+      echo -e "${__bold}$function_name${__reset} - $function_description"
+      return 0
+    fi
+    read -r line
+  done <<<"$functions"
+
+  # no documented description found, still print something rather than nothing
+  echo -e "${__bold}$target${__reset}"
+  return 1
+}
+
+# Shared main() dispatcher. Given the command file's own filename and "$@":
+# runs the matching subcommand, but if --help is the argument right after the
+# subcommand name, prints its one-line @description instead of running it.
+# Falls back to the file's full documentation when no subcommand is given.
+function _dispatch() {
+  local filename="$1"
+  shift
+  local subcommand="$1"
+
+  # the `-*` guard matters: bash's `type -t` chokes on an arg that looks like
+  # its own flag (e.g. "type -t --help" errors instead of just failing), so a
+  # bare `<cmd> --help` must be caught before it ever reaches `type`.
+  if [[ -z "$subcommand" ]] || [[ "$subcommand" == -* ]] || ! type -t "$subcommand" | grep -q 'function'; then
+    _echo_documentation "$filename"
+    return
+  fi
+  shift
+
+  if [[ "$1" == "--help" ]]; then
+    _echo_function_description "$filename" "$subcommand"
+    return
+  fi
+
+  "$subcommand" "$@"
+}
+
 function _flag_is_present() {
   # first argument is the flag we are looking for
   flag_to_check="$1"

@@ -8,13 +8,7 @@ woocommerce() (
 
   # Runs the command.
   function main() {
-    # try to run the subcommand passed as the second argument and that function exists
-    if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
-      "$1"
-    else
-      # if no subcommand is passed, run the documentation function
-      _echo_documentation "$filename"
-    fi
+    _dispatch "$filename" "$@"
   }
 
   # @function add

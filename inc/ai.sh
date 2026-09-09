@@ -20,14 +20,7 @@ ai() (
 
   # Runs the command.
   function main() {
-    # try to run the subcommand passed as the second argument and that function exists
-    if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
-      # attach any remaining arguments to the function
-      "$1" "${@:2}"
-    else
-      # if no subcommand is passed, run the documentation function
-      _echo_documentation "$filename"
-    fi
+    _dispatch "$filename" "$@"
   }
 
   # ---------------------------------------------------------------------------
@@ -260,21 +253,35 @@ ai() (
   # @description Installs the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config, the toon hook and rtk. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
-    if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
+    if [[ -n "$1" ]] && [[ "$1" != -* ]] && type -t "$1" | grep -q 'function'; then
+      if [[ "$2" == "--help" ]]; then
+        _claude_subcommand_description "$1"
+        return
+      fi
       "$1" "${@:2}"
     else
       _claude_documentation
     fi
   }
 
-  # Hand-written help for the second level: _echo_documentation only reads the
-  # flat "# @function" list of this file, which belongs to `wp-takeoff ai`.
+  # Second-level subcommand descriptions, hand-written because
+  # _echo_documentation only reads the flat "# @function" list of this file,
+  # which belongs to `wp-takeoff ai` (install/uninstall must stay out of it).
+  # Shared between the full doc below and `claude <sub> --help`.
+  function _claude_subcommand_description() {
+    case "$1" in
+      install) echo -e "${__bold}install${__reset} - Installs config files, the toon hook and rtk. Flags: --force, --skip-hook" ;;
+      uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
+      *) echo -e "${__bold}$1${__reset}" ;;
+    esac
+  }
+
   function _claude_documentation() {
     echo -e "${__bold}wp-takeoff ai claude${__reset} — Claude Code setup for Label Vier projects."
     echo
     echo -e "${__bold}Available functions:${__reset}"
-    echo -e "  ${__bold}install${__reset} - Installs config files, the toon hook and rtk. Flags: --force, --skip-hook"
-    echo -e "  ${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)"
+    echo -e "  $(_claude_subcommand_description install)"
+    echo -e "  $(_claude_subcommand_description uninstall)"
     echo
     echo -e "Run ${__blue}wp-takeoff ai check${__reset} for status."
   }
