@@ -19,9 +19,3 @@ When finishing a release create or update the CHANGELOG.md, using the keepachang
 
 ## Staging
 When asking 'deploy to staging' or 'zet op staging' or 'test op staging', use `wp-takeoff deploy staging`. Don't run `npm run deploy-staging` directly. If you have merge conflicts during staging deploy, fix and push the `staging` branch. After that run `wp-takeoff deploy staging` again.
-
-## Other
-
-@labelvier/WORDPRESS.md
-
-@labelvier/ANGULAR.md
