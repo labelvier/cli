@@ -402,13 +402,13 @@ ai() (
     if type -P toon >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} toon"
     else
-      echo -e "${__red}✗${__reset} toon ${__red}(missing, run: npm i -g @toon-format/cli)${__reset}"
+      echo -e "${__red}✗${__reset} toon ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
     fi
 
     if type -P rtk >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} rtk"
     else
-      echo -e "${__red}✗${__reset} rtk ${__red}(missing, run: brew install rtk)${__reset}"
+      echo -e "${__red}✗${__reset} rtk ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
     fi
 
     local pair target
@@ -417,25 +417,25 @@ ai() (
       if [ -f "$target" ]; then
         echo -e "${__green}✓${__reset} $target"
       else
-        echo -e "${__red}✗${__reset} $target ${__red}(missing)${__reset}"
+        echo -e "${__red}✗${__reset} $target ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
       fi
     done < <(_claude_files)
 
     if [ -f "$claude_dir/CLAUDE.md" ]; then
       if ! grep -q '@labelvier/WORDPRESS.md' "$claude_dir/CLAUDE.md"; then
-        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/WORDPRESS.md"
+        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/WORDPRESS.md ${__red}(run: wp-takeoff ai claude install)${__reset}"
       fi
       if ! grep -q '@labelvier/ANGULAR.md' "$claude_dir/CLAUDE.md"; then
-        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/ANGULAR.md"
+        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/ANGULAR.md ${__red}(run: wp-takeoff ai claude install)${__reset}"
       fi
     fi
 
     if _hook_registered; then
       echo -e "${__green}✓${__reset} $hook_path (toon hook, registered)"
     elif [ -f "$hook_path" ]; then
-      echo -e "${__red}✗${__reset} $hook_path exists but is not registered in $settings_file"
+      echo -e "${__red}✗${__reset} $hook_path exists but is not registered in $settings_file ${__red}(run: wp-takeoff ai claude install)${__reset}"
     else
-      echo -e "${__red}✗${__reset} $hook_path (toon hook, missing)"
+      echo -e "${__red}✗${__reset} $hook_path (toon hook) ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
     fi
   }
 
