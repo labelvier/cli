@@ -34,7 +34,7 @@ function _show_banner() {
   local b="" c="" r=""
   if [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
     b="$__bold"
-    c="$__blue"
+    c=$'\033[38;2;226;101;94m'
     r="$__reset"
   fi
 
