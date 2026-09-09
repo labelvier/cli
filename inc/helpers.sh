@@ -75,12 +75,21 @@ function _dispatch() {
   shift
   local subcommand="$1"
 
-  # the `-*` guard matters: bash's `type -t` chokes on an arg that looks like
-  # its own flag (e.g. "type -t --help" errors instead of just failing), so a
-  # bare `<cmd> --help` must be caught before it ever reaches `type`.
-  if [[ -z "$subcommand" ]] || [[ "$subcommand" == -* ]] || ! type -t "$subcommand" | grep -q 'function'; then
+  # No subcommand, or it looks like a flag (e.g. a bare `--help`) — show docs.
+  # The `-*` check also matters because bash's `type -t` chokes on an arg
+  # that looks like its own flag (errors instead of just failing).
+  if [[ -z "$subcommand" ]] || [[ "$subcommand" == -* ]]; then
     _echo_documentation "$filename"
     return
+  fi
+
+  # A real subcommand name was typed but it doesn't exist — say so, don't
+  # just silently dump the same docs a bare call would show.
+  if ! type -t "$subcommand" | grep -q 'function'; then
+    echo -e "${__red}✗${__reset} Unknown command: ${__bold}$subcommand${__reset}"
+    echo
+    _echo_documentation "$filename"
+    return 1
   fi
   shift
 

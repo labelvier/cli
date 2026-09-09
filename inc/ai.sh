@@ -292,8 +292,16 @@ ai() (
         fi
         "_claude_$1" "${@:2}"
         ;;
-      *)
+      ""|-*)
+        # No subcommand, or it looks like a flag (e.g. a bare `--help`).
         _claude_documentation
+        ;;
+      *)
+        # A subcommand name was typed but it doesn't exist.
+        echo -e "${__red}✗${__reset} Unknown command: ${__bold}$1${__reset}"
+        echo
+        _claude_documentation
+        return 1
         ;;
     esac
   }

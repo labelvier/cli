@@ -21,6 +21,7 @@ WP Takeoff CLI — pure-bash command tool (`wp-takeoff`, usually aliased `wt`) f
 - The top-level help list is auto-generated from `declare -F` minus names starting with `_` or `main`. So **every internal helper must be `_`-prefixed** to stay hidden.
 - Subcommand help comes from `# @function <name>` + `# @description <text>` comment pairs (single line each). Keep `@description` one terse sentence — name what it does, flags in short form (`--force`, not a parenthetical essay). Don't list requirements/usage examples/sub-details there; put those in the command's own `--help`-style output if it needs more, not in this comment.
 - `<cmd> <sub> --help` prints that one `@description` line and does **not** run the subcommand — this is load-bearing, don't let a subcommand consume `--help` as a regular flag.
+- A typo'd subcommand (non-empty, not flag-like, no matching function) prints `✗ Unknown command: <name>` before falling back to the docs, and returns/exits non-zero — distinct from the bare-call case (no error, docs only). `_dispatch`, the top-level `wp-takeoff` entry script, and `ai.sh`'s nested `claude` all do this; mirror it in any other hand-rolled dispatcher.
 - Color vars `$__red $__blue $__green $__bold $__reset` are set in `wp-takeoff` and inherited — use them, don't redefine.
 
 ## Adding a command
