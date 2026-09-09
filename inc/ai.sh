@@ -86,6 +86,32 @@ ai() (
     fi
   }
 
+  # rtk is a general Claude Code token-saving proxy, not tied to the hook —
+  # every Label Vier dev should have it regardless of --skip-hook.
+  function _require_rtk() {
+    if type -P rtk >/dev/null 2>&1; then
+      return 0
+    fi
+
+    echo -e "${__red}rtk is not installed.${__reset} It proxies commands (ls, git, ...) to cut Claude Code token usage."
+    if ! type -P brew >/dev/null 2>&1; then
+      echo -e "Homebrew was not found either. Install rtk yourself: ${__blue}https://www.rtk-ai.app/${__reset}"
+      exit 1
+    fi
+
+    local answer
+    read -p "Install it now with 'brew install rtk'? [y/N] " answer
+    case "$answer" in
+      [yY]*) brew install rtk ;;
+      *) echo "Aborted."; exit 1 ;;
+    esac
+
+    if ! type -P rtk >/dev/null 2>&1; then
+      echo -e "${__red}rtk is still not on your PATH after installing.${__reset} Open a new shell and try again."
+      exit 1
+    fi
+  }
+
   # Make sure settings.json exists and holds valid JSON, then back it up.
   function _prepare_settings_file() {
     mkdir -p "$claude_dir"
@@ -231,7 +257,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Install everything a Label Vier dev needs in ~/.claude: the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config files, and the toon hook that shrinks basecamp CLI output. Subcommands: install, uninstall. See `ai check` for status.
+  # @description Install everything a Label Vier dev needs for Claude Code: the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config files, the toon hook that shrinks basecamp CLI output, and the rtk token-saving proxy. Subcommands: install, uninstall. See `ai check` for status.
   # ---------------------------------------------------------------------------
   function claude() {
     if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
@@ -246,15 +272,17 @@ ai() (
   function _claude_documentation() {
     echo -e "${__bold}wp-takeoff ai claude${__reset} — Claude Code setup for Label Vier projects."
     echo
-    echo -e "Covers everything in ${__blue}$claude_dir${__reset}:"
+    echo -e "Covers everything in ${__blue}$claude_dir${__reset}, plus the ${__bold}rtk${__reset} proxy:"
     echo -e "  - ${__bold}CLAUDE.md${__reset}, ${__bold}labelvier/WORDPRESS.md${__reset}, ${__bold}labelvier/ANGULAR.md${__reset} — the global instruction files"
     echo -e "  - the ${__bold}toon${__reset} hook — pipes ${__blue}basecamp${__reset} CLI output through the TOON formatter so Claude reads it for fewer tokens"
+    echo -e "  - ${__bold}rtk${__reset} — proxies ls/git/... to cut Claude Code token usage"
     echo
     echo -e "${__bold}Available functions:${__reset}"
-    echo -e "  ${__bold}install${__reset} - Create missing config files and install the toon hook. Flags: --force (overwrite config files from template), --skip-hook (skip the toon hook)"
+    echo -e "  ${__bold}install${__reset} - Create missing config files, install the toon hook and rtk. Flags: --force (overwrite config files from template), --skip-hook (skip the toon hook)"
     echo -e "  ${__bold}uninstall${__reset} - Remove the toon hook AND the config files. Warns and asks for confirmation first"
     echo
     echo -e "${__bold}Requirements for the hook:${__reset} ${__blue}jq${__reset} (via brew) and ${__blue}toon${__reset} (via npm i -g @toon-format/cli) — both are offered for install."
+    echo -e "${__bold}Requirement for rtk:${__reset} ${__blue}brew${__reset} — offered for install."
     echo
     echo -e "${__bold}Usage: ${__blue}wp-takeoff ai claude install${__reset}"
     echo -e "For status of basecamp, toon and this setup, run: ${__blue}wp-takeoff ai check${__reset}"
@@ -292,6 +320,9 @@ ai() (
     done < <(_claude_files)
 
     _append_missing_refs
+
+    echo
+    _require_rtk
 
     if _flag_is_present skip-hook "$@"; then
       echo "Skipped the toon hook (--skip-hook)."
@@ -374,6 +405,12 @@ ai() (
       echo -e "${__green}✓${__reset} toon"
     else
       echo -e "${__red}✗${__reset} toon ${__red}(missing, run: npm i -g @toon-format/cli)${__reset}"
+    fi
+
+    if type -P rtk >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} rtk"
+    else
+      echo -e "${__red}✗${__reset} rtk ${__red}(missing, run: brew install rtk)${__reset}"
     fi
 
     local pair target
