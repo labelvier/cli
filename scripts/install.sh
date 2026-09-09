@@ -12,6 +12,74 @@ set -e
 REPO="labelvier/cli"
 INSTALL_DIR="${LABELVIER_CLI_DIR:-$HOME/.labelvier}"
 
+show_banner() {
+  # Skip the braille mark if the terminal is too narrow (logo 32 + gap 3 + text 9 = 44)
+  local cols
+  cols=$(tput cols 2>/dev/null || echo 80)
+  if [ "$cols" -lt 44 ]; then
+    echo ""
+    echo "Label Vier CLI"
+    echo ""
+    return
+  fi
+
+  local b="" c="" r=""
+  if [ -z "${NO_COLOR:-}" ] && [ -t 1 ]; then
+    b=$'\033[1m'
+    c=$'\033[0;34m'
+    r=$'\033[0m'
+  fi
+
+  local logo=(
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⢤⣐⠲⠶⠤⠤⠶⠶⣂⡤⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⠀⠀⣀⢔⡪⠓⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠚⠵⡢⣄⠀⠀⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⡠⣪⠔⠁⠀⠀⠀⠀⠀⢀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠈⠲⢕⢄⠀⠀⠀⠀"
+    "⠀⠀⢀⢜⠔⠁⠀⠀⠀⠀⠀⠀⢠⢋⠭⡫⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠣⡱⡀⠀⠀"
+    "⠀⢀⢮⠊⠀⠀⠀⠀⠀⠀⠀⢠⢃⠎⠀⡇⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡕⡀⠀"
+    "⠀⣎⠇⠀⠀⠀⠀⠀⠀⠀⡰⢡⠋⠀⠀⡇⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣱⠀"
+    "⢰⡘⠀⠀⠀⠀⠀⠀⠀⡰⢡⠃⠀⠀⠀⡇⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢣⡇"
+    "⠘⡇⠀⠀⠀⠀⠀⠀⢸⠤⢇⣀⣀⣀⣀⣧⣼⣀⣀⣀⣀⣀⣀⣀⠀⠀⠀⠀⠀⠀⢸⢰"
+    "⢠⡇⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠑⡟⢻⠊⠉⠉⠉⢑⠖⡜⠀⠀⠀⠀⠀⠀⢸⠸"
+    "⠸⢣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⢸⠀⠀⠀⢠⢎⡜⠀⠀⠀⠀⠀⠀⠀⡘⡇"
+    "⠀⢏⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⢸⠀⠀⢠⢃⠎⠀⠀⠀⠀⠀⠀⠀⢠⡻⠀"
+    "⠀⠈⢞⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⢸⠀⣠⢃⠎⠀⠀⠀⠀⠀⠀⠀⢠⢣⠃⠀"
+    "⠀⠀⠈⢮⢢⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠮⠒⢡⠃⠀⠀⠀⠀⠀⠀⠀⡴⡱⠁⠀⠀"
+    "⠀⠀⠀⠀⠑⢕⠤⡀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠁⠀⠀⠀⠀⠀⢀⡤⡪⠊⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⠀⠀⠑⠪⢖⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⠤⣒⠕⠊⠀⠀⠀⠀⠀⠀"
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠑⠚⠭⠶⢒⣒⣒⡒⠶⠬⠛⠊⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀"
+  )
+  local text_line=7
+
+  echo ""
+  if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    for line in "${logo[@]}"; do
+      echo "${c}${line}${r}"
+      sleep 0.02
+    done
+    sleep 0.1
+    local text="labelvier" i
+    local lines_up=$(( ${#logo[@]} - text_line ))
+    printf "\033[%dA\033[36G" "$lines_up"
+    for (( i=0; i<${#text}; i++ )); do
+      printf "%s%s%s" "${b}" "${text:$i:1}" "${r}"
+      sleep 0.02
+    done
+    printf "\033[%dB\r" "$lines_up"
+  else
+    local i
+    for i in "${!logo[@]}"; do
+      if [ "$i" -eq "$text_line" ]; then
+        echo "${logo[$i]}   labelvier"
+      else
+        echo "${logo[$i]}"
+      fi
+    done
+  fi
+  echo ""
+}
+
+show_banner
+
 if [ -d "$INSTALL_DIR/.git" ]; then
   echo "Already installed at $INSTALL_DIR — updating..."
   git -C "$INSTALL_DIR" pull --ff-only
