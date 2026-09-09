@@ -1,40 +1,49 @@
-# README #
+<img src="assets/logo.svg" width="300" height="100" alt="Label Vier">
 
-The WP Takeoff CLI is a command line interface for the WP Takeoff starterkit. It allows you to install the starterkit and manage your WordPress projects, do releases and more.
+# Label Vier CLI
 
-## Install the wp-takeoff CLI
+The Label Vier CLI (`labelvier`, shorthand `l4`) is a command line interface
+for the Label Vier WordPress Starter Kit. It helps you install the starter
+kit, manage your WordPress projects, run releases, and more.
 
-### Run the following command to clone the repository:
+> `wp-takeoff` was the old name for this tool. It still works — it's a
+> symlink to the same script — but prints a deprecation notice pointing at
+> `labelvier`/`l4`. New scripts and aliases should use `labelvier` or `l4`.
 
+## Install
 
-`git clone git@bitbucket.org:labelvier/wp-takeoff-cli.git`
+```sh
+curl -fsSL https://raw.githubusercontent.com/labelvier/cli/master/scripts/install.sh | bash
+```
 
-This will clone the repository to a new directory named `wp-takeoff-cli` in the current directory.
+This clones the CLI to `~/.labelvier` and adds it to your `$PATH`. Restart
+your shell afterwards.
 
-Note: If you don't have set up SSH keys for your Bitbucket account, you can use HTTPS instead of SSH to clone the repository. To do this, replace the SSH URL in the `git clone` command with the HTTPS URL.
+Prefer to do it by hand? Clone the repo yourself and run `core install`
+from inside it:
 
+```sh
+git clone git@github.com:labelvier/cli.git
+cd cli
+./labelvier core install
+```
 
-`git clone https://bitbucket.org/labelvier/wp-takeoff-cli.git`
+Want an even shorter alias (e.g. `wt`)? Run:
 
-### Install the core for the current repository by running the following command:
-
-`./wp-takeoff core install`
-
-After the installation you get the option to choose which $PATH variable you want to set and choose the correct option.
-
-From now on you can globally use the `wp-takeoff` command. Hint, if you want to set and alias run the following command:
-
-`wp-takeoff core alias`
+```sh
+labelvier core alias
+```
 
 ### Documentation
 
-Running `wp-takeoff` will give you a list of all available commands.
+Running `labelvier` (or `l4`) with no arguments lists all available
+commands. Running any command without arguments lists all available
+subcommands for it — e.g. `labelvier core` lists everything under `core`.
 
-Running any command without any arguments will give you a list of all available options for that command. For example, running `wp-takeoff core` will give you a list of all available options for the core command.
+### Install the WordPress starter kit
 
-### Install the WordPress starterkit
+Run this from the folder where all your projects live:
 
-Run this from the folder where all your projects are located.
-
-`wp-takeoff starterkit install`
-
+```sh
+labelvier starterkit install
+```
