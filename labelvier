@@ -56,16 +56,13 @@ function _show_banner() {
     "⠀⠀⠀⠀⠀⠀⠑⠪⢖⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⠤⣒⠕⠊⠀⠀⠀⠀⠀⠀"
     "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠑⠚⠭⠶⢒⣒⣒⡒⠶⠬⠛⠊⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀"
   )
-  local text_line=7 i
+  local i
 
   echo ""
   for i in "${!logo[@]}"; do
-    if [ "$i" -eq "$text_line" ]; then
-      echo -e "${c}${logo[$i]}${r}   ${b}labelvier${r}"
-    else
-      echo -e "${c}${logo[$i]}${r}"
-    fi
+    echo -e "${c}${logo[$i]}${r}"
   done
+  echo -e "           ${b}Label Vier CLI${r}"
   echo ""
 }
 

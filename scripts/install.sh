@@ -48,8 +48,6 @@ show_banner() {
     "⠀⠀⠀⠀⠀⠀⠑⠪⢖⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⠤⣒⠕⠊⠀⠀⠀⠀⠀⠀"
     "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠑⠚⠭⠶⢒⣒⣒⡒⠶⠬⠛⠊⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀"
   )
-  local text_line=7
-
   echo ""
   if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     for line in "${logo[@]}"; do
@@ -57,23 +55,19 @@ show_banner() {
       sleep 0.02
     done
     sleep 0.1
-    local text="labelvier" i
-    local lines_up=$(( ${#logo[@]} - text_line ))
-    printf "\033[%dA\033[36G" "$lines_up"
+    local text="Label Vier CLI" i
+    printf "           "
     for (( i=0; i<${#text}; i++ )); do
       printf "%s%s%s" "${b}" "${text:$i:1}" "${r}"
       sleep 0.02
     done
-    printf "\033[%dB\r" "$lines_up"
+    printf "\n"
   else
     local i
     for i in "${!logo[@]}"; do
-      if [ "$i" -eq "$text_line" ]; then
-        echo "${logo[$i]}   labelvier"
-      else
-        echo "${logo[$i]}"
-      fi
+      echo "${logo[$i]}"
     done
+    echo "           Label Vier CLI"
   fi
   echo ""
 }
