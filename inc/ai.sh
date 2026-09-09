@@ -284,15 +284,18 @@ ai() (
   # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the toon hook and rtk. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
-    if [[ -n "$1" ]] && [[ "$1" != -* ]] && type -t "$1" | grep -q 'function'; then
-      if [[ "$2" == "--help" ]]; then
-        _claude_subcommand_description "$1"
-        return
-      fi
-      "$1" "${@:2}"
-    else
-      _claude_documentation
-    fi
+    case "$1" in
+      install|uninstall)
+        if [[ "$2" == "--help" ]]; then
+          _claude_subcommand_description "$1"
+          return
+        fi
+        "_claude_$1" "${@:2}"
+        ;;
+      *)
+        _claude_documentation
+        ;;
+    esac
   }
 
   # Second-level subcommand descriptions, hand-written because
@@ -323,7 +326,7 @@ ai() (
   # the missing @labelvier/... lines appended (see _append_missing_refs), so
   # personal content in it is never touched. --skip-hook skips the toon hook
   # step.
-  function install() {
+  function _claude_install() {
     local force=1
     _flag_is_present force "$@" && force=0
 
@@ -364,7 +367,7 @@ ai() (
 
   # Removes the toon hook and the @labelvier/... refs it added to CLAUDE.md —
   # never the file itself, which holds personal/project edits.
-  function uninstall() {
+  function _claude_uninstall() {
     echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}wp-takeoff ai claude install${__reset} sets up:"
     echo -e "  - the toon hook script and its registration in $settings_file"
     echo -e "  - the @labelvier/... and @RTK.md reference lines in CLAUDE.md (not the file itself)"
