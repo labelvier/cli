@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-09-09
+
+### Added
+- Braille-art logo banner (brand red) shown on the install script and the CLI's bare usage screen, with "Label Vier CLI" centered underneath.
+- `labelvier ai claude install`/`uninstall` and `ai check` now also manage the caveman Claude Code plugin.
+
+### Changed
+- Rewrote the CLI's usage tagline to reflect its actual scope beyond WordPress scaffolding.
+
 ## [1.0.0] - 2026-09-09
 
 ### Added
