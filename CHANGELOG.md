@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-09-09
+
+### Changed
+- `scripts/install.sh` now drops into a fresh login shell after updating `$PATH`, so `labelvier`/`l4` works immediately without restarting the terminal or running `source ~/.zshrc`. Skipped in CI or piped/non-interactive installs, or when `LABELVIER_NO_EXEC` is set.
+
 ## [1.0.1] - 2026-09-09
 
 ### Added
