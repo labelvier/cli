@@ -16,8 +16,9 @@ kit, manage your WordPress projects, run releases, and more.
 curl -fsSL https://raw.githubusercontent.com/labelvier/cli/master/scripts/install.sh | bash
 ```
 
-This clones the CLI to `~/.labelvier` and adds it to your `$PATH`. Restart
-your shell afterwards.
+This clones the CLI to `~/.labelvier`, adds it to your `$PATH`, and drops you
+into a fresh shell so `labelvier`/`l4` works right away — no manual restart
+needed.
 
 Prefer to do it by hand? Clone the repo yourself and run `core install`
 from inside it:

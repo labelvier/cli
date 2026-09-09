@@ -89,6 +89,7 @@ fi
 
 chmod +x "$INSTALL_DIR/labelvier"
 
+path_updated=1
 if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
   echo "labelvier is already on your \$PATH."
 else
@@ -113,7 +114,8 @@ else
   esac
 
   if [ -n "$rc_file" ]; then
-    echo "Added $INSTALL_DIR to \$PATH in $rc_file — restart your shell (or run 'source $rc_file') to use it."
+    echo "Added $INSTALL_DIR to \$PATH in $rc_file."
+    path_updated=0
   else
     echo "Could not detect your shell (\$SHELL=$SHELL) — add this to your shell config manually:"
     echo "  export PATH=\$PATH:$INSTALL_DIR"
@@ -122,3 +124,12 @@ fi
 
 echo
 echo "Installed! Run 'labelvier' or 'l4' to get started."
+
+# Drop straight into a fresh login shell so labelvier/l4 works right away,
+# without the user having to restart their terminal or run 'source ~/.zshrc'
+# themselves. Only when this is a real interactive terminal (not CI, not
+# LABELVIER_NO_EXEC) — never for piped/scripted installs.
+if [ "$path_updated" -eq 0 ] && [ -t 1 ] && [ -z "${CI:-}" ] && [ -z "${LABELVIER_NO_EXEC:-}" ]; then
+  echo "Starting a new shell so it's ready to use..."
+  exec "$SHELL" -l
+fi
