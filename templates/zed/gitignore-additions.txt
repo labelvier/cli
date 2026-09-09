@@ -1,5 +1,5 @@
 
-# Autocompletion files (managed by wp-takeoff zed)
+# Autocompletion files (managed by labelvier zed)
 autocomplete
 vendor
 
