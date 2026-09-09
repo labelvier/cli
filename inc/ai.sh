@@ -136,7 +136,7 @@ ai() (
   # check/install works through. Plain array instead of an associative one —
   # this repo targets bash 3.2 (macOS default).
   function _claude_files() {
-    echo "$claude_dir/CLAUDE.md:$claude_tpl_dir/CLAUDE.md.tpl"
+    echo "$labelvier_dir/GLOBAL.md:$claude_tpl_dir/labelvier/GLOBAL.md.tpl"
     echo "$labelvier_dir/WORDPRESS.md:$claude_tpl_dir/labelvier/WORDPRESS.md.tpl"
     echo "$labelvier_dir/ANGULAR.md:$claude_tpl_dir/labelvier/ANGULAR.md.tpl"
   }
@@ -233,24 +233,46 @@ ai() (
     fi
   }
 
-  # Appends any missing @labelvier/... reference line to an existing
-  # CLAUDE.md. Only adds what's missing, never rewrites the rest of the file.
+  # CLAUDE.md is the user's own file — we never overwrite or template it.
+  # This only creates it empty if it's missing (so the refs below have
+  # somewhere to live) and appends whatever @labelvier/... lines are missing,
+  # leaving all of the user's own content untouched.
   function _append_missing_refs() {
     local claude_md="$claude_dir/CLAUDE.md"
-    [ -f "$claude_md" ] || return 0
+    if [ ! -f "$claude_md" ]; then
+      mkdir -p "$claude_dir"
+      : > "$claude_md"
+      echo -e "${__green}Created${__reset} $claude_md (empty)"
+    fi
 
     local ref
-    for ref in "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
-      if ! grep -q "$ref" "$claude_md"; then
+    for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
+      if ! grep -qxF "$ref" "$claude_md"; then
         printf '\n%s\n' "$ref" >> "$claude_md"
         echo -e "${__green}Added${__reset} $ref to $claude_md"
       fi
     done
   }
 
+  # Inverse of _append_missing_refs, for uninstall: removes only the
+  # @labelvier/... reference lines it added, never the file itself or
+  # anything else in it.
+  function _remove_refs() {
+    local claude_md="$claude_dir/CLAUDE.md"
+    [ -f "$claude_md" ] || return 0
+
+    local ref tmp_file="$claude_md.tmp"
+    for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
+      if grep -qxF "$ref" "$claude_md"; then
+        grep -vxF "$ref" "$claude_md" > "$tmp_file" && mv "$tmp_file" "$claude_md"
+        echo -e "${__green}Removed${__reset} $ref from $claude_md"
+      fi
+    done
+  }
+
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config, the toon hook and rtk. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the toon hook and rtk. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     if [[ -n "$1" ]] && [[ "$1" != -* ]] && type -t "$1" | grep -q 'function'; then
@@ -288,9 +310,10 @@ ai() (
 
   # Creates missing config files from their tpl template and installs the
   # toon hook. Never overwrites an existing config file unless --force is
-  # passed; an existing CLAUDE.md only gets the missing @labelvier/... lines
-  # appended, so custom content in it is never touched. --skip-hook skips
-  # the toon hook step.
+  # passed. CLAUDE.md itself is never templated/overwritten — it only gets
+  # the missing @labelvier/... lines appended (see _append_missing_refs), so
+  # personal content in it is never touched. --skip-hook skips the toon hook
+  # step.
   function install() {
     local force=1
     _flag_is_present force "$@" && force=0
@@ -330,11 +353,12 @@ ai() (
     fi
   }
 
-  # Removes the toon hook only — config files hold personal/project edits
-  # and are never deleted by this command.
+  # Removes the toon hook and the @labelvier/... refs it added to CLAUDE.md —
+  # never the file itself, which holds personal/project edits.
   function uninstall() {
     echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}wp-takeoff ai claude install${__reset} sets up:"
     echo -e "  - the toon hook script and its registration in $settings_file"
+    echo -e "  - the @labelvier/... reference lines in CLAUDE.md (not the file itself)"
 
     local pair target
     while IFS= read -r pair; do
@@ -351,6 +375,7 @@ ai() (
     esac
 
     _remove_hook
+    _remove_refs
 
     while IFS= read -r pair; do
       target="${pair%%:*}"
@@ -422,12 +447,15 @@ ai() (
     done < <(_claude_files)
 
     if [ -f "$claude_dir/CLAUDE.md" ]; then
-      if ! grep -q '@labelvier/WORDPRESS.md' "$claude_dir/CLAUDE.md"; then
-        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/WORDPRESS.md ${__red}(run: wp-takeoff ai claude install)${__reset}"
-      fi
-      if ! grep -q '@labelvier/ANGULAR.md' "$claude_dir/CLAUDE.md"; then
-        echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference @labelvier/ANGULAR.md ${__red}(run: wp-takeoff ai claude install)${__reset}"
-      fi
+      echo -e "${__green}✓${__reset} $claude_dir/CLAUDE.md"
+      local ref
+      for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
+        if ! grep -qxF "$ref" "$claude_dir/CLAUDE.md"; then
+          echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference $ref ${__red}(run: wp-takeoff ai claude install)${__reset}"
+        fi
+      done
+    else
+      echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
     fi
 
     if _hook_registered; then
