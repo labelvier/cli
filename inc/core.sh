@@ -191,24 +191,31 @@ core() (
     fi
   }
 
-  # @function generate
-  # @description Generate a new command collection
+  # @function generate <optional-command-name> <optional-first-command-name>
+  # @description Generate a new command collection. Pass both names as args to skip the prompts.
   function generate () {
-    # Ask for the command name
-    echo "What is the name of the command collection (i.e. core, release, deploy)?"
-    read -r command_name
+    local command_name="$1"
+    local first_command_name="$2"
+
+    # Ask for the command name if it wasn't passed as an argument
+    if [[ -z "$command_name" ]]; then
+      echo "What is the name of the command collection (i.e. core, release, deploy)?"
+      read -r command_name
+    fi
     # Check if there are any characters in the command name that are not allowed for a bash function name / file name
     if [[ "$command_name" =~ [^a-zA-Z0-9_-] ]]; then
       echo "The command name can only contain letters, numbers, underscores and dashes"
       exit 1
     fi
     # Copy example.sh.tpl to the command name
-    cp "$current_dir/example.sh.tpl" "$current_dir/$command_name.sh"
+    cp "$current_dir/../templates/example.sh.tpl" "$current_dir/$command_name.sh"
     # Replace the command name in the file
     sed -i '' "s/global_command_name/$command_name/g" "$current_dir/$command_name.sh"
-    # Ask for the first command name
-    echo "What is the name of the first command (i.e. list, install, deploy)?"
-    read -r first_command_name
+    # Ask for the first command name if it wasn't passed as an argument
+    if [[ -z "$first_command_name" ]]; then
+      echo "What is the name of the first command (i.e. list, install, deploy)?"
+      read -r first_command_name
+    fi
     # Check if there are any characters in the command name that are not allowed for a bash function name / file name
     if [[ "$first_command_name" =~ [^a-zA-Z0-9_-] ]]; then
       echo "The command name can only contain letters, numbers, underscores and dashes"
@@ -216,6 +223,7 @@ core() (
     fi
     # Replace the command name in the file
     sed -i '' "s/first_command_name/$first_command_name/g" "$current_dir/$command_name.sh"
+    echo "Generated $current_dir/$command_name.sh"
   }
 
   _get_package_version() {

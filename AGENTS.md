@@ -8,8 +8,8 @@ WP Takeoff CLI — pure-bash command tool (`wp-takeoff`, usually aliased `wt`) f
 - `inc/*.sh` — one command collection per file. Filename == function name (`inc/release.sh` → `release()`).
 - `inc/core.sh` — install/update/alias/generate machinery.
 - `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`).
-- `inc/example.sh.tpl` — scaffold template (`wp-takeoff core generate`).
-- `templates/` — files deployed to servers (cron runner, etc.).
+- `templates/example.sh.tpl` — scaffold template (`wp-takeoff core generate`).
+- `templates/` — files deployed to servers (cron runner, etc.) plus the scaffold template above.
 - `package.json` — only holds `version`.
 
 ## How commands work
@@ -26,9 +26,9 @@ WP Takeoff CLI — pure-bash command tool (`wp-takeoff`, usually aliased `wt`) f
 ## Adding a command
 
 1. Read `inc/hello.sh` (minimal) and `inc/cron.sh` / `inc/release.sh` (real) first; mirror their structure.
-2. `wp-takeoff core generate` to scaffold, or copy the pattern from `inc/example.sh.tpl`.
+2. Scaffold with `wp-takeoff core generate <command-name> <first-command-name>` — both args are optional and, if omitted, are asked for interactively; passing them makes it a non-interactive one-liner (the form an agent should use). Or copy the pattern from `templates/example.sh.tpl` by hand.
 3. Underscore-prefix all helpers. Reuse `inc/helpers.sh` and `core _get_package_version`.
-4. Use the `wt-command-builder` agent (`.claude/agents/`) for this work.
+4. Use the `wt-command-builder` agent (`.claude/agents/`) for this work — it can run `core generate` itself instead of hand-writing the boilerplate.
 
 ## Environment constraints
 
