@@ -17,7 +17,7 @@ WP Takeoff CLI — pure-bash command tool (`wp-takeoff`, usually aliased `wt`) f
 - Each command is a **subshell function** `cmd() ( ... )` (parens, not braces).
 - It contains an inner `main()` that dispatches: if `$1` names a function, run it with remaining args; otherwise print docs via `_echo_documentation`.
 - The top-level help list is auto-generated from `declare -F` minus names starting with `_` or `main`. So **every internal helper must be `_`-prefixed** to stay hidden.
-- Subcommand help comes from `# @function <name>` + `# @description <text>` comment pairs (single line each).
+- Subcommand help comes from `# @function <name>` + `# @description <text>` comment pairs (single line each). Keep `@description` one terse sentence — name what it does, flags in short form (`--force`, not a parenthetical essay). Don't list requirements/usage examples/sub-details there; put those in the command's own `--help`-style output if it needs more, not in this comment.
 - Color vars `$__red $__blue $__green $__bold $__reset` are set in `wp-takeoff` and inherited — use them, don't redefine.
 
 ## Adding a command

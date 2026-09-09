@@ -257,7 +257,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Install everything a Label Vier dev needs for Claude Code: the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config files, the toon hook that shrinks basecamp CLI output, and the rtk token-saving proxy. Subcommands: install, uninstall. See `ai check` for status.
+  # @description Installs the global CLAUDE.md/WORDPRESS.md/ANGULAR.md config, the toon hook and rtk. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     if [[ -n "$1" ]] && type -t "$1" | grep -q 'function'; then
@@ -272,20 +272,11 @@ ai() (
   function _claude_documentation() {
     echo -e "${__bold}wp-takeoff ai claude${__reset} — Claude Code setup for Label Vier projects."
     echo
-    echo -e "Covers everything in ${__blue}$claude_dir${__reset}, plus the ${__bold}rtk${__reset} proxy:"
-    echo -e "  - ${__bold}CLAUDE.md${__reset}, ${__bold}labelvier/WORDPRESS.md${__reset}, ${__bold}labelvier/ANGULAR.md${__reset} — the global instruction files"
-    echo -e "  - the ${__bold}toon${__reset} hook — pipes ${__blue}basecamp${__reset} CLI output through the TOON formatter so Claude reads it for fewer tokens"
-    echo -e "  - ${__bold}rtk${__reset} — proxies ls/git/... to cut Claude Code token usage"
-    echo
     echo -e "${__bold}Available functions:${__reset}"
-    echo -e "  ${__bold}install${__reset} - Create missing config files, install the toon hook and rtk. Flags: --force (overwrite config files from template), --skip-hook (skip the toon hook)"
-    echo -e "  ${__bold}uninstall${__reset} - Remove the toon hook AND the config files. Warns and asks for confirmation first"
+    echo -e "  ${__bold}install${__reset} - Installs config files, the toon hook and rtk. Flags: --force, --skip-hook"
+    echo -e "  ${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)"
     echo
-    echo -e "${__bold}Requirements for the hook:${__reset} ${__blue}jq${__reset} (via brew) and ${__blue}toon${__reset} (via npm i -g @toon-format/cli) — both are offered for install."
-    echo -e "${__bold}Requirement for rtk:${__reset} ${__blue}brew${__reset} — offered for install."
-    echo
-    echo -e "${__bold}Usage: ${__blue}wp-takeoff ai claude install${__reset}"
-    echo -e "For status of basecamp, toon and this setup, run: ${__blue}wp-takeoff ai check${__reset}"
+    echo -e "Run ${__blue}wp-takeoff ai check${__reset} for status."
   }
 
   # Creates missing config files from their tpl template and installs the
@@ -371,7 +362,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function basecamp
-  # @description Install the Basecamp CLI via curl -fsSL https://basecamp.com/install-cli | bash
+  # @description Installs the Basecamp CLI.
   # ---------------------------------------------------------------------------
   function basecamp() {
     if type -P basecamp >/dev/null 2>&1; then
@@ -392,7 +383,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Report what's present, missing or unregistered for basecamp, toon and the Claude Code setup
+  # @description Checks basecamp, toon, rtk and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     if type -P basecamp >/dev/null 2>&1; then
