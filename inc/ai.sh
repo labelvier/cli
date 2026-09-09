@@ -82,26 +82,34 @@ ai() (
   # rtk is a general Claude Code token-saving proxy, not tied to the hook —
   # every Label Vier dev should have it regardless of --skip-hook.
   function _require_rtk() {
-    if type -P rtk >/dev/null 2>&1; then
-      return 0
-    fi
-
-    echo -e "${__red}rtk is not installed.${__reset} It proxies commands (ls, git, ...) to cut Claude Code token usage."
-    if ! type -P brew >/dev/null 2>&1; then
-      echo -e "Homebrew was not found either. Install rtk yourself: ${__blue}https://www.rtk-ai.app/${__reset}"
-      exit 1
-    fi
-
-    local answer
-    read -p "Install it now with 'brew install rtk'? [y/N] " answer
-    case "$answer" in
-      [yY]*) brew install rtk ;;
-      *) echo "Aborted."; exit 1 ;;
-    esac
-
     if ! type -P rtk >/dev/null 2>&1; then
-      echo -e "${__red}rtk is still not on your PATH after installing.${__reset} Open a new shell and try again."
-      exit 1
+      echo -e "${__red}rtk is not installed.${__reset} It proxies commands (ls, git, ...) to cut Claude Code token usage."
+      if ! type -P brew >/dev/null 2>&1; then
+        echo -e "Homebrew was not found either. Install rtk yourself: ${__blue}https://www.rtk-ai.app/${__reset}"
+        exit 1
+      fi
+
+      local answer
+      read -p "Install it now with 'brew install rtk'? [y/N] " answer
+      case "$answer" in
+        [yY]*) brew install rtk ;;
+        *) echo "Aborted."; exit 1 ;;
+      esac
+
+      if ! type -P rtk >/dev/null 2>&1; then
+        echo -e "${__red}rtk is still not on your PATH after installing.${__reset} Open a new shell and try again."
+        exit 1
+      fi
+    fi
+
+    # The binary alone does nothing — `rtk init -g` is what actually wires it
+    # up: writes ~/.claude/RTK.md, patches the Claude Code hook into
+    # settings.json, and appends the @RTK.md import to CLAUDE.md. Idempotent,
+    # so safe to re-run every time install runs.
+    if rtk init -g --auto-patch; then
+      echo -e "${__green}✓${__reset} rtk wired into Claude Code (RTK.md, hook, CLAUDE.md import)"
+    else
+      echo -e "${__red}rtk init -g failed.${__reset} Run it yourself: ${__blue}rtk init -g${__reset}"
     fi
   }
 
@@ -255,14 +263,15 @@ ai() (
   }
 
   # Inverse of _append_missing_refs, for uninstall: removes only the
-  # @labelvier/... reference lines it added, never the file itself or
-  # anything else in it.
+  # reference lines added by this command (or by `rtk init -g`, which adds
+  # @RTK.md but — unlike its own --uninstall — never removes it), never the
+  # file itself or anything else in it.
   function _remove_refs() {
     local claude_md="$claude_dir/CLAUDE.md"
     [ -f "$claude_md" ] || return 0
 
     local ref tmp_file="$claude_md.tmp"
-    for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
+    for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md" "@RTK.md"; do
       if grep -qxF "$ref" "$claude_md"; then
         grep -vxF "$ref" "$claude_md" > "$tmp_file" && mv "$tmp_file" "$claude_md"
         echo -e "${__green}Removed${__reset} $ref from $claude_md"
@@ -358,7 +367,8 @@ ai() (
   function uninstall() {
     echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}wp-takeoff ai claude install${__reset} sets up:"
     echo -e "  - the toon hook script and its registration in $settings_file"
-    echo -e "  - the @labelvier/... reference lines in CLAUDE.md (not the file itself)"
+    echo -e "  - the @labelvier/... and @RTK.md reference lines in CLAUDE.md (not the file itself)"
+    echo -e "  - rtk's own artifacts (RTK.md, its Claude Code hook) via ${__bold}rtk init -g --uninstall${__reset}, if rtk is installed"
 
     local pair target
     while IFS= read -r pair; do
@@ -375,6 +385,13 @@ ai() (
     esac
 
     _remove_hook
+
+    # Delegate to rtk's own uninstall rather than reimplementing it — it
+    # removes RTK.md, its settings.json hook entry, and usually the @RTK.md
+    # line too; _remove_refs below is just a safety net in case it doesn't.
+    if type -P rtk >/dev/null 2>&1; then
+      rtk init -g --uninstall --auto-patch || echo -e "${__red}rtk init -g --uninstall failed.${__reset} Run it yourself: ${__blue}rtk init -g --uninstall${__reset}"
+    fi
     _remove_refs
 
     while IFS= read -r pair; do
@@ -434,6 +451,19 @@ ai() (
       echo -e "${__green}✓${__reset} rtk"
     else
       echo -e "${__red}✗${__reset} rtk ${__red}(missing, run: wp-takeoff ai claude install)${__reset}"
+    fi
+
+    # Ask rtk itself whether it's fully wired into Claude Code (RTK.md, hook,
+    # @RTK.md import) instead of re-implementing its own checks here.
+    if type -P rtk >/dev/null 2>&1; then
+      local rtk_status
+      rtk_status=$(rtk init -g --dry-run 2>&1)
+      if echo "$rtk_status" | grep -q '^\[dry-run\] would'; then
+        echo -e "${__red}✗${__reset} rtk not fully wired into Claude Code ${__red}(run: wp-takeoff ai claude install)${__reset}"
+        echo "$rtk_status" | grep '^\[dry-run\] would' | sed 's/^/    /'
+      else
+        echo -e "${__green}✓${__reset} rtk wired into Claude Code"
+      fi
     fi
 
     local pair target
