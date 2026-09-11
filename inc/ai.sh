@@ -92,6 +92,98 @@ ai() (
     fi
   }
 
+  # Sources nvm into this shell when it is installed but not loaded yet.
+  # Homebrew's nvm is not on PATH by itself — it ships an nvm.sh that the
+  # user's shell profile is supposed to source, so a fresh install (or a
+  # non-interactive shell) has nvm on disk and still no `npm`.
+  function _load_nvm() {
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+
+    local candidate
+    for candidate in "$NVM_DIR/nvm.sh" "$(brew --prefix nvm 2>/dev/null)/nvm.sh" /opt/homebrew/opt/nvm/nvm.sh /usr/local/opt/nvm/nvm.sh; do
+      if [ -s "$candidate" ]; then
+        # shellcheck disable=SC1090
+        . "$candidate"
+        return 0
+      fi
+    done
+
+    return 1
+  }
+
+  # npm is needed to install the `toon` CLI. Node.js is not part of a stock
+  # macOS, so install it through nvm (brew) rather than a system-wide Node —
+  # that keeps Node versions switchable per project.
+  function _require_npm() {
+    if type -P npm >/dev/null 2>&1; then
+      return 0
+    fi
+
+    # nvm may already be installed but simply not sourced in this shell.
+    if _load_nvm && type -P npm >/dev/null 2>&1; then
+      return 0
+    fi
+
+    echo -e "${__red}npm is not installed.${__reset} It is needed to install the 'toon' CLI."
+    if ! _require_brew; then
+      echo -e "Install Node.js yourself: ${__blue}https://nodejs.org/${__reset}"
+      return 1
+    fi
+
+    local answer
+    read -p "Install it now with 'brew install nvm' + 'nvm install --lts'? [y/N] " answer
+    case "$answer" in
+      [yY]*) ;;
+      *) return 1 ;;
+    esac
+
+    if ! _load_nvm; then
+      brew install nvm || return 1
+    fi
+
+    # nvm refuses to install anything when NVM_DIR does not exist yet.
+    mkdir -p "${NVM_DIR:-$HOME/.nvm}"
+
+    if ! _load_nvm; then
+      echo -e "${__red}nvm installed but nvm.sh could not be found.${__reset} Open a new shell and try again."
+      return 1
+    fi
+
+    nvm install --lts || return 1
+
+    if ! type -P npm >/dev/null 2>&1; then
+      echo -e "${__red}npm is still not on your PATH after installing.${__reset} Open a new shell and try again."
+      return 1
+    fi
+
+    # Homebrew's nvm needs NVM_DIR + a source line in the shell profile,
+    # otherwise npm is gone again in the next shell.
+    _persist_nvm_profile
+  }
+
+  # Appends the NVM_DIR / nvm.sh lines to the user's shell profile once, so
+  # npm survives beyond this shell. Skips silently when they are already there.
+  function _persist_nvm_profile() {
+    local profile="$HOME/.zshrc"
+    [ "${SHELL##*/}" = "bash" ] && profile="$HOME/.bash_profile"
+
+    if [ -f "$profile" ] && grep -q 'NVM_DIR' "$profile"; then
+      return 0
+    fi
+
+    local nvm_sh="$(brew --prefix nvm 2>/dev/null)/nvm.sh"
+    [ -s "$nvm_sh" ] || nvm_sh="$NVM_DIR/nvm.sh"
+
+    {
+      echo ''
+      echo '# Added by labelvier ai claude install'
+      echo 'export NVM_DIR="$HOME/.nvm"'
+      echo "[ -s \"$nvm_sh\" ] && . \"$nvm_sh\""
+    } >> "$profile"
+
+    echo -e "${__green}✓${__reset} nvm added to $profile"
+  }
+
   # The hook pipes basecamp output through the `toon` binary from @toon-format/cli.
   function _require_toon() {
     if type -P toon >/dev/null 2>&1; then
@@ -99,7 +191,7 @@ ai() (
     fi
 
     echo -e "${__red}The 'toon' command is not installed.${__reset} The hook needs it to convert JSON to TOON."
-    if ! type -P npm >/dev/null 2>&1; then
+    if ! _require_npm; then
       echo -e "npm was not found either. Install Node.js first, then run: ${__blue}npm i -g @toon-format/cli${__reset}"
       exit 1
     fi
@@ -555,13 +647,19 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, toon, rtk, the caveman plugin and the Claude Code config.
+  # @description Checks basecamp, npm, toon, rtk, the caveman plugin and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     if type -P basecamp >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} basecamp"
     else
       echo -e "${__red}✗${__reset} basecamp ${__red}(missing, run: labelvier ai basecamp)${__reset}"
+    fi
+
+    if type -P npm >/dev/null 2>&1 || { _load_nvm >/dev/null 2>&1 && type -P npm >/dev/null 2>&1; }; then
+      echo -e "${__green}✓${__reset} npm"
+    else
+      echo -e "${__red}✗${__reset} npm ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
     if type -P toon >/dev/null 2>&1; then
