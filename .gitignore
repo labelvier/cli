@@ -1,6 +1,6 @@
 .*
 !.gitignore
-# .* slikt ook .github op, en dan reist de release-workflow niet mee.
+# .* swallows .github too, and then the release workflow never ships.
 !.github/
 /migration_profiles/
 /debug.sh

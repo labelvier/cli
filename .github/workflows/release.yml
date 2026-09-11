@@ -1,7 +1,7 @@
 name: Release
 
-# labelvier release finish tagt zonder v-prefix; de v-vorm blijft erbij voor
-# tags die met de hand zijn gezet.
+# labelvier release finish tags without a v prefix; the v form stays supported
+# for tags set by hand.
 on:
   push:
     tags:
@@ -13,22 +13,22 @@ permissions:
 
 jobs:
   release:
-    name: Release publiceren
+    name: Publish release
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Controleer of de tag bij package.json hoort
+      - name: Check the tag against package.json
         run: |
           version="$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[^"]*"([^"]+)".*/\1/')"
           tag="${GITHUB_REF_NAME#v}"
           if [ "$version" != "$tag" ]; then
-            echo "Tag $GITHUB_REF_NAME hoort niet bij versie $version in package.json." >&2
+            echo "Tag $GITHUB_REF_NAME does not match version $version in package.json." >&2
             exit 1
           fi
 
-      - name: Release-notes uit de changelog halen
+      - name: Build the release notes from the changelog
         run: |
           tag="${GITHUB_REF_NAME#v}"
           {
@@ -40,10 +40,10 @@ jobs:
             echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/scripts/install.sh | bash -s -- ${GITHUB_REF_NAME}"
             echo '```'
             echo ""
-            echo "Zonder het versieargument volgt de installatie gewoon \`master\`, dus de nieuwste release."
+            echo "Without the version argument the install follows \`master\`, so the newest release."
           } > release-notes.md
 
-      - name: Release aanmaken of bijwerken
+      - name: Create or update the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
