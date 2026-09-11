@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-09-11
+
+### Added
+- A GitHub Release is now published for every tag. The notes come straight out of this changelog, so they cannot drift from it, and they carry the install line for that exact release.
+- `scripts/install.sh` takes a version, either as an argument (`| bash -s -- 1.0.3`) or through `LABELVIER_CLI_REF`. Without one it follows `master` as before, and running it again on a pinned install moves you back to `master`.
+
+### Fixed
+- The update check no longer trips over an install that is pinned to a release. Such an install has no upstream branch, so every `rev-parse` against `@{u}` failed and the CLI asked about an update it could not perform. It now compares against the newest tag and offers to check that one out.
+
 ## [1.0.3] - 2026-09-09
 
 ### Added
