@@ -18,6 +18,10 @@ ai() (
   local labelvier_dir="$claude_dir/labelvier"
   local claude_tpl_dir="$current_dir/../templates/claude"
 
+  # Where the Basecamp CLI keeps its OAuth credentials and its cache.
+  local basecamp_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/basecamp"
+  local basecamp_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/basecamp"
+
   # Runs the command.
   function main() {
     _dispatch "$filename" "$@"
@@ -534,9 +538,62 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function basecamp
-  # @description Installs the Basecamp CLI.
+  # @description Installs the Basecamp CLI and its Claude Code plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function basecamp() {
+    case "$1" in
+      install|uninstall)
+        if [[ "$2" == "--help" ]]; then
+          _basecamp_subcommand_description "$1"
+          return
+        fi
+        "_basecamp_$1" "${@:2}"
+        ;;
+      ""|-*)
+        # No subcommand, or it looks like a flag (e.g. a bare `--help`).
+        _basecamp_documentation
+        ;;
+      *)
+        # A subcommand name was typed but it doesn't exist.
+        echo -e "${__red}✗${__reset} Unknown command: ${__bold}$1${__reset}"
+        echo
+        _basecamp_documentation
+        return 1
+        ;;
+    esac
+  }
+
+  # Second-level subcommand descriptions, hand-written for the same reason as
+  # the claude ones: _echo_documentation only reads the flat "# @function"
+  # list of this file, which belongs to `labelvier ai`.
+  function _basecamp_subcommand_description() {
+    case "$1" in
+      install) echo -e "${__bold}install${__reset} - Installs the Basecamp CLI (and, through its own setup, the Claude Code plugin)" ;;
+      uninstall) echo -e "${__bold}uninstall${__reset} - Removes the Basecamp CLI, your login and the Claude Code plugin (asks for confirmation)" ;;
+      *) echo -e "${__bold}$1${__reset}" ;;
+    esac
+  }
+
+  function _basecamp_documentation() {
+    echo -e "${__bold}labelvier ai basecamp${__reset} — Basecamp CLI setup for Label Vier projects."
+    echo
+    echo -e "${__bold}Available functions:${__reset}"
+    echo -e "  $(_basecamp_subcommand_description install)"
+    echo -e "  $(_basecamp_subcommand_description uninstall)"
+    echo
+    echo -e "Run ${__blue}labelvier ai check${__reset} for status."
+  }
+
+  # True (0) if the Basecamp plugin for Claude Code is installed and enabled.
+  # The Basecamp installer wires this up itself via `basecamp setup agents`.
+  function _basecamp_plugin_installed() {
+    type -P claude >/dev/null 2>&1 || return 1
+    type -P jq >/dev/null 2>&1 || return 1
+    command claude plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "basecamp@37signals" and .enabled == true)' >/dev/null 2>&1
+  }
+
+  # Installs the Basecamp CLI. Safe to re-run: skips when already installed.
+  function _basecamp_install() {
     if type -P basecamp >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} basecamp is already installed."
       return 0
@@ -553,6 +610,62 @@ ai() (
     fi
   }
 
+  # Inverse of _basecamp_install: drops the binary, the login and the Claude
+  # Code plugin its setup installed.
+  function _basecamp_uninstall() {
+    # `type -P` searches PATH only — `command -v` would match the shell
+    # function of the same name defined right above.
+    local binary
+    binary=$(type -P basecamp)
+
+    echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}labelvier ai basecamp install${__reset} sets up:"
+    if [ -n "$binary" ]; then
+      echo -e "  - the basecamp binary at $binary"
+    else
+      echo -e "  - the basecamp binary ${__blue}(not on your PATH, nothing to remove)${__reset}"
+    fi
+    echo -e "  - your Basecamp login: it is logged out and $basecamp_config_dir is deleted"
+    echo -e "  - the cache in $basecamp_cache_dir"
+    echo -e "  - the Basecamp plugin for Claude Code, if installed"
+
+    echo
+    local answer
+    read -p "Continue? [y/N] " answer
+    case "$answer" in
+      [yY]*) ;;
+      *) echo "Aborted."; exit 1 ;;
+    esac
+
+    # Log out first, while the binary is still there — that revokes the token
+    # with Basecamp instead of only orphaning it on disk.
+    if [ -n "$binary" ]; then
+      command basecamp logout >/dev/null 2>&1 \
+        && echo -e "${__green}Logged out${__reset} of Basecamp" \
+        || echo "Skipping logout: no active Basecamp session."
+    fi
+
+    if _basecamp_plugin_installed; then
+      command claude plugin uninstall basecamp@37signals -y
+      echo -e "${__green}Removed${__reset} the Basecamp plugin for Claude Code"
+    fi
+
+    if [ -n "$binary" ]; then
+      rm -f "$binary"
+      echo -e "${__green}Removed${__reset} $binary"
+    fi
+
+    local dir
+    for dir in "$basecamp_config_dir" "$basecamp_cache_dir"; do
+      if [ -d "$dir" ]; then
+        rm -rf "$dir"
+        echo -e "${__green}Removed${__reset} $dir"
+      fi
+    done
+
+    echo
+    echo -e "${__bold}Done.${__reset} Restart your Claude Code session to pick up the changes."
+  }
+
   # ---------------------------------------------------------------------------
   # @function check
   # @description Checks basecamp, toon, rtk, the caveman plugin and the Claude Code config.
@@ -561,7 +674,13 @@ ai() (
     if type -P basecamp >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} basecamp"
     else
-      echo -e "${__red}✗${__reset} basecamp ${__red}(missing, run: labelvier ai basecamp)${__reset}"
+      echo -e "${__red}✗${__reset} basecamp ${__red}(missing, run: labelvier ai basecamp install)${__reset}"
+    fi
+
+    if _basecamp_plugin_installed; then
+      echo -e "${__green}✓${__reset} basecamp plugin for Claude Code"
+    else
+      echo -e "${__red}✗${__reset} basecamp plugin for Claude Code ${__red}(missing, run: labelvier ai basecamp install)${__reset}"
     fi
 
     if type -P toon >/dev/null 2>&1; then
