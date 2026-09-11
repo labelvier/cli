@@ -53,6 +53,39 @@ core() (
     fi
   }
 
+  # Update check for an install that is pinned to a release tag.
+  #
+  # Such an install has no upstream branch, so "is the remote ahead" has no
+  # meaning here. The question is whether a newer release exists, and the answer
+  # is another checkout rather than a pull.
+  #
+  # Assumes the caller is already in the CLI directory and has fetched.
+  function _check_pinned_release() {
+    local current newest
+
+    current=$(git describe --tags --exact-match 2>/dev/null)
+    newest=$(git tag --sort=-v:refname | head -1)
+
+    if [ -z "$newest" ] || [ "$current" = "$newest" ]; then
+      echo "Up-to-date"
+      return
+    fi
+
+    if [ -z "$current" ]; then
+      echo "This CLI is on a detached HEAD that is not a release tag, leaving it alone."
+      return
+    fi
+
+    echo "You are on release $current, $newest is available. Do you want to update? (y/n)"
+    read -r answer
+    if [ "$answer" == "y" ]; then
+      git -P log --pretty=oneline --abbrev-commit "$current".."$newest"
+      git checkout --quiet "$newest"
+      echo "Now on $newest. Please restart the CLI."
+      exit 0
+    fi
+  }
+
   function _check_and_ask_for_update() {
     # Check if there are updates available from git and ask if we should pull them
     local OLDPWD=$(pwd);
@@ -62,7 +95,15 @@ core() (
       # Migrate remote from Bitbucket to GitHub if needed
       _migrate_remote_if_needed
       # Fetch the latest version
-      git fetch
+      git fetch --tags --force
+      # An install pinned to a release sits on a detached HEAD, so there is no
+      # upstream branch to compare against and every rev-parse below would
+      # fail. Compare against the newest tag instead.
+      if ! git symbolic-ref -q HEAD > /dev/null; then
+        _check_pinned_release
+        cd "$OLDPWD"
+        return
+      fi
       # Check if remote is ahead of local branch
       UPSTREAM=${1:-'@{u}'}
       LOCAL=$(git rev-parse @)
