@@ -18,7 +18,26 @@ curl -fsSL https://raw.githubusercontent.com/labelvier/cli/master/scripts/instal
 
 This clones the CLI to `~/.labelvier`, adds it to your `$PATH`, and drops you
 into a fresh shell so `labelvier`/`l4` works right away — no manual restart
-needed.
+needed. It follows `master`, so you always get the newest release and the
+update checker keeps offering new ones.
+
+### Pinning a release
+
+Every release has its own install line, listed in the release notes:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/labelvier/cli/1.0.3/scripts/install.sh | bash -s -- 1.0.3
+```
+
+The ref in the URL only picks which installer you download; the version
+argument is what decides which version ends up in `~/.labelvier`. Passing both
+keeps the two in step. `LABELVIER_CLI_REF=1.0.3` does the same thing as the
+argument.
+
+A pinned install sits on a detached HEAD. The update checker notices that and
+compares against the newest tag instead of the branch, so it still tells you
+when a new release is out. Running the plain install line again moves you back
+to `master`.
 
 Prefer to do it by hand? Clone the repo yourself and run `core install`
 from inside it:

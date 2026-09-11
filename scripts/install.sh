@@ -4,6 +4,16 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/labelvier/cli/master/scripts/install.sh | bash
 #
+# Pin a release instead of tracking master:
+#
+#   curl -fsSL https://raw.githubusercontent.com/labelvier/cli/1.0.3/scripts/install.sh | bash -s -- 1.0.3
+#
+# The ref in the URL only picks which installer you download — the version
+# argument is what decides which version ends up in $INSTALL_DIR. Passing both
+# keeps the two in step, which is why the release notes hand out that one line.
+# LABELVIER_CLI_REF does the same as the argument, for callers that find an
+# environment variable easier to thread through.
+#
 # Non-interactive by design: this script's stdin is the curl stream, not a
 # terminal, so it never `read`s. Everything is detected/decided automatically.
 
@@ -11,6 +21,7 @@ set -e
 
 REPO="labelvier/cli"
 INSTALL_DIR="${LABELVIER_CLI_DIR:-$HOME/.labelvier}"
+REF="${1:-${LABELVIER_CLI_REF:-}}"
 
 show_banner() {
   # Skip the braille mark if the terminal is too narrow (logo 32 + gap 3 + text 9 = 44)
@@ -81,10 +92,31 @@ show_banner
 
 if [ -d "$INSTALL_DIR/.git" ]; then
   echo "Already installed at $INSTALL_DIR — updating..."
-  git -C "$INSTALL_DIR" pull --ff-only
+  # --force so a moved tag still lands; tags are the only thing a pinned
+  # install has to go on.
+  git -C "$INSTALL_DIR" fetch --tags --force --quiet
+  if [ -n "$REF" ]; then
+    git -C "$INSTALL_DIR" checkout --quiet "$REF"
+  elif git -C "$INSTALL_DIR" symbolic-ref -q HEAD > /dev/null; then
+    git -C "$INSTALL_DIR" pull --ff-only
+  else
+    # Pinned install, no version asked for: put it back on the branch that
+    # tracks releases, otherwise the update checker has no upstream to compare
+    # against and every run would ask about an update it cannot do.
+    echo "Was pinned to a release — moving back to master."
+    git -C "$INSTALL_DIR" checkout --quiet master
+    git -C "$INSTALL_DIR" pull --ff-only
+  fi
 else
   echo "Cloning $REPO to $INSTALL_DIR..."
   git clone "https://github.com/$REPO.git" "$INSTALL_DIR"
+  if [ -n "$REF" ]; then
+    git -C "$INSTALL_DIR" checkout --quiet "$REF"
+  fi
+fi
+
+if [ -n "$REF" ]; then
+  echo "Pinned to $REF."
 fi
 
 chmod +x "$INSTALL_DIR/labelvier"
