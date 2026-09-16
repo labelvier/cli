@@ -1,6 +1,15 @@
 # WordPress development
 
-The inc folder is important because we add controller / service functionality there. If the functionality gets to big you should create a subfolder with namespace and autoload.
+## Theme structure
+
+First check the starterkit version in `package.json` in the project root.
+
+**v7 and up** — the theme splits PHP over `inc/` and `modules/`. Read these before touching theme PHP:
+
+- `wp-content/themes/{theme}/modules/README.md` — the rules: where each kind of code lives, the module contract, how to create one.
+- `docs/MODULES.md` — the reasoning behind those rules.
+
+**Below v7** — the inc folder is important because we add controller / service functionality there. If the functionality gets too big you should create a subfolder with namespace and autoload.
 
 Example:
 ```php
@@ -48,7 +57,9 @@ add_action('init', function() {
 });
 ```
 
-When working on a Label Vier starter kit WordPress project, the site is running in a Docker environment. When doing checks or running commands, use `npm run` for accessing the docker environment.
+## Docker environment
+
+When working on a Label Vier starter kit WordPress project, the site is running in a Docker environment. When doing checks or running commands, use `npm run` for accessing the Docker environment.
 
 For example, when running a `wp` cli command, run `npm run wp`. If you want to add assoc argument, add an extra -- to escape npm. I.e. `npm run wp -- --info`
 
