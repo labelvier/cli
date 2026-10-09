@@ -326,6 +326,14 @@ ai() (
   function _setup_skill_token() {
     local env_file="$claude_dir/.env"
     if [ -f "$env_file" ] && grep -q '^TIMESHEET_API_TOKEN=.' "$env_file"; then
+      # Sanctum tokens contain '|': quote an unquoted value so the file stays
+      # safe to source.
+      if grep -q "^TIMESHEET_API_TOKEN=[^\"']" "$env_file"; then
+        (umask 077; sed "s/^TIMESHEET_API_TOKEN=\(.*\)\$/TIMESHEET_API_TOKEN=\"\1\"/" "$env_file" > "$env_file.tmp")
+        mv "$env_file.tmp" "$env_file"
+        chmod 600 "$env_file"
+        echo -e "${__green}✓${__reset} Quoted TIMESHEET_API_TOKEN in $env_file"
+      fi
       echo -e "${__green}✓${__reset} TIMESHEET_API_TOKEN is set in $env_file"
       return 0
     fi
@@ -352,7 +360,7 @@ ai() (
       (umask 077; grep -v '^TIMESHEET_API_TOKEN=' "$env_file" > "$env_file.tmp")
       mv "$env_file.tmp" "$env_file"
     fi
-    printf 'TIMESHEET_API_TOKEN=%s\n' "$token" >> "$env_file"
+    printf 'TIMESHEET_API_TOKEN="%s"\n' "$token" >> "$env_file"
     chmod 600 "$env_file"
     echo -e "${__green}Saved${__reset} the token in $env_file"
   }

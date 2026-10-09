@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Version stamps (`labelvier-ai-version`) on `GLOBAL.md`, `WORDPRESS.md`, `ANGULAR.md` and the timesheet skill, plus a version-stamped managed block in `~/.claude/CLAUDE.md` for the `@labelvier/...` refs. `ai check` reports installed vs. available versions and flags outdated or unversioned copies; `ai claude install` refreshes outdated files (the old copy is kept as `.bak`) and replaces an outdated CLAUDE.md block, leaving the rest of that file untouched.
 - `ai claude install` now asks for your `TIMESHEET_API_TOKEN` interactively when it is not set yet and saves it in `~/.claude/.env` (mode 600). Without a terminal it only prints the instructions. `ai check` reports whether the token is set.
 
+### Fixed
+- `ai claude install` writes `TIMESHEET_API_TOKEN` quoted in `~/.claude/.env` (and quotes an existing unquoted entry).
+- Timesheet skill (v2): new `me` command; the skill now identifies the token owner first and only treats own entries as replaceable, instead of assuming every booked hour on a phase is the user's own.
+
 ### Changed
 - Bare `@labelvier/...` lines in `CLAUDE.md` are folded into the new managed block on the next `ai claude install`.
 

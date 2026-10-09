@@ -21,7 +21,7 @@ triggers:
 argument-hint: "[command] [args...]"
 ---
 
-<!-- labelvier-ai-version: 1 -->
+<!-- labelvier-ai-version: 2 -->
 
 # Label Vier Timesheet (API v1)
 
@@ -57,6 +57,7 @@ All calls go through the helper script — don't hand-roll curl:
 | Command | Effect |
 |---|---|
 | `get <path>` | raw GET under `/api/v1`, e.g. `get '/time-entries?per_page=5'` |
+| `me` | the token owner: `id, name` (+ `email`, roles). **Always the booking person**, regardless of role; `users` is not (an admin sees everyone) |
 | `users` | visible users: `id, name` (+ `email`, `is_admin`, `is_budget_manager` when visible, see scope); regular user gets only themselves |
 | `projects [--active]` | projects: `id, name, is_active, color, created_at, phases[]` |
 | `phases [project_id]` | phases: `id, project_id, name, order, budget_hours, completed_at` |
@@ -95,6 +96,8 @@ $T entries --from 2026-07-01 --to 2026-09-30 --user 4 --all | jq length
 ## Booking hours
 
 - Writing is limited to the token owner's **own** hours; there is no way to book for someone else.
+- **Who is the user?** Run `me` first (token owner id) and remember it. An admin/budget-manager token sees **everybody's** entries, so a booking that exists on a phase/day is not necessarily the user's own. Never assume it is.
+- **Check only own entries before booking:** `entries --from D --to D --user <me.id>`. `log` replaces only the token owner's own booking on that phase/day; entries of colleagues are untouched. When reporting existing hours on a phase, name the owner (`user_id` → `users`) and only offer to "replace" the ones that are the user's own. Hours of others are context, never something to replace.
 - Find the phase first: `projects --active` (phases inside) or `phases <project_id>`; book on a phase that is not completed.
 - Only write when the user explicitly asks for it. Confirm project/phase, date and hours back to them first if anything is ambiguous, and check the day with `entries --from D --to D` before replacing an existing booking.
 - Bookings made via the API are flagged `via_api` in the app.

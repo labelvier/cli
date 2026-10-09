@@ -57,6 +57,7 @@ _usage() {
 Usage: timesheet.sh <command> [args]
 
   get <path>                                 raw GET under /api/v1 (e.g. get '/time-entries?per_page=5')
+  me                                         the token owner (id, name, email): who am I
   users                                      all users (id, name; email/roles if visible to token owner)
   projects [--active]                        all projects incl. phases (budget_hours, completed_at, order)
   phases [project_id]                        phases, optionally for one project
@@ -80,6 +81,9 @@ get)
 	[ -n "${1:-}" ] || _usage
 	_get "$1"
 	echo
+	;;
+me)
+	_get "/me"
 	;;
 users)
 	_get "/users"
