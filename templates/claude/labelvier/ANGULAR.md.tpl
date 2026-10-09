@@ -1,3 +1,4 @@
+<!-- labelvier-ai-version: 1 -->
 # Angular Development
 
 When working on the Angular part of a Label Vier project, the Angular app is running in a separate Docker container. Use `ng serve` commands to start, stop or build the Angular app.

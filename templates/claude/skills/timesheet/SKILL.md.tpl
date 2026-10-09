@@ -21,6 +21,8 @@ triggers:
 argument-hint: "[command] [args...]"
 ---
 
+<!-- labelvier-ai-version: 1 -->
+
 # Label Vier Timesheet (API v1)
 
 Config:

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `ai claude install` now installs the Claude Code `timesheet` skill (Timesheet API helper: read data, book and delete own hours) into `~/.claude/skills/timesheet` and runs `npm install` for its Playwright dependency. `ai claude uninstall` removes it and `ai check` verifies it.
+- Version stamps (`labelvier-ai-version`) on `GLOBAL.md`, `WORDPRESS.md`, `ANGULAR.md` and the timesheet skill, plus a version-stamped managed block in `~/.claude/CLAUDE.md` for the `@labelvier/...` refs. `ai check` reports installed vs. available versions and flags outdated or unversioned copies; `ai claude install` refreshes outdated files (the old copy is kept as `.bak`) and replaces an outdated CLAUDE.md block, leaving the rest of that file untouched.
+- `ai claude install` now asks for your `TIMESHEET_API_TOKEN` interactively when it is not set yet and saves it in `~/.claude/.env` (mode 600). Without a terminal it only prints the instructions. `ai check` reports whether the token is set.
+
+### Changed
+- Bare `@labelvier/...` lines in `CLAUDE.md` are folded into the new managed block on the next `ai claude install`.
 
 ## [1.0.5] - 2026-09-11
 
