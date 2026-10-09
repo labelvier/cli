@@ -21,7 +21,7 @@ triggers:
 argument-hint: "[command] [args...]"
 ---
 
-<!-- labelvier-ai-version: 2 -->
+<!-- labelvier-ai-version: 3 -->
 
 # Label Vier Timesheet (API v1)
 
@@ -62,7 +62,7 @@ All calls go through the helper script — don't hand-roll curl:
 | `projects [--active]` | projects: `id, name, is_active, color, created_at, phases[]` |
 | `phases [project_id]` | phases: `id, project_id, name, order, budget_hours, completed_at` |
 | `entries --from D --to D [--user ID] [--project ID] [--phase ID] [--per-page N] [--page N] [--all]` | time entries: `id, user_id, project_id, phase_id, date, hours` (+ `description` on own entries, or all entries for an admin). Paginated (`data`, `links`, `meta`); `--all` fetches every page and returns one flat JSON array (needs `jq`) |
-| `log --phase ID --date D --hours H [--description TEXT]` | book own hours (POST `/time-entries`, needs ability `write`). One booking per user/phase/day: an existing one is **replaced**, not added to (safe to repeat). `--hours` is decimal (1.5 = 1:30). Returns the entry (201 created, 200 replaced) |
+| `log --phase ID --date D --hours H [--description TEXT]` | book own hours (POST `/time-entries`, needs ability `write`). One booking per user/phase/day: the API **replaces** an existing one, so to add hours you send the new total (see "Booking hours"). `--hours` is decimal (1.5 = 1:30). Returns the entry (201 created, 200 replaced) |
 | `delete <entry_id>` | delete one of your own bookings (needs ability `write`; 204, empty body) |
 | `summary --from D --to D [--user ID] [--project ID]` | hours grouped by user x project x phase: `user_id, user_name`, `user_email` (only when visible), `project_id, project_name, phase_id, phase_name, phase_budget_hours, hours, entries` + `meta.total_hours` |
 
@@ -97,9 +97,11 @@ $T entries --from 2026-07-01 --to 2026-09-30 --user 4 --all | jq length
 
 - Writing is limited to the token owner's **own** hours; there is no way to book for someone else.
 - **Who is the user?** Run `me` first (token owner id) and remember it. An admin/budget-manager token sees **everybody's** entries, so a booking that exists on a phase/day is not necessarily the user's own. Never assume it is.
-- **Check only own entries before booking:** `entries --from D --to D --user <me.id>`. `log` replaces only the token owner's own booking on that phase/day; entries of colleagues are untouched. When reporting existing hours on a phase, name the owner (`user_id` → `users`) and only offer to "replace" the ones that are the user's own. Hours of others are context, never something to replace.
+- **"Schrijf {x}u voor {y}" means ADD.** Never ask whether to replace. Fetch the user's own entries for that day (`entries --from D --to D --user <me.id>`), take the own entry on that phase (if any), and `log` with hours = existing + x, rounded to 2 decimals (the API replaces, so you send the sum). Pass the existing `description` along (`--description`) so it is not lost, unless the user gives a new one. Use `--all` when fetching entries for the sum. No own entry yet: log x. Only replace (set an absolute value) when the user explicitly says so ("zet op", "maak er 1u van", "corrigeer naar").
+- **Always report the day total:** after booking, fetch the own entries of that day again and tell the user how many hours they have in total that day (sum of own `hours`, in H:MM), plus the new total on that phase.
+- **Only own entries count.** An admin/budget-manager token sees **everybody's** entries, so a booking on a phase/day is not necessarily the user's own. Filter on `user_id == me.id`; `log` never touches colleagues' entries. Hours of others are context, never part of the sum or something to replace.
 - Find the phase first: `projects --active` (phases inside) or `phases <project_id>`; book on a phase that is not completed.
-- Only write when the user explicitly asks for it. Confirm project/phase, date and hours back to them first if anything is ambiguous, and check the day with `entries --from D --to D` before replacing an existing booking.
+- Only write when the user explicitly asks for it. Confirm project/phase, date and hours back to them first only if something is ambiguous (not for adding to an existing booking).
 - Bookings made via the API are flagged `via_api` in the app.
 
 ```bash
