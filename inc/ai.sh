@@ -324,7 +324,7 @@ ai() (
         || echo -e "${__red}npm install failed.${__reset} Run it yourself: ${__blue}cd $skill_dir/browser && npm install${__reset}"
     fi
 
-    echo -e "Add ${__bold}TIMESHEET_API_TOKEN${__reset} to $claude_dir/.env (create it in the Timesheet app under ${__blue}/profiel${__reset} → API-tokens)."
+    echo -e "Add ${__bold}TIMESHEET_API_TOKEN${__reset} to $claude_dir/.env (create it in the Timesheet app under ${__blue}/profiel${__reset} → API-tokens; tick the write ability to let the skill book hours)."
   }
 
   # Removes the timesheet skill directory (incl. node_modules). The token in

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Thin curl wrapper around the Label Vier Timesheet read-only API (v1).
+# Thin curl wrapper around the Label Vier Timesheet API (v1).
 # Config: TIMESHEET_URL (default below) + TIMESHEET_API_TOKEN (from ~/.claude/.env or env).
 set -euo pipefail
 
@@ -28,19 +28,22 @@ fi
 TIMESHEET_TRANSPORT="${TIMESHEET_TRANSPORT:-browser}"
 BROWSER_GET="$(cd "$(dirname "$0")/../browser" && pwd)/browser-get.mjs"
 
-# GET <path-with-query>, path relative to /api/v1 (e.g. /users or users?x=1)
-_get() {
-	local path="$1"
+# <METHOD> <path-with-query> [json-body], path relative to /api/v1 (e.g. /users or users?x=1)
+_request() {
+	local method="$1" path="$2" body="${3:-}"
 	case "$path" in /*) ;; *) path="/$path" ;; esac
 	if [ "$TIMESHEET_TRANSPORT" = "browser" ]; then
-		TIMESHEET_API_TOKEN="$TIMESHEET_API_TOKEN" node "$BROWSER_GET" "$TIMESHEET_URL" "$path"
+		TIMESHEET_API_TOKEN="$TIMESHEET_API_TOKEN" TIMESHEET_BODY="$body" node "$BROWSER_GET" "$TIMESHEET_URL" "$path" "$method"
 		return
 	fi
-	curl -sS -m 30 --fail-with-body \
-		-H "Authorization: Bearer ${TIMESHEET_API_TOKEN}" \
-		-H "Accept: application/json" \
-		"${TIMESHEET_URL}/api/v1${path}"
+	local args=(-sS -m 30 --fail-with-body -X "$method"
+		-H "Authorization: Bearer ${TIMESHEET_API_TOKEN}"
+		-H "Accept: application/json")
+	[ -n "$body" ] && args+=(-H "Content-Type: application/json" --data "$body")
+	curl "${args[@]}" "${TIMESHEET_URL}/api/v1${path}"
 }
+
+_get() { _request GET "$1"; }
 
 _need_jq() {
 	command -v jq >/dev/null || {
@@ -61,6 +64,9 @@ Usage: timesheet.sh <command> [args]
                                              time entries (paginated; --all fetches every page, returns a flat array)
   summary --from D --to D [--user ID] [--project ID]
                                              hours per user x project x phase
+  log --phase ID --date D --hours H [--description TEXT]
+                                             book own hours (needs a token with ability write); replaces an existing booking for that phase/day
+  delete <entry_id>                          delete one of your own bookings (needs ability write)
 Dates are YYYY-MM-DD.
 USAGE
 	exit 1
@@ -93,6 +99,35 @@ phases)
 	else
 		_get "/phases"
 	fi
+	echo
+	;;
+log)
+	phase="" date="" hours="" description="" has_desc=0
+	while [ $# -gt 0 ]; do
+		[ $# -ge 2 ] || { echo "Error: $1 needs a value" >&2; exit 1; }
+		case "$1" in
+		--phase) phase="${2:-}"; shift 2 ;;
+		--date) date="${2:-}"; shift 2 ;;
+		--hours) hours="${2:-}"; shift 2 ;;
+		--description) description="${2:-}"; has_desc=1; shift 2 ;;
+		*) echo "Unknown option: $1" >&2; _usage ;;
+		esac
+	done
+	if [ -z "$phase" ] || [ -z "$date" ] || [ -z "$hours" ]; then
+		echo "Error: --phase, --date (YYYY-MM-DD) and --hours (decimal, e.g. 1.5) are required" >&2
+		exit 1
+	fi
+	[[ "$phase" =~ ^[0-9]+$ ]] || { echo "Error: --phase must be a numeric phase id" >&2; exit 1; }
+	[[ "$hours" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "Error: --hours must be decimal with a dot (1.5 = 1:30)" >&2; exit 1; }
+	_need_jq "log"
+	body="$(jq -cn --arg phase "$phase" --arg date "$date" --arg hours "$hours" --arg desc "$description" --argjson has_desc "$has_desc" \
+		'{phase_id: ($phase|tonumber), date: $date, hours: ($hours|tonumber)} + (if $has_desc == 1 then {description: $desc} else {} end)')"
+	_request POST "/time-entries" "$body"
+	echo
+	;;
+delete)
+	[[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "Error: delete needs a numeric entry id" >&2; exit 1; }
+	_request DELETE "/time-entries/$1"
 	echo
 	;;
 entries | summary)

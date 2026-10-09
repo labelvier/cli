@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `ai claude install` now installs the Claude Code `timesheet` skill (read-only Timesheet API helper) into `~/.claude/skills/timesheet` and runs `npm install` for its Playwright dependency. `ai claude uninstall` removes it and `ai check` verifies it.
+- `ai claude install` now installs the Claude Code `timesheet` skill (Timesheet API helper: read data, book and delete own hours) into `~/.claude/skills/timesheet` and runs `npm install` for its Playwright dependency. `ai claude uninstall` removes it and `ai check` verifies it.
 
 ## [1.0.5] - 2026-09-11
 

@@ -1,4 +1,4 @@
-// GET one Timesheet API path inside a real browser session.
+// Call one Timesheet API path (GET by default, POST/DELETE optional) inside a real browser session.
 //
 // The Timesheet host sits behind SiteGround's bot challenge (sgcaptcha). Per
 // SiteGround's advice, the challenge is shown to the person running the report:
@@ -7,15 +7,17 @@
 // call then runs as fetch() inside that same browser session; no cookies leave
 // the browser profile.
 //
-// Usage: node browser-get.mjs <base-url> <path-under-/api/v1>
-// Env:   TIMESHEET_API_TOKEN (required), TIMESHEET_BROWSER_PROFILE (optional)
+// Usage: node browser-get.mjs <base-url> <path-under-/api/v1> [method]
+// Env:   TIMESHEET_API_TOKEN (required), TIMESHEET_BODY (optional JSON request body),
+//        TIMESHEET_BROWSER_PROFILE (optional)
 // Output: response body on stdout. Exit 0 on 2xx, 22 otherwise (like curl --fail-with-body).
 
 import { chromium } from 'playwright';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const [base, path] = process.argv.slice(2);
+const [base, path, method = 'GET'] = process.argv.slice(2);
+const body = process.env.TIMESHEET_BODY || undefined; // an empty string would make GET fail
 const token = process.env.TIMESHEET_API_TOKEN;
 if (!base || !path || !token) {
 	console.error('Usage: TIMESHEET_API_TOKEN=... node browser-get.mjs <base-url> <path>');
@@ -30,13 +32,12 @@ const CHALLENGE_TIMEOUT_MS = 5 * 60 * 1000;
 const isChallenge = (url, body = '') => url.includes('sgcaptcha') || body.includes('/.well-known/sgcaptcha/');
 
 async function apiFetch(page) {
-	return page.evaluate(async ({ url, token }) => {
-		const r = await fetch(url, {
-			headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-			credentials: 'same-origin',
-		});
+	return page.evaluate(async ({ url, token, method, body }) => {
+		const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+		if (body) headers['Content-Type'] = 'application/json';
+		const r = await fetch(url, { method, headers, body, credentials: 'same-origin' });
 		return { status: r.status, body: await r.text() };
-	}, { url: `${origin}/api/v1${path.startsWith('/') ? path : `/${path}`}`, token });
+	}, { url: `${origin}/api/v1${path.startsWith('/') ? path : `/${path}`}`, token, method, body });
 }
 
 async function run(headless) {
