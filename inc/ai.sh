@@ -983,5 +983,54 @@ ai() (
     fi
   }
 
+  # ---------------------------------------------------------------------------
+  # @function update
+  # @description Runs the checks and offers to apply each suggested fix, one [Y/n] at a time.
+  # ---------------------------------------------------------------------------
+  function update() {
+    local cli="$current_dir/../labelvier"
+    local output
+    output=$(check)
+
+    if ! echo "$output" | grep -q '✗'; then
+      echo "$output"
+      echo
+      echo -e "${__green}Everything is up to date.${__reset}"
+      return 0
+    fi
+
+    echo "$output"
+    echo
+
+    # Suggested actions are printed as "run: labelvier ai ..." — collect the
+    # unique ones (several failed checks often point at the same command).
+    local actions
+    actions=$(echo "$output" | sed 's/\x1b\[[0-9;]*m//g' | grep -o 'run: labelvier [a-z ]*' | sed 's/^run: //; s/ *$//' | awk '!seen[$0]++')
+
+    if [ -z "$actions" ]; then
+      echo "Nothing I can fix automatically, see the list above."
+      return 1
+    fi
+
+    echo -e "${__bold}Suggested fixes:${__reset} (nothing changes without your yes)"
+    local action answer
+    while IFS= read -r action; do
+      # No terminal to answer on (cron, launchd, pipe)? Treat that as "no".
+      if ! read -p "  Run '$action'? [Y/n] " answer < /dev/tty 2>/dev/null; then
+        echo
+        echo "  No terminal to ask on, skipped."
+        continue
+      fi
+      case "$answer" in
+        [nN]*) echo "  Skipped." ;;
+        *) "$cli" ${action#labelvier } ;;
+      esac
+    done <<< "$actions"
+
+    echo
+    echo "Checking again..."
+    check | grep '✗' || echo -e "${__green}All checks passed.${__reset}"
+  }
+
   main "$@"
 )

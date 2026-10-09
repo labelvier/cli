@@ -13,12 +13,146 @@ core() (
   }
 
   # @function update
-  # @description Check for updates for the CLI
+  # @description Check for updates for the CLI, or run it unattended with --auto (--enable-auto/--disable-auto set up the daily run)
   function update() {
-    _check_and_ask_for_update
+    case "$1" in
+      --auto) _auto_update ;;
+      --enable-auto) _enable_auto_update ;;
+      --disable-auto) _disable_auto_update ;;
+      *) _check_and_ask_for_update ;;
+    esac
+  }
+
+  local auto_label="nl.labelvier.cli-update"
+  local auto_plist="$HOME/Library/LaunchAgents/$auto_label.plist"
+  local auto_dir="$HOME/.labelvier-auto-update"
+  local auto_log="$auto_dir/update.log"
+
+  function _auto_log() {
+    mkdir -p "$auto_dir"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$auto_log"
+  }
+
+  # Shows a macOS notification. Silent no-op elsewhere.
+  function _notify() {
+    if type -P osascript >/dev/null 2>&1; then
+      osascript -e "display notification \"$2\" with title \"$1\"" >/dev/null 2>&1
+    fi
+  }
+
+  # Unattended update: fast-forward only, never force, never prompts. Runs
+  # `ai check` afterwards and sends a notification when something needs
+  # attention. It does NOT fix anything itself (new skills and config changes
+  # always need a human yes via `labelvier ai update`).
+  function _auto_update() {
+    local cli_dir
+    cli_dir=$(cd "$current_dir/.." && pwd)
+    [ -d "$cli_dir/.git" ] || { _auto_log "skip: $cli_dir is not a git checkout"; return 0; }
+
+    # Lock against double runs; a lock older than an hour is stale.
+    mkdir -p "$auto_dir"
+    local lock="$auto_dir/lock"
+    if ! mkdir "$lock" 2>/dev/null; then
+      if [ -n "$(find "$lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+        rm -rf "$lock"; mkdir "$lock" || return 0
+      else
+        _auto_log "skip: another run is active"; return 0
+      fi
+    fi
+    trap 'rm -rf "$lock"' EXIT
+
+    cd "$cli_dir" || return 0
+    _migrate_remote_if_needed
+    if ! git fetch --tags --force --quiet 2>>"$auto_log"; then
+      _auto_log "skip: git fetch failed (offline?)"; return 0
+    fi
+
+    local before after
+    before=$(git rev-parse --short HEAD)
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+      _auto_log "skip update: working directory has local changes"
+    elif git symbolic-ref -q HEAD > /dev/null; then
+      if ! git merge --ff-only --quiet '@{u}' 2>>"$auto_log"; then
+        _auto_log "skip update: cannot fast-forward (diverged or no upstream)"
+      fi
+    else
+      local current newest
+      current=$(git describe --tags --exact-match 2>/dev/null)
+      newest=$(git tag --sort=-v:refname | head -1)
+      if [ -n "$current" ] && [ -n "$newest" ] && [ "$current" != "$newest" ]; then
+        git checkout --quiet "$newest" 2>>"$auto_log"
+      fi
+    fi
+    after=$(git rev-parse --short HEAD)
+    if [ "$before" != "$after" ]; then
+      _auto_log "updated $before -> $after"
+    else
+      _auto_log "up-to-date at $after"
+    fi
+
+    # Run the checks of the (possibly just updated) CLI.
+    local result
+    result=$("$cli_dir/labelvier" ai check 2>&1)
+    if echo "$result" | grep -q '✗'; then
+      _auto_log "ai check found problems"
+      _notify "Label Vier CLI" "Something needs attention. Open the terminal and type: labelvier ai update"
+    elif [ "$before" != "$after" ]; then
+      _notify "Label Vier CLI" "Updated to the latest version, all checks passed."
+    fi
+  }
+
+  function _enable_auto_update() {
+    if [ "$(uname)" != "Darwin" ]; then
+      echo "Automatic updates use launchd and are only supported on macOS."
+      return 1
+    fi
+    local cli_dir
+    cli_dir=$(cd "$current_dir/.." && pwd)
+    mkdir -p "$(dirname "$auto_plist")" "$auto_dir"
+    cat > "$auto_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$auto_label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$cli_dir/labelvier</string>
+    <string>core</string>
+    <string>update</string>
+    <string>--auto</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>LABELVIER_AUTO_UPDATE</key><string>1</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>86400</integer>
+  <key>StandardErrorPath</key><string>$auto_log</string>
+</dict>
+</plist>
+PLIST
+    launchctl unload "$auto_plist" 2>/dev/null
+    launchctl load "$auto_plist"
+    echo "Automatic updates enabled: the CLI checks once a day (log: $auto_log)."
+    echo "Turn off with: labelvier core update --disable-auto"
+  }
+
+  function _disable_auto_update() {
+    if [ -f "$auto_plist" ]; then
+      launchctl unload "$auto_plist" 2>/dev/null
+      rm -f "$auto_plist"
+      echo "Automatic updates disabled."
+    else
+      echo "Automatic updates were not enabled."
+    fi
   }
 
   function _run_update_checker() {
+    # The unattended run (launchd) handles updating itself.
+    [ -n "$LABELVIER_AUTO_UPDATE" ] && return
     # Check if there are updates available from git and ask if we should pull them
     if [ -d "$current_dir/../.git" ]; then
       # echo date minus 12 hours, don't use -d option because it's not available on mac
