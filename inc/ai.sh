@@ -18,6 +18,11 @@ ai() (
   local labelvier_dir="$claude_dir/labelvier"
   local claude_tpl_dir="$current_dir/../templates/claude"
 
+  # Claude Code skill for the Timesheet API, shipped as a template dir and
+  # copied to ~/.claude/skills/timesheet (the skill needs its browser/ deps).
+  local skill_dir="$claude_dir/skills/timesheet"
+  local skill_tpl_dir="$claude_tpl_dir/skills/timesheet"
+
   # Where the Basecamp CLI keeps its OAuth credentials and its cache.
   local basecamp_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/basecamp"
   local basecamp_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/basecamp"
@@ -260,6 +265,77 @@ ai() (
     echo "$labelvier_dir/ANGULAR.md:$claude_tpl_dir/labelvier/ANGULAR.md.tpl"
   }
 
+  # "target file:template file" pairs of the timesheet skill. Kept separate
+  # from _claude_files: these live in ~/.claude/skills, not ~/.claude/labelvier,
+  # and are executable/need npm install afterwards.
+  function _skill_files() {
+    echo "$skill_dir/SKILL.md:$skill_tpl_dir/SKILL.md.tpl"
+    echo "$skill_dir/scripts/timesheet.sh:$skill_tpl_dir/scripts/timesheet.sh.tpl"
+    echo "$skill_dir/browser/browser-get.mjs:$skill_tpl_dir/browser/browser-get.mjs.tpl"
+    echo "$skill_dir/browser/package.json:$skill_tpl_dir/browser/package.json.tpl"
+    echo "$skill_dir/browser/package-lock.json:$skill_tpl_dir/browser/package-lock.json.tpl"
+  }
+
+  # True (0) if every skill file is present and the Playwright dependency is installed.
+  function _skill_installed() {
+    local pair
+    while IFS= read -r pair; do
+      [ -f "${pair%%:*}" ] || return 1
+    done < <(_skill_files)
+    [ -d "$skill_dir/browser/node_modules/playwright" ]
+  }
+
+  # Installs the timesheet skill and runs npm install for its Playwright
+  # dependency. Existing files are only overwritten with --force.
+  function _install_skill() {
+    local force="$1" pair target template
+
+    if ! type -P npm >/dev/null 2>&1; then
+      echo -e "${__red}npm is not installed.${__reset} The timesheet skill needs it for Playwright. Install Node.js first, then re-run this command."
+      return 1
+    fi
+
+    while IFS= read -r pair; do
+      target="${pair%%:*}"
+      template="${pair##*:}"
+
+      if [ ! -f "$template" ]; then
+        echo -e "${__red}Template not found:${__reset} $template"
+        continue
+      fi
+
+      if [ -f "$target" ] && [ "$force" -ne 0 ]; then
+        echo -e "Already present, skipped: $target ${__blue}(--force to overwrite)${__reset}"
+        continue
+      fi
+
+      mkdir -p "$(dirname "$target")"
+      cp "$template" "$target"
+      echo -e "${__green}Installed${__reset} $target"
+    done < <(_skill_files)
+
+    chmod +x "$skill_dir/scripts/timesheet.sh" 2>/dev/null
+
+    if [ -d "$skill_dir/browser/node_modules/playwright" ]; then
+      echo -e "${__green}✓${__reset} timesheet skill dependencies already installed"
+    else
+      (cd "$skill_dir/browser" && npm install --no-audit --no-fund) \
+        && echo -e "${__green}Installed${__reset} timesheet skill dependencies" \
+        || echo -e "${__red}npm install failed.${__reset} Run it yourself: ${__blue}cd $skill_dir/browser && npm install${__reset}"
+    fi
+
+    echo -e "Add ${__bold}TIMESHEET_API_TOKEN${__reset} to $claude_dir/.env (create it in the Timesheet app under ${__blue}/profiel${__reset} → API-tokens)."
+  }
+
+  # Removes the timesheet skill directory (incl. node_modules). The token in
+  # ~/.claude/.env is the user's own and is left alone.
+  function _remove_skill() {
+    if [ -d "$skill_dir" ]; then
+      rm -rf "$skill_dir"
+      echo -e "${__green}Removed${__reset} $skill_dir"
+    fi
+  }
+
   # True (0) if the toon hook script is both present and registered in
   # settings.json. Falls back to a plain file check when jq isn't installed.
   function _hook_registered() {
@@ -392,7 +468,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the toon hook, rtk and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the toon hook, rtk and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -423,7 +499,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the toon hook, rtk and the caveman plugin. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the toon hook, rtk and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -474,6 +550,9 @@ ai() (
     _append_missing_refs
 
     echo
+    _install_skill "$force"
+
+    echo
     _require_rtk
 
     echo
@@ -495,6 +574,7 @@ ai() (
     echo -e "  - the @labelvier/... and @RTK.md reference lines in CLAUDE.md (not the file itself)"
     echo -e "  - rtk's own artifacts (RTK.md, its Claude Code hook) via ${__bold}rtk init -g --uninstall${__reset}, if rtk is installed"
     echo -e "  - the caveman plugin and its marketplace registration, if installed"
+    echo -e "  - the timesheet skill ($skill_dir), if installed"
 
     local pair target
     while IFS= read -r pair; do
@@ -512,6 +592,7 @@ ai() (
 
     _remove_hook
     _remove_caveman
+    _remove_skill
 
     # Delegate to rtk's own uninstall rather than reimplementing it — it
     # removes RTK.md, its settings.json hook entry, and usually the @RTK.md
@@ -668,7 +749,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, toon, rtk, the caveman plugin and the Claude Code config.
+  # @description Checks basecamp, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     if type -P basecamp >/dev/null 2>&1; then
@@ -734,6 +815,12 @@ ai() (
       done
     else
       echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md ${__red}(missing, run: labelvier ai claude install)${__reset}"
+    fi
+
+    if _skill_installed; then
+      echo -e "${__green}✓${__reset} $skill_dir (timesheet skill)"
+    else
+      echo -e "${__red}✗${__reset} $skill_dir (timesheet skill) ${__red}(missing or incomplete, run: labelvier ai claude install)${__reset}"
     fi
 
     if _hook_registered; then

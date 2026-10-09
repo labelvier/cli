@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `ai claude install` now installs the Claude Code `timesheet` skill (read-only Timesheet API helper) into `~/.claude/skills/timesheet` and runs `npm install` for its Playwright dependency. `ai claude uninstall` removes it and `ai check` verifies it.
+
 ## [1.0.5] - 2026-09-11
 
 ### Fixed
