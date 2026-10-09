@@ -889,6 +889,25 @@ ai() (
   # @description Checks basecamp, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
+    local output
+    output=$(_run_checks)
+    echo "$output"
+
+    # Walk the user to `ai update` instead of leaving them with a list of red crosses.
+    # No terminal (launchd, pipe) = no question.
+    if echo "$output" | grep -q '✗' && [ -t 0 ] && [ -t 1 ]; then
+      echo
+      local answer
+      read -p "Some checks failed. Run 'labelvier ai update' now to fix them? [Y/n] " answer
+      case "$answer" in
+        [nN]*) ;;
+        *) update ;;
+      esac
+    fi
+  }
+
+  # The checks themselves, without the follow-up question (used by check and update).
+  function _run_checks() {
     if type -P basecamp >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} basecamp"
     else
@@ -990,12 +1009,13 @@ ai() (
   function update() {
     local cli="$current_dir/../labelvier"
     local output
-    output=$(check)
+    output=$(_run_checks)
 
     if ! echo "$output" | grep -q '✗'; then
       echo "$output"
       echo
       echo -e "${__green}Everything is up to date.${__reset}"
+      _offer_auto_update
       return 0
     fi
 
@@ -1009,6 +1029,7 @@ ai() (
 
     if [ -z "$actions" ]; then
       echo "Nothing I can fix automatically, see the list above."
+      _offer_auto_update
       return 1
     fi
 
@@ -1029,7 +1050,25 @@ ai() (
 
     echo
     echo "Checking again..."
-    check | grep '✗' || echo -e "${__green}All checks passed.${__reset}"
+    _run_checks | grep '✗' || echo -e "${__green}All checks passed.${__reset}"
+    _offer_auto_update
+  }
+
+  # Asks (once per run, only when there is a terminal and macOS) whether to
+  # turn on the daily automatic update. Skipped when it is already enabled.
+  function _offer_auto_update() {
+    [ "$(uname)" = "Darwin" ] || return 0
+    [ -f "$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist" ] && return 0
+    local answer
+    echo
+    if ! read -p "Want the CLI to update itself automatically once a day? [Y/n] " answer < /dev/tty 2>/dev/null; then
+      echo
+      return 0
+    fi
+    case "$answer" in
+      [nN]*) echo "  Ok, turn it on later with: labelvier core update --enable-auto" ;;
+      *) "$current_dir/../labelvier" core update --enable-auto ;;
+    esac
   }
 
   main "$@"
