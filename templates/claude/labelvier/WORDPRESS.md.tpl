@@ -1,3 +1,4 @@
+<!-- labelvier-ai-version: 1 -->
 # WordPress development
 
 The inc folder is important because we add controller / service functionality there. If the functionality gets to big you should create a subfolder with namespace and autoload.
