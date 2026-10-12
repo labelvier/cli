@@ -16,7 +16,7 @@ release() (
   }
 
   # @function start <optional-version>
-  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file in the root, get the version from there and ask before bumping it. If that fails, give the version yourself.
+  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file in the root, get the version from there and ask before bumping it. If that fails, we'll do the same with a VERSION file in the root. If that fails, give the version yourself and we'll offer to create a VERSION file.
   function start() {
     # Create the release branch and stop immediately when it cannot be created.
     function _create_release_branch() {
@@ -53,6 +53,9 @@ release() (
     local message=""
     local custom_version=""
     local using_package_json=0
+    local using_version_file=0
+    local create_version_file=0
+    local no_version_source=0
 
     # Capture an explicitly requested release version when it was provided.
     if [ -n "$1" ] && [[ ! $1 =~ ^--.*$ ]]; then
@@ -124,9 +127,29 @@ release() (
       echo "No package.json file found."
     fi
 
+    # Fallback to a VERSION file in the root when neither a theme file nor package.json gave a version.
+    if [ "$path" = "0" ] && [ "$using_package_json" = "0" ]; then
+      if [ -f VERSION ]; then
+        version=$(head -n 1 VERSION | tr -d '[:space:]')
+        if [ "$version" ]; then
+          echo "Found version $version in VERSION"
+          using_version_file=1
+        else
+          echo "No version found in VERSION"
+        fi
+      else
+        echo "No VERSION file found."
+      fi
+    fi
+
+    if [ "$path" = "0" ] && [ "$using_package_json" = "0" ] && [ "$using_version_file" = "0" ]; then
+      no_version_source=1
+    fi
+
     # Without any version source the new version cannot be calculated, so it has to be given.
-    if [ -z "$custom_version" ] && [ "$path" = "0" ] && [ "$using_package_json" = "0" ]; then
+    if [ -z "$custom_version" ] && [ "$no_version_source" = "1" ]; then
       echo "No version file found, give the new version: labelvier release start <version>"
+      echo "Tip: add a VERSION file with the current version (echo 1.0.0 > VERSION), so the next release can bump it."
       exit 1
     fi
 
@@ -206,6 +229,25 @@ release() (
       fi
     fi
 
+    # The VERSION file is the last backup source, so ask before bumping it too.
+    if [ "$using_version_file" = "1" ]; then
+      read -p "No theme version file or package.json found. Bump VERSION from $oldversion to $version? [Y/n] " -n 1 -r
+      echo ""
+      if [[ $REPLY =~ ^[Nn]$ ]]; then
+        using_version_file=0
+        echo "Leaving VERSION at $oldversion."
+      fi
+    fi
+
+    # Without any version source, suggest a VERSION file so the next release can find its version.
+    if [ "$no_version_source" = "1" ]; then
+      read -p "No version file found. Create a VERSION file with $version, so the next release can bump it? [Y/n] " -n 1 -r
+      echo ""
+      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        create_version_file=1
+      fi
+    fi
+
     # Create the release branch before applying the version bump.
     _create_release_branch "release/${version// /-}"
     # Update and stage the theme version file when one was detected.
@@ -226,6 +268,17 @@ release() (
       message="chore(package.json): updated version to $version"
       # commit the changed file
       git add package.json
+    fi
+
+    if [ "$using_version_file" = "1" ] || [ "$create_version_file" = "1" ]; then
+      # Write the new version to the VERSION file, or create it when there was no version source.
+      echo "$version" > VERSION
+      if [ "$create_version_file" = "1" ]; then
+        message="chore(VERSION): add VERSION file with $version"
+      else
+        message="chore(VERSION): updated version to $version"
+      fi
+      git add VERSION
     fi
     # commit the changed file if messages is not empty
     if [ "$message" ]; then

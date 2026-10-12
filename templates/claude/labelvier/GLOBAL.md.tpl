@@ -7,7 +7,7 @@ Commit using conventional commits
 Use `labelvier release` to start and finish releases
 ```
 Available functions:
-  start <optional-version> - Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file in the root, get the version from there and ask before bumping it. If that fails, give the version yourself.
+  start <optional-version> - Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file in the root, get the version from there and ask before bumping it. If that fails, we'll do the same with a VERSION file in the root. If that fails, give the version yourself and we'll offer to create a VERSION file.
   cancel - Cancels the release.
   abort - Alias for cancel, matching the common git merge --abort habit.
   finish - Merges the release branch into master (or main) and develop, and tags the release.

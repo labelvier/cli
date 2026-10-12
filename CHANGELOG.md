@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `release start` falls back to a `VERSION` file in the root when there is no theme version file and no `package.json` version. It asks `[Y/n]` before bumping it.
+- `release start` with a given version but no version file offers to create a `VERSION` file, so the next release can bump it.
+
 ### Changed
 - `release start` asks `[Y/n]` before bumping a root `package.json`, because that file is only the backup version source when no theme version file is found. Answering `n` still creates the release branch, but leaves `package.json` alone.
-- `release start` without a version file and without a given version now says to pass the version (`labelvier release start <version>`), instead of `Version 0 is not semantic`.
+- `release start` without a version file and without a given version now says to pass the version (`labelvier release start <version>`) and suggests adding a `VERSION` file, instead of `Version 0 is not semantic`.
 - The `release finish` description and the `GLOBAL.md` template (version 2) say that `main` works as well as `master`.
 
 ### Fixed
