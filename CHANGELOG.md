@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `release start` asks `[Y/n]` before bumping a root `package.json`, because that file is only the backup version source when no theme version file is found. Answering `n` still creates the release branch, but leaves `package.json` alone.
+- `release start` without a version file and without a given version now says to pass the version (`labelvier release start <version>`), instead of `Version 0 is not semantic`.
+- The `release finish` description and the `GLOBAL.md` template (version 2) say that `main` works as well as `master`.
+
+### Fixed
+- `release start` reads the `package.json` version when `"version"` is the last key (no trailing comma). Before, this gave `xargs: unterminated quote` and no version was found.
+
 ## [1.0.5] - 2026-09-11
 
 ### Fixed

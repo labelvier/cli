@@ -16,7 +16,7 @@ release() (
   }
 
   # @function start <optional-version>
-  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file and try to get the version from there. If that fails, we'll exit.
+  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file in the root, get the version from there and ask before bumping it. If that fails, give the version yourself.
   function start() {
     # Create the release branch and stop immediately when it cannot be created.
     function _create_release_branch() {
@@ -111,13 +111,8 @@ release() (
 
     if [ "$path" = "0" ] && [ -f package.json ]; then
       # Fallback to package.json when no theme version file was detected.
-      version=$(grep version package.json)
-      # remove the 'version: ' part with sed
-      version=$(echo $version | sed 's/"version": "//')
-      # remove the last " with sed
-      version=$(echo $version | sed 's/",//')
-      # remove any whitespaces
-      version=$(echo $version | xargs)
+      # take the value of the first "version" key, with or without a trailing comma
+      version=$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[^"]*"([^"]*)".*/\1/')
       # check if version is not empty
       if [ "$version" ]; then
         echo "Found version $version in package.json"
@@ -127,6 +122,12 @@ release() (
       fi
     elif [ "$path" = "0" ]; then
       echo "No package.json file found."
+    fi
+
+    # Without any version source the new version cannot be calculated, so it has to be given.
+    if [ -z "$custom_version" ] && [ "$path" = "0" ] && [ "$using_package_json" = "0" ]; then
+      echo "No version file found, give the new version: labelvier release start <version>"
+      exit 1
     fi
 
     # Validate the detected current version before calculating the release version.
@@ -194,6 +195,17 @@ release() (
     fi
 
     echo "New version: $version"
+
+    # package.json in the root is only a backup source, so ask before bumping it.
+    if [ "$using_package_json" = "1" ]; then
+      read -p "No theme version file found. Bump package.json from $oldversion to $version? [Y/n] " -n 1 -r
+      echo ""
+      if [[ $REPLY =~ ^[Nn]$ ]]; then
+        using_package_json=0
+        echo "Leaving package.json at $oldversion."
+      fi
+    fi
+
     # Create the release branch before applying the version bump.
     _create_release_branch "release/${version// /-}"
     # Update and stage the theme version file when one was detected.
@@ -272,7 +284,7 @@ release() (
   }
 
   # @function finish
-  # @description Merges the release branch into master and develop, and tags the release.
+  # @description Merges the release branch into master (or main) and develop, and tags the release.
   function finish() {
     # Track which local merge steps have completed successfully.
     local master_merged=0
