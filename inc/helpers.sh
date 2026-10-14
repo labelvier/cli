@@ -132,3 +132,58 @@ function _is_semantic_version() {
   # if we get here, the version is not a semantic version
   return 1
 }
+
+# Offers to install Homebrew itself (via the official install script) when
+# it's missing, so callers can fall through to `brew install <thing>`
+# instead of just telling the user to go install <thing> by hand. Returns
+# 1 (without exiting) when brew is still unavailable — declined, or the
+# install failed — so callers can fall back to their own manual-install message.
+function _require_brew() {
+  if type -P brew >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo -e "${__red}Homebrew is not installed.${__reset} It's the easiest way to install missing dependencies."
+  local answer
+  read -p "Install Homebrew now? [y/N] " answer
+  case "$answer" in
+    [yY]*) ;;
+    *) return 1 ;;
+  esac
+
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+  # The installer doesn't update PATH in this already-running shell — pick
+  # up brew from its known install locations ourselves.
+  if ! type -P brew >/dev/null 2>&1; then
+    local candidate
+    for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew; do
+      if [ -x "$candidate" ]; then
+        eval "$("$candidate" shellenv)"
+        break
+      fi
+    done
+  fi
+
+  if ! type -P brew >/dev/null 2>&1; then
+    echo -e "${__red}Homebrew installed but still not on your PATH in this shell.${__reset} Open a new shell and try again."
+    return 1
+  fi
+}
+
+# Asks a [Y/n] question on the terminal, also when stdin is a pipe or a
+# here-string. Returns 0 on yes (or Enter), 1 on "n", and 2 when there is no
+# terminal to ask on (launchd, cron, CI), so nothing is installed unasked.
+# The /dev/tty check runs first, in a subshell: `read -p` writes its prompt
+# to stderr, so `read ... < /dev/tty 2>/dev/null` would hide the question.
+function _confirm() {
+  if ! (: < /dev/tty) 2>/dev/null; then
+    echo "$1 [Y/n] (no terminal to ask on, skipped)"
+    return 2
+  fi
+  local answer
+  read -p "$1 [Y/n] " answer < /dev/tty
+  case "$answer" in
+    [nN]*) return 1 ;;
+  esac
+}

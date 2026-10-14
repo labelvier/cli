@@ -48,6 +48,20 @@ cd cli
 ./labelvier core install
 ```
 
+### Setup
+
+After installing, run:
+
+```sh
+labelvier setup
+```
+
+It checks the tools the CLI needs (Homebrew, git, jq, nvm and Node.js, Docker,
+Composer), offers to install what is missing, sets up clickable update
+notifications (`terminal-notifier`) and then offers to check and install the
+AI setup (`labelvier ai update`). Nothing is installed without your yes. Run
+`labelvier setup tools` to only check the tools.
+
 Want an even shorter alias (e.g. `wt`)? Run:
 
 ```sh

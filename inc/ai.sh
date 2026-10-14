@@ -47,44 +47,6 @@ ai() (
   # Helpers
   # ---------------------------------------------------------------------------
 
-  # Offers to install Homebrew itself (via the official install script) when
-  # it's missing, so callers can fall through to `brew install <thing>`
-  # instead of just telling the user to go install <thing> by hand. Returns
-  # 1 (without exiting) when brew is still unavailable — declined, or the
-  # install failed — so callers can fall back to their own manual-install message.
-  function _require_brew() {
-    if type -P brew >/dev/null 2>&1; then
-      return 0
-    fi
-
-    echo -e "${__red}Homebrew is not installed.${__reset} It's the easiest way to install missing dependencies."
-    local answer
-    read -p "Install Homebrew now? [y/N] " answer
-    case "$answer" in
-      [yY]*) ;;
-      *) return 1 ;;
-    esac
-
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-    # The installer doesn't update PATH in this already-running shell — pick
-    # up brew from its known install locations ourselves.
-    if ! type -P brew >/dev/null 2>&1; then
-      local candidate
-      for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew; do
-        if [ -x "$candidate" ]; then
-          eval "$("$candidate" shellenv)"
-          break
-        fi
-      done
-    fi
-
-    if ! type -P brew >/dev/null 2>&1; then
-      echo -e "${__red}Homebrew installed but still not on your PATH in this shell.${__reset} Open a new shell and try again."
-      return 1
-    fi
-  }
-
   # jq is used to merge into settings.json without clobbering existing settings.
   # NOTE: `type -P` searches PATH only — `command -v` would also match the shell
   # functions defined in this file.
@@ -945,6 +907,22 @@ ai() (
       fi
     fi
 
+    # Clickable notifications from the automatic update (macOS only).
+    # -diagnose reports the permission without showing a notification.
+    if [ "$(uname)" = "Darwin" ]; then
+      if ! type -P terminal-notifier >/dev/null 2>&1; then
+        echo -e "${__red}✗${__reset} terminal-notifier ${__red}(missing, run: labelvier core notifications)${__reset}"
+      else
+        local notification_status
+        notification_status=$(terminal-notifier -diagnose 2>/dev/null | sed -n 's/^ *authorization *//p')
+        if [ "$notification_status" = "authorized" ]; then
+          echo -e "${__green}✓${__reset} terminal-notifier (notifications allowed)"
+        else
+          echo -e "${__red}✗${__reset} terminal-notifier ${__red}(notifications not allowed: ${notification_status:-unknown}; run: labelvier core notifications)${__reset}"
+        fi
+      fi
+    fi
+
     if _caveman_installed; then
       echo -e "${__green}✓${__reset} caveman plugin"
     else
@@ -1034,17 +1012,13 @@ ai() (
     fi
 
     echo -e "${__bold}Suggested fixes:${__reset} (nothing changes without your yes)"
-    local action answer
+    local action
     while IFS= read -r action; do
-      # No terminal to answer on (cron, launchd, pipe)? Treat that as "no".
-      if ! read -p "  Run '$action'? [Y/n] " answer < /dev/tty 2>/dev/null; then
-        echo
-        echo "  No terminal to ask on, skipped."
-        continue
-      fi
-      case "$answer" in
-        [nN]*) echo "  Skipped." ;;
-        *) "$cli" ${action#labelvier } ;;
+      # No terminal to answer on (cron, launchd, pipe)? _confirm treats that as "no".
+      _confirm "  Run '$action'?"
+      case $? in
+        0) "$cli" ${action#labelvier } ;;
+        1) echo "  Skipped." ;;
       esac
     done <<< "$actions"
 
@@ -1059,15 +1033,11 @@ ai() (
   function _offer_auto_update() {
     [ "$(uname)" = "Darwin" ] || return 0
     [ -f "$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist" ] && return 0
-    local answer
     echo
-    if ! read -p "Want the CLI to update itself automatically once a day? [Y/n] " answer < /dev/tty 2>/dev/null; then
-      echo
-      return 0
-    fi
-    case "$answer" in
-      [nN]*) echo "  Ok, turn it on later with: labelvier core update --enable-auto" ;;
-      *) "$current_dir/../labelvier" core update --enable-auto ;;
+    _confirm "Want the CLI to update itself automatically once a day?"
+    case $? in
+      0) "$current_dir/../labelvier" core update --enable-auto ;;
+      1) echo "  Ok, turn it on later with: labelvier core update --enable-auto" ;;
     esac
   }
 

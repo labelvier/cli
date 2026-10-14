@@ -8,9 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `labelvier setup` walks a new install through the required tools (Homebrew, git with the Xcode Command Line Tools, jq, nvm, Node.js LTS, Docker Desktop, Composer), offering `[Y/n]` to install each missing one, then sets up notifications (`core notifications`) and asks to run `ai update`. `labelvier setup tools` only does the tools. The install script and `core install` now point to it.
 - `release start` falls back to a `VERSION` file in the root when there is no theme version file and no `package.json` version. It asks `[Y/n]` before bumping it.
 - `release start` with a given version but no version file offers to create a `VERSION` file, so the next release can bump it.
 - Auto-update "needs attention" notification opens Terminal with `labelvier ai update` when clicked, if `terminal-notifier` is installed. Without it you get the plain notification as before.
+- `core notifications` installs `terminal-notifier` via Homebrew (asks `[Y/n]` first) and asks macOS for permission to show its notifications. `labelvier setup` and `core update --enable-auto` run it, and `ai check` / `ai update` flag a missing `terminal-notifier` or missing permission on macOS. When the banner style is temporary it tips to switch it to Persistent, so the update notification stays until clicked.
 - `ai claude install` now installs the Claude Code `timesheet` skill (Timesheet API helper: read data, book and delete own hours) into `~/.claude/skills/timesheet` and runs `npm install` for its Playwright dependency. `ai claude uninstall` removes it and `ai check` verifies it.
 - Timesheet skill (v3): "schrijf {x}u voor {y}" adds to an existing own booking instead of asking to replace it, and reports the total hours for that day.
 - Version stamps (`labelvier-ai-version`) on `GLOBAL.md`, `WORDPRESS.md`, `ANGULAR.md` and the timesheet skill, plus a version-stamped managed block in `~/.claude/CLAUDE.md` for the `@labelvier/...` refs. `ai check` reports installed vs. available versions and flags outdated or unversioned copies; `ai claude install` refreshes outdated files (the old copy is kept as `.bak`) and replaces an outdated CLAUDE.md block, leaving the rest of that file untouched.
@@ -24,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bare `@labelvier/...` lines in `CLAUDE.md` are folded into the new managed block on the next `ai claude install`.
 
 ### Fixed
+- The automatic update reported `toon`, `basecamp`, the Basecamp plugin and the caveman plugin as missing every day, because launchd ran it with a bare `PATH`. `core update --enable-auto` now writes the `PATH` of your shell into the LaunchAgent.
+- The automatic update left its lock behind (`~/.labelvier-auto-update/lock`), so a second run within an hour was skipped.
+- Clickable update notifications failed with `Notifications are not allowed for this application` and macOS never asked for permission. A Homebrew `terminal-notifier` run straight from the Cellar is not registered with LaunchServices; `core notifications` now launches the app once with `open` so macOS shows the permission prompt.
 - `release start --force` no longer fails with `fatal: ambiguous argument 'HEAD'` in a repository without commits.
 - `release start` reads the `package.json` version when `"version"` is the last key (no trailing comma). Before, this gave `xargs: unterminated quote` and no version was found.
 - `ai claude install` writes `TIMESHEET_API_TOKEN` quoted in `~/.claude/.env` (and quotes an existing unquoted entry).

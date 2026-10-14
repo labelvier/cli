@@ -155,7 +155,7 @@ else
 fi
 
 echo
-echo "Installed! Run 'labelvier' or 'l4' to get started."
+echo "Installed! Run 'labelvier setup' to install the required tools and the AI setup."
 
 # Drop straight into a fresh login shell so labelvier/l4 works right away,
 # without the user having to restart their terminal or run 'source ~/.zshrc'

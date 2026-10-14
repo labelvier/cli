@@ -52,6 +52,96 @@ core() (
     fi
   }
 
+  # @function notifications
+  # @description Install terminal-notifier and ask macOS for permission to show clickable update notifications.
+  function notifications() {
+    if [ "$(uname)" != "Darwin" ]; then
+      echo "Notifications are only supported on macOS."
+      return 0
+    fi
+
+    if ! type -P terminal-notifier >/dev/null 2>&1; then
+      echo -e "${__red}terminal-notifier is not installed.${__reset} The automatic update needs it for notifications you can click."
+      if ! _require_brew; then
+        echo -e "Install it yourself: ${__blue}https://github.com/julienXX/terminal-notifier${__reset}"
+        return 1
+      fi
+      _confirm "Install it now with 'brew install terminal-notifier'?"
+      case $? in
+        0) brew install terminal-notifier || return 1 ;;
+        1) echo "  Skipped. Update notifications stay plain (no click action)."; return 1 ;;
+        *) return 1 ;;
+      esac
+    fi
+
+    local status
+    status=$(_notification_status)
+    case "$status" in
+      authorized)
+        echo -e "${__green}✓${__reset} terminal-notifier may show notifications"
+        _tip_persistent_notifications
+        return 0
+        ;;
+      denied)
+        _explain_notifications_denied
+        return 1
+        ;;
+    esac
+
+    # Permission was never asked. Run directly from the Homebrew Cellar, macOS
+    # refuses without a prompt ("Notifications are not allowed for this
+    # application"). Launching the app bundle once through LaunchServices
+    # (`open`) registers it, and then macOS does ask.
+    local app
+    app=$(terminal-notifier -diagnose 2>/dev/null | sed -n 's/^ *bundle path *//p')
+    if [ -z "$app" ] || [ ! -d "$app" ]; then
+      echo -e "${__red}Could not find the terminal-notifier app bundle.${__reset} Run: terminal-notifier -diagnose"
+      return 1
+    fi
+    echo "macOS asks for permission to show notifications from terminal-notifier now. Click Allow."
+    open -W -n "$app" --args -title "Label Vier CLI" -message "Notifications are on." >/dev/null 2>&1
+
+    status=$(_notification_status)
+    case "$status" in
+      authorized)
+        echo -e "${__green}✓${__reset} terminal-notifier may show notifications"
+        _tip_persistent_notifications
+        ;;
+      denied)
+        _explain_notifications_denied
+        return 1
+        ;;
+      *)
+        echo -e "${__red}✗${__reset} Permission is still not given (status: ${status:-unknown})."
+        echo "  Check System Settings > Notifications > terminal-notifier, or run: terminal-notifier -diagnose"
+        return 1
+        ;;
+    esac
+  }
+
+  # Prints terminal-notifier's authorization status (authorized, denied,
+  # not determined, ...) without showing a notification. Empty when it is
+  # not installed.
+  function _notification_status() {
+    type -P terminal-notifier >/dev/null 2>&1 || return 0
+    terminal-notifier -diagnose 2>/dev/null | sed -n 's/^ *authorization *//p'
+  }
+
+  # A temporary banner disappears after a few seconds, so the update
+  # notification is easy to miss. Apps cannot change this style themselves.
+  function _tip_persistent_notifications() {
+    if terminal-notifier -diagnose 2>/dev/null | grep -q '^ *alert style *banners'; then
+      echo "  Tip: set the banner style to Persistent in System Settings > Notifications > terminal-notifier,"
+      echo "  so the update notification stays until you click it."
+    fi
+  }
+
+  function _explain_notifications_denied() {
+    echo -e "${__red}✗${__reset} Notifications from terminal-notifier are turned off."
+    echo "  Turn them on in System Settings > Notifications > terminal-notifier."
+    open "x-apple.systempreferences:com.apple.Notifications-Settings.extension" >/dev/null 2>&1
+  }
+
   # Unattended update: fast-forward only, never force, never prompts. Runs
   # `ai check` afterwards and sends a notification when something needs
   # attention. It does NOT fix anything itself (new skills and config changes
@@ -71,7 +161,9 @@ core() (
         _auto_log "skip: another run is active"; return 0
       fi
     fi
-    trap 'rm -rf "$lock"' EXIT
+    # Expand $lock now: the trap fires when the subshell exits, after this
+    # function returned and its local variables are gone.
+    trap "rm -rf '$lock'" EXIT
 
     cd "$cli_dir" || return 0
     _migrate_remote_if_needed
@@ -120,6 +212,12 @@ core() (
     fi
     local cli_dir
     cli_dir=$(cd "$current_dir/.." && pwd)
+    # launchd starts with a bare PATH, without nvm (toon), ~/.local/bin
+    # (claude, basecamp) and the like, so `ai check` would report those as
+    # missing every day. Take the PATH of the shell that turns this on, with
+    # the system defaults appended, escaped for the XML plist.
+    local launchd_path
+    launchd_path=$(printf '%s' "$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
     mkdir -p "$(dirname "$auto_plist")" "$auto_dir"
     cat > "$auto_plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -137,7 +235,7 @@ core() (
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PATH</key><string>$launchd_path</string>
     <key>LABELVIER_AUTO_UPDATE</key><string>1</string>
   </dict>
   <key>RunAtLoad</key><true/>
@@ -149,7 +247,10 @@ PLIST
     launchctl unload "$auto_plist" 2>/dev/null
     launchctl load "$auto_plist"
     echo "Automatic updates enabled: the CLI checks once a day (log: $auto_log)."
+    echo "It uses the PATH of this shell. Installed a new Node version or tool elsewhere? Run this again."
     echo "Turn off with: labelvier core update --disable-auto"
+    echo
+    notifications
   }
 
   function _disable_auto_update() {
@@ -333,6 +434,14 @@ PLIST
       else
         echo "The CLI is not added to the \$PATH variable"
       fi
+    fi
+
+    # The checkout may just have been moved, so run setup from its new place.
+    echo
+    if _confirm "Run 'labelvier setup' now to install the required tools and the AI setup?"; then
+      "$HOME/.labelvier/labelvier" setup
+    else
+      echo "Run it later with: labelvier setup"
     fi
   }
 
