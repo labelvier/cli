@@ -118,7 +118,7 @@ release() (
       version=$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[^"]*"([^"]*)".*/\1/')
       # check if version is not empty
       if [ "$version" ]; then
-        echo "Found version $version in package.json"
+        echo "Found version $version in package.json in the project root"
         using_package_json=1
       else
         echo "No version found in package.json"
@@ -132,7 +132,7 @@ release() (
       if [ -f VERSION ]; then
         version=$(head -n 1 VERSION | tr -d '[:space:]')
         if [ "$version" ]; then
-          echo "Found version $version in VERSION"
+          echo "Found version $version in VERSION in the project root"
           using_version_file=1
         else
           echo "No version found in VERSION"
@@ -221,7 +221,7 @@ release() (
 
     # package.json in the root is only a backup source, so ask before bumping it.
     if [ "$using_package_json" = "1" ]; then
-      read -p "No theme version file found. Bump package.json from $oldversion to $version? [Y/n] " -n 1 -r
+      read -p "Bump package.json in the project root from $oldversion to $version? [Y/n] " -n 1 -r
       echo ""
       if [[ $REPLY =~ ^[Nn]$ ]]; then
         using_package_json=0
@@ -231,7 +231,7 @@ release() (
 
     # The VERSION file is the last backup source, so ask before bumping it too.
     if [ "$using_version_file" = "1" ]; then
-      read -p "No theme version file or package.json found. Bump VERSION from $oldversion to $version? [Y/n] " -n 1 -r
+      read -p "Bump VERSION in the project root from $oldversion to $version? [Y/n] " -n 1 -r
       echo ""
       if [[ $REPLY =~ ^[Nn]$ ]]; then
         using_version_file=0

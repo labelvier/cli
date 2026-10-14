@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `release start` asks `[Y/n]` before bumping a root `package.json`, because that file is only the backup version source when no theme version file is found. Answering `n` still creates the release branch, but leaves `package.json` alone.
+- `release start` now names the file and location in its messages ("Found version 1.0.5 in package.json in the project root", "Bump package.json in the project root from ..."), and the bump prompts no longer start with "No theme version file found".
 - `release start` without a version file and without a given version now says to pass the version (`labelvier release start <version>`) and suggests adding a `VERSION` file, instead of `Version 0 is not semantic`.
 - The `release finish` description and the `GLOBAL.md` template (version 2) say that `main` works as well as `master`.
 
