@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `release start` falls back to a `VERSION` file in the root when there is no theme version file and no `package.json` version. It asks `[Y/n]` before bumping it.
+- `release start` with a given version but no version file offers to create a `VERSION` file, so the next release can bump it.
+
+### Changed
+- `release start` asks `[Y/n]` before bumping a root `package.json`, because that file is only the backup version source when no theme version file is found. Answering `n` still creates the release branch, but leaves `package.json` alone.
+- `release start` now names the file and location in its messages ("Found version 1.0.5 in package.json in the project root", "Bump package.json in the project root from ..."), and the bump prompts no longer start with "No theme version file found".
+- `release start` without a version file and without a given version now asks `[Y/n]` to create a `VERSION` file and then for the version, which becomes the release version, instead of `Version 0 is not semantic`. Answering `n` points to `labelvier release start <version>`.
+- The `release finish` description and the `GLOBAL.md` template (version 2) say that `main` works as well as `master`.
+
+### Fixed
+- `release start --force` no longer fails with `fatal: ambiguous argument 'HEAD'` in a repository without commits.
+- `release start` reads the `package.json` version when `"version"` is the last key (no trailing comma). Before, this gave `xargs: unterminated quote` and no version was found.
+
 ## [1.0.5] - 2026-09-11
 
 ### Fixed
