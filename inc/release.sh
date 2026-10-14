@@ -16,7 +16,7 @@ release() (
   }
 
   # @function start <optional-version>
-  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file in the root, get the version from there and ask before bumping it. If that fails, we'll do the same with a VERSION file in the root. If that fails, give the version yourself and we'll offer to create a VERSION file.
+  # @description Creates a new release branch, tries to check if there is any package.json file and updates the version. Possible flags are --minor and --major. Standard version is patch. If no version is given, we'll check if there is a WordPress theme in the .env file and try to get the version from the style.scss file. If that fails, we'll check if there is a package.json file in the root, get the version from there and ask before bumping it. If that fails, we'll do the same with a VERSION file in the root. If that fails, we offer to create a VERSION file with the version you give.
   function start() {
     # Create the release branch and stop immediately when it cannot be created.
     function _create_release_branch() {
@@ -40,7 +40,8 @@ release() (
     fi
 
     # check if we are on the develop branch and --force is not set
-    local branch=$(git rev-parse --abbrev-ref HEAD)
+    # symbolic-ref also works in a repository without commits, where rev-parse HEAD fails.
+    local branch=$(git symbolic-ref --short -q HEAD || echo "HEAD")
 
     if ! _flag_is_present "force" "$@" && [ "$branch" != "develop" ]; then
         echo "You are not on the develop branch, use --force to start a release branch from $branch."
@@ -146,11 +147,23 @@ release() (
       no_version_source=1
     fi
 
-    # Without any version source the new version cannot be calculated, so it has to be given.
+    # Without any version source the new version cannot be calculated, so offer to create a VERSION file.
     if [ -z "$custom_version" ] && [ "$no_version_source" = "1" ]; then
-      echo "No version file found, give the new version: labelvier release start <version>"
-      echo "Tip: add a VERSION file with the current version (echo 1.0.0 > VERSION), so the next release can bump it."
-      exit 1
+      read -p "No version file found. Create a VERSION file? [Y/n] " -n 1 -r
+      echo ""
+      if [[ $REPLY =~ ^[Nn]$ ]]; then
+        echo "No version file found, give the new version: labelvier release start <version>"
+        exit 1
+      fi
+      read -p "What is the current version? [1.0.0] " version
+      version=${version:-1.0.0}
+      if ! _is_semantic_version "$version"; then
+        echo "Version $version is not semantic, exiting."
+        exit 1
+      fi
+      # The given version is the one to release, so no bump is needed.
+      custom_version="$version"
+      create_version_file=1
     fi
 
     # Validate the detected current version before calculating the release version.
@@ -239,8 +252,8 @@ release() (
       fi
     fi
 
-    # Without any version source, suggest a VERSION file so the next release can find its version.
-    if [ "$no_version_source" = "1" ]; then
+    # With a given version but no version source, suggest a VERSION file so the next release can find its version.
+    if [ "$no_version_source" = "1" ] && [ "$create_version_file" = "0" ]; then
       read -p "No version file found. Create a VERSION file with $version, so the next release can bump it? [Y/n] " -n 1 -r
       echo ""
       if [[ ! $REPLY =~ ^[Nn]$ ]]; then
