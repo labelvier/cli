@@ -7,9 +7,6 @@ setup() (
   # get the current directory name of this file
   local current_dir=$(dirname "${BASH_SOURCE[0]}")
 
-  # nvm's own installer. Homebrew's nvm formula is not supported by nvm itself.
-  local nvm_install_url="https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh"
-
   # Runs the command. Unlike the other commands, a bare `labelvier setup`
   # runs the whole walkthrough instead of printing the docs, because that is
   # what a new colleague types. Subcommands and --help still go through
@@ -118,68 +115,6 @@ setup() (
       return 1
     fi
     _brew_tool git "used for releases, deploys and updating this CLI" git
-  }
-
-  # nvm is a shell function, not a binary, so look for its script and load it
-  # into this shell. Returns 1 when nvm is not installed.
-  function _load_nvm() {
-    type nvm >/dev/null 2>&1 && return 0
-    local nvm_sh
-    for nvm_sh in "${NVM_DIR:-$HOME/.nvm}/nvm.sh" "$(type -P brew >/dev/null 2>&1 && brew --prefix nvm 2>/dev/null)/nvm.sh"; do
-      if [ -s "$nvm_sh" ]; then
-        # shellcheck disable=SC1090
-        . "$nvm_sh"
-        return 0
-      fi
-    done
-    return 1
-  }
-
-  function _require_nvm() {
-    if _load_nvm; then
-      echo -e "${__green}✓${__reset} nvm"
-      return 0
-    fi
-
-    echo -e "${__red}✗${__reset} nvm is not installed (manages the Node.js version per project)."
-    if ! _confirm "  Install it now with the official nvm install script?"; then
-      echo -e "  Skipped. Install it yourself: ${__blue}https://github.com/nvm-sh/nvm#installing-and-updating${__reset}"
-      return 1
-    fi
-    # The installer adds the nvm lines to your shell config (~/.zshrc etc.).
-    curl -fsSL "$nvm_install_url" | bash
-
-    if _load_nvm; then
-      echo -e "${__green}✓${__reset} nvm installed"
-    else
-      echo -e "${__red}✗${__reset} nvm is still not found. Open a new shell and run 'labelvier setup tools' again."
-      return 1
-    fi
-  }
-
-  function _require_node() {
-    if type -P node >/dev/null 2>&1; then
-      echo -e "${__green}✓${__reset} node ($(node --version 2>/dev/null))"
-      return 0
-    fi
-
-    echo -e "${__red}✗${__reset} node is not installed (npm builds the themes and installs the toon tool)."
-    if ! _load_nvm; then
-      echo "  Install nvm first, then run: nvm install --lts"
-      return 1
-    fi
-    if ! _confirm "  Install the latest LTS version with 'nvm install --lts'?"; then
-      echo "  Skipped."
-      return 1
-    fi
-    nvm install --lts && nvm alias default 'lts/*' >/dev/null
-
-    if type -P node >/dev/null 2>&1; then
-      echo -e "${__green}✓${__reset} node $(node --version) installed. Open a new shell to use it there too."
-    else
-      echo -e "${__red}✗${__reset} node is still not found. Open a new shell and run 'labelvier setup tools' again."
-      return 1
-    fi
   }
 
   # Any docker CLI is fine (Docker Desktop, OrbStack, ...). Docker Desktop

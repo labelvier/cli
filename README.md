@@ -57,7 +57,8 @@ labelvier setup
 ```
 
 It checks the tools the CLI needs (Homebrew, git, jq, nvm and Node.js, Docker,
-Composer), offers to install what is missing, sets up clickable update
+Composer), offers to install what is missing (nvm via `brew install nvm`, which
+also adds the nvm lines to your `~/.zshrc`), sets up clickable update
 notifications (`terminal-notifier`) and then offers to check and install the
 AI setup (`labelvier ai update`). Nothing is installed without your yes. Run
 `labelvier setup tools` to only check the tools.

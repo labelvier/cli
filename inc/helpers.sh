@@ -144,12 +144,7 @@ function _require_brew() {
   fi
 
   echo -e "${__red}Homebrew is not installed.${__reset} It's the easiest way to install missing dependencies."
-  local answer
-  read -p "Install Homebrew now? [y/N] " answer
-  case "$answer" in
-    [yY]*) ;;
-    *) return 1 ;;
-  esac
+  _confirm "Install Homebrew now?" || return 1
 
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
@@ -186,4 +181,125 @@ function _confirm() {
   case "$answer" in
     [nN]*) return 1 ;;
   esac
+}
+
+# nvm is a shell function, not a binary, so look for its script and source it
+# into this shell (that also puts nvm's default Node on PATH). Homebrew's nvm
+# lives outside NVM_DIR and is only loaded by the source line in the shell
+# profile, so a fresh install or a non-interactive shell has nvm on disk and
+# still no npm. Returns 1 when nvm is not installed.
+function _load_nvm() {
+  type nvm >/dev/null 2>&1 && return 0
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+
+  local nvm_sh
+  for nvm_sh in "$NVM_DIR/nvm.sh" /opt/homebrew/opt/nvm/nvm.sh /usr/local/opt/nvm/nvm.sh \
+    "$(type -P brew >/dev/null 2>&1 && brew --prefix nvm 2>/dev/null)/nvm.sh"; do
+    if [ -s "$nvm_sh" ]; then
+      # nvm.sh can complain and return non-zero when no default Node is
+      # installed yet, nvm itself is loaded either way.
+      # shellcheck disable=SC1090
+      . "$nvm_sh" >/dev/null 2>&1
+      type nvm >/dev/null 2>&1 && return 0
+    fi
+  done
+  return 1
+}
+
+# Checks for nvm and offers 'brew install nvm' when it is missing. nvm's own
+# docs don't support the Homebrew install, but it is what we use on our Macs
+# and it updates along with the rest of brew. Homebrew's nvm needs NVM_DIR and
+# a source line in the shell profile, so those are added too.
+function _require_nvm() {
+  if _load_nvm; then
+    echo -e "${__green}✓${__reset} nvm"
+    return 0
+  fi
+
+  echo -e "${__red}✗${__reset} nvm is not installed (manages the Node.js version per project)."
+  if ! type -P brew >/dev/null 2>&1; then
+    echo "  Install Homebrew first, then run: brew install nvm"
+    return 1
+  fi
+  if ! _confirm "  Install it now with 'brew install nvm'?"; then
+    echo -e "  Skipped. Install it yourself: ${__blue}https://github.com/nvm-sh/nvm#installing-and-updating${__reset}"
+    return 1
+  fi
+  brew install nvm || return 1
+
+  # nvm refuses to install anything when NVM_DIR does not exist yet.
+  mkdir -p "$NVM_DIR"
+
+  if ! _load_nvm; then
+    echo -e "${__red}✗${__reset} nvm is installed, but nvm.sh could not be found. Open a new shell and try again."
+    return 1
+  fi
+  echo -e "${__green}✓${__reset} nvm installed"
+  _persist_nvm_profile
+}
+
+# Appends NVM_DIR and the nvm.sh source line to the shell profile once, so
+# nvm (and npm) still work in the next shell. Skips it when a profile already
+# mentions NVM_DIR.
+function _persist_nvm_profile() {
+  local profile="$HOME/.zshrc" candidates="$HOME/.zshrc $HOME/.zprofile $HOME/.zshenv"
+  if [ "${SHELL##*/}" = "bash" ]; then
+    profile="$HOME/.bash_profile"
+    candidates="$HOME/.bash_profile $HOME/.bashrc $HOME/.profile"
+  fi
+
+  local file
+  for file in $candidates; do
+    [ -f "$file" ] && grep -q 'NVM_DIR' "$file" && return 0
+  done
+
+  local nvm_sh
+  nvm_sh="$(brew --prefix nvm 2>/dev/null)/nvm.sh"
+  [ -s "$nvm_sh" ] || nvm_sh="$NVM_DIR/nvm.sh"
+
+  {
+    echo ''
+    echo '# Added by labelvier: load nvm'
+    echo 'export NVM_DIR="$HOME/.nvm"'
+    echo "[ -s \"$nvm_sh\" ] && . \"$nvm_sh\""
+  } >> "$profile"
+
+  echo -e "${__green}✓${__reset} nvm added to $profile"
+}
+
+# Checks for Node.js and offers 'nvm install --lts' when it is missing.
+# Needs nvm, see _require_nvm.
+function _require_node() {
+  if type -P node >/dev/null 2>&1 || { _load_nvm && type -P node >/dev/null 2>&1; }; then
+    echo -e "${__green}✓${__reset} node ($(node --version 2>/dev/null))"
+    return 0
+  fi
+
+  echo -e "${__red}✗${__reset} node is not installed (npm builds the themes and installs the toon tool)."
+  if ! _load_nvm; then
+    echo "  Install nvm first, then run: nvm install --lts"
+    return 1
+  fi
+  if ! _confirm "  Install the latest LTS version with 'nvm install --lts'?"; then
+    echo "  Skipped."
+    return 1
+  fi
+  nvm install --lts && nvm alias default 'lts/*' >/dev/null
+
+  if type -P node >/dev/null 2>&1; then
+    echo -e "${__green}✓${__reset} node $(node --version) installed. Open a new shell to use it there too."
+  else
+    echo -e "${__red}✗${__reset} node is still not found. Open a new shell and try again."
+    return 1
+  fi
+}
+
+# npm comes with Node.js, Node.js comes from nvm: offers to install whatever
+# is missing of those (Homebrew included). Silent when npm is already there.
+function _require_npm() {
+  if type -P npm >/dev/null 2>&1 || { _load_nvm && type -P npm >/dev/null 2>&1; }; then
+    return 0
+  fi
+  _require_brew
+  _require_nvm && _require_node && type -P npm >/dev/null 2>&1
 }

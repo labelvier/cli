@@ -7,7 +7,7 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 - `labelvier` — entry point (real file). `l4` and `wp-takeoff` are symlinks to it — one source of truth, dispatched on by `$(basename "$0")`. Sources every `inc/*.sh`, then `main "$@"` runs `$1` as a function.
 - `inc/*.sh` — one command collection per file. Filename == function name (`inc/release.sh` → `release()`).
 - `inc/core.sh` — install/update/alias/generate machinery.
-- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`, `_require_brew`, `_confirm`).
+- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`, `_require_brew`, `_confirm`, `_load_nvm`, `_require_nvm`, `_require_node`, `_require_npm`).
 - `templates/example.sh.tpl` — scaffold template (`labelvier core generate`).
 - `templates/` — files deployed to servers (cron runner, etc.) plus the scaffold template above.
 - `package.json` — only holds `version`.

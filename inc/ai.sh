@@ -81,8 +81,8 @@ ai() (
     fi
 
     echo -e "${__red}The 'toon' command is not installed.${__reset} The hook needs it to convert JSON to TOON."
-    if ! type -P npm >/dev/null 2>&1; then
-      echo -e "npm was not found either. Install Node.js first, then run: ${__blue}npm i -g @toon-format/cli${__reset}"
+    if ! _require_npm; then
+      echo -e "npm was not found either. Run 'labelvier setup tools', then: ${__blue}npm i -g @toon-format/cli${__reset}"
       exit 1
     fi
 
@@ -848,7 +848,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
+  # @description Checks basecamp, npm, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     local output
@@ -880,6 +880,12 @@ ai() (
       echo -e "${__green}✓${__reset} basecamp plugin for Claude Code"
     else
       echo -e "${__red}✗${__reset} basecamp plugin for Claude Code ${__red}(missing, run: labelvier ai basecamp install)${__reset}"
+    fi
+
+    if type -P npm >/dev/null 2>&1 || { _load_nvm >/dev/null 2>&1 && type -P npm >/dev/null 2>&1; }; then
+      echo -e "${__green}✓${__reset} npm"
+    else
+      echo -e "${__red}✗${__reset} npm ${__red}(missing, run: labelvier setup tools)${__reset}"
     fi
 
     if type -P toon >/dev/null 2>&1; then
