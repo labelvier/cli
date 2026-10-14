@@ -18,6 +18,22 @@ ai() (
   local labelvier_dir="$claude_dir/labelvier"
   local claude_tpl_dir="$current_dir/../templates/claude"
 
+  # Claude Code skill for the Timesheet API, shipped as a template dir and
+  # copied to ~/.claude/skills/timesheet (the skill needs its browser/ deps).
+  local skill_dir="$claude_dir/skills/timesheet"
+  local skill_tpl_dir="$claude_tpl_dir/skills/timesheet"
+
+  # Every template carries a "labelvier-ai-version: <n>" stamp. install/check
+  # compare it with the installed copy, so outdated files get noticed and
+  # refreshed. Bump the stamp in a template whenever its content changes.
+  # The managed block in CLAUDE.md has its own version (bump it when the list
+  # of @labelvier/... refs changes).
+  local claude_md="$claude_dir/CLAUDE.md"
+  local snippet_version="1"
+  local snippet_start="<!-- labelvier-ai:start version=$snippet_version -->"
+  local snippet_end="<!-- labelvier-ai:end -->"
+  local snippet_refs="@labelvier/GLOBAL.md @labelvier/WORDPRESS.md @labelvier/ANGULAR.md"
+
   # Where the Basecamp CLI keeps its OAuth credentials and its cache.
   local basecamp_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/basecamp"
   local basecamp_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/basecamp"
@@ -251,6 +267,26 @@ ai() (
     mv "$tmp_file" "$settings_file"
   }
 
+  # Version stamp of a file ("labelvier-ai-version: <n>"). Empty when the file
+  # is missing or has no stamp (installed before versions existed).
+  function _file_version() {
+    [ -f "$1" ] || return 0
+    sed -n 's/.*labelvier-ai-version: *\([0-9][0-9.]*\).*/\1/p' "$1" | head -n 1
+  }
+
+  # Version of the managed block in CLAUDE.md. Empty when there is none.
+  function _snippet_version() {
+    [ -f "$claude_md" ] || return 0
+    sed -n 's/^<!-- labelvier-ai:start version=\([0-9][0-9.]*\) -->$/\1/p' "$claude_md" | head -n 1
+  }
+
+  # Prints "ok", "outdated" or "missing" for a target/template pair.
+  function _file_status() {
+    local target="$1" template="$2"
+    [ -f "$target" ] || { echo missing; return; }
+    [ "$(_file_version "$target")" = "$(_file_version "$template")" ] && echo ok || echo outdated
+  }
+
   # List of "target file:template file" pairs the config-file part of
   # check/install works through. Plain array instead of an associative one —
   # this repo targets bash 3.2 (macOS default).
@@ -258,6 +294,135 @@ ai() (
     echo "$labelvier_dir/GLOBAL.md:$claude_tpl_dir/labelvier/GLOBAL.md.tpl"
     echo "$labelvier_dir/WORDPRESS.md:$claude_tpl_dir/labelvier/WORDPRESS.md.tpl"
     echo "$labelvier_dir/ANGULAR.md:$claude_tpl_dir/labelvier/ANGULAR.md.tpl"
+  }
+
+  # "target file:template file" pairs of the timesheet skill. Kept separate
+  # from _claude_files: these live in ~/.claude/skills, not ~/.claude/labelvier,
+  # and are executable/need npm install afterwards.
+  function _skill_files() {
+    echo "$skill_dir/SKILL.md:$skill_tpl_dir/SKILL.md.tpl"
+    echo "$skill_dir/scripts/timesheet.sh:$skill_tpl_dir/scripts/timesheet.sh.tpl"
+    echo "$skill_dir/browser/browser-get.mjs:$skill_tpl_dir/browser/browser-get.mjs.tpl"
+    echo "$skill_dir/browser/package.json:$skill_tpl_dir/browser/package.json.tpl"
+    echo "$skill_dir/browser/package-lock.json:$skill_tpl_dir/browser/package-lock.json.tpl"
+  }
+
+  # True (0) if every skill file is present and the Playwright dependency is installed.
+  function _skill_installed() {
+    local pair
+    while IFS= read -r pair; do
+      [ -f "${pair%%:*}" ] || return 1
+    done < <(_skill_files)
+    [ -d "$skill_dir/browser/node_modules/playwright" ]
+  }
+
+  # True (0) if the installed skill carries the same version as the template.
+  function _skill_current() {
+    [ "$(_file_version "$skill_dir/SKILL.md")" = "$(_file_version "$skill_tpl_dir/SKILL.md.tpl")" ]
+  }
+
+  # Offers to store TIMESHEET_API_TOKEN in ~/.claude/.env. Only asks when the
+  # token is missing and we have a terminal; otherwise just prints the hint.
+  function _setup_skill_token() {
+    local env_file="$claude_dir/.env"
+    if [ -f "$env_file" ] && grep -q '^TIMESHEET_API_TOKEN=.' "$env_file"; then
+      # Sanctum tokens contain '|': quote an unquoted value so the file stays
+      # safe to source.
+      if grep -q "^TIMESHEET_API_TOKEN=[^\"']" "$env_file"; then
+        (umask 077; sed "s/^TIMESHEET_API_TOKEN=\(.*\)\$/TIMESHEET_API_TOKEN=\"\1\"/" "$env_file" > "$env_file.tmp")
+        mv "$env_file.tmp" "$env_file"
+        chmod 600 "$env_file"
+        echo -e "${__green}✓${__reset} Quoted TIMESHEET_API_TOKEN in $env_file"
+      fi
+      echo -e "${__green}✓${__reset} TIMESHEET_API_TOKEN is set in $env_file"
+      return 0
+    fi
+
+    echo -e "The timesheet skill needs a ${__bold}TIMESHEET_API_TOKEN${__reset}."
+    echo -e "Create one in the Timesheet app under ${__blue}/profiel${__reset} → API-tokens (tick the write ability if the skill should book hours)."
+
+    if [ ! -t 0 ]; then
+      echo -e "Then add it to $env_file as ${__bold}TIMESHEET_API_TOKEN=<token>${__reset}."
+      return 0
+    fi
+
+    local token
+    read -r -s -p "Paste your token here (leave empty to skip): " token
+    echo
+    if [ -z "$token" ]; then
+      echo -e "Skipped. Add ${__bold}TIMESHEET_API_TOKEN=<token>${__reset} to $env_file later."
+      return 0
+    fi
+
+    mkdir -p "$claude_dir"
+    # Replace an existing empty/old entry instead of appending a duplicate.
+    if [ -f "$env_file" ] && grep -q '^TIMESHEET_API_TOKEN=' "$env_file"; then
+      (umask 077; grep -v '^TIMESHEET_API_TOKEN=' "$env_file" > "$env_file.tmp")
+      mv "$env_file.tmp" "$env_file"
+    fi
+    printf 'TIMESHEET_API_TOKEN="%s"\n' "$token" >> "$env_file"
+    chmod 600 "$env_file"
+    echo -e "${__green}Saved${__reset} the token in $env_file"
+  }
+
+  # Installs the timesheet skill and runs npm install for its Playwright
+  # dependency. Existing files are only overwritten with --force.
+  function _install_skill() {
+    local force="$1" pair target template
+    local refresh=1
+    # Skill files belong together: when SKILL.md is outdated, refresh them all.
+    if [ -f "$skill_dir/SKILL.md" ] && ! _skill_current; then
+      refresh=0
+      local installed_version
+      installed_version=$(_file_version "$skill_dir/SKILL.md")
+      echo -e "timesheet skill is outdated (installed: ${__bold}${installed_version:-unversioned}${__reset}, available: ${__bold}$(_file_version "$skill_tpl_dir/SKILL.md.tpl")${__reset}), updating."
+    fi
+
+    if ! type -P npm >/dev/null 2>&1; then
+      echo -e "${__red}npm is not installed.${__reset} The timesheet skill needs it for Playwright. Install Node.js first, then re-run this command."
+      return 1
+    fi
+
+    while IFS= read -r pair; do
+      target="${pair%%:*}"
+      template="${pair##*:}"
+
+      if [ ! -f "$template" ]; then
+        echo -e "${__red}Template not found:${__reset} $template"
+        continue
+      fi
+
+      if [ -f "$target" ] && [ "$force" -ne 0 ] && [ "$refresh" -ne 0 ]; then
+        echo -e "Up to date, skipped: $target ${__blue}(--force to overwrite)${__reset}"
+        continue
+      fi
+
+      mkdir -p "$(dirname "$target")"
+      cp "$template" "$target"
+      echo -e "${__green}Installed${__reset} $target"
+    done < <(_skill_files)
+
+    chmod +x "$skill_dir/scripts/timesheet.sh" 2>/dev/null
+
+    if [ -d "$skill_dir/browser/node_modules/playwright" ]; then
+      echo -e "${__green}✓${__reset} timesheet skill dependencies already installed"
+    else
+      (cd "$skill_dir/browser" && npm install --no-audit --no-fund) \
+        && echo -e "${__green}Installed${__reset} timesheet skill dependencies" \
+        || echo -e "${__red}npm install failed.${__reset} Run it yourself: ${__blue}cd $skill_dir/browser && npm install${__reset}"
+    fi
+
+    echo
+    _setup_skill_token
+  }
+
+  # Removes the timesheet skill directory (incl. node_modules). The token in
+  # ~/.claude/.env is the user's own and is left alone.
+  function _remove_skill() {
+    if [ -d "$skill_dir" ]; then
+      rm -rf "$skill_dir"
+      echo -e "${__green}Removed${__reset} $skill_dir"
+    fi
   }
 
   # True (0) if the toon hook script is both present and registered in
@@ -353,46 +518,85 @@ ai() (
   }
 
   # CLAUDE.md is the user's own file — we never overwrite or template it.
-  # This only creates it empty if it's missing (so the refs below have
-  # somewhere to live) and appends whatever @labelvier/... lines are missing,
-  # leaving all of the user's own content untouched.
+  # This creates it empty if it's missing and maintains one version-stamped
+  # block in it that holds the @labelvier/... refs; everything outside that
+  # block is left untouched. A block with another version is replaced, and
+  # bare ref lines from before the block existed are folded into it.
   function _append_missing_refs() {
-    local claude_md="$claude_dir/CLAUDE.md"
     if [ ! -f "$claude_md" ]; then
       mkdir -p "$claude_dir"
       : > "$claude_md"
       echo -e "${__green}Created${__reset} $claude_md (empty)"
     fi
 
-    local ref
-    for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
-      if ! grep -qxF "$ref" "$claude_md"; then
-        printf '\n%s\n' "$ref" >> "$claude_md"
-        echo -e "${__green}Added${__reset} $ref to $claude_md"
-      fi
-    done
+    local installed
+    installed=$(_snippet_version)
+    if [ "$installed" = "$snippet_version" ]; then
+      echo -e "${__green}✓${__reset} CLAUDE.md snippet is up to date (version $snippet_version)"
+      return 0
+    fi
+
+    _strip_snippet
+    {
+      printf '\n%s\n' "$snippet_start"
+      local ref
+      for ref in $snippet_refs; do echo "$ref"; done
+      echo "$snippet_end"
+    } >> "$claude_md"
+
+    if [ -n "$installed" ]; then
+      echo -e "${__green}Updated${__reset} the labelvier snippet in $claude_md (version $installed → $snippet_version)"
+    else
+      echo -e "${__green}Added${__reset} the labelvier snippet (version $snippet_version) to $claude_md"
+    fi
   }
 
-  # Inverse of _append_missing_refs, for uninstall: removes only the
-  # reference lines added by this command (or by `rtk init -g`, which adds
-  # @RTK.md but — unlike its own --uninstall — never removes it), never the
-  # file itself or anything else in it.
+  # Removes the managed block and any legacy bare ref lines from CLAUDE.md.
+  # The block is only dropped when its end marker really follows; a start
+  # marker without an end marker is left alone (never delete to end of file).
+  # Writes through `cat >` so a symlinked CLAUDE.md stays a symlink, and keeps
+  # a .bak of the original.
+  function _strip_snippet() {
+    [ -f "$claude_md" ] || return 0
+    local tmp_file="$claude_md.tmp" ref
+    cp "$claude_md" "$claude_md.bak"
+    awk '
+      /^<!-- labelvier-ai:start version=.* -->[[:space:]]*$/ { if (inblock) printf "%s", buf; inblock=1; buf=$0 ORS; next }
+      inblock { buf=buf $0 ORS; if ($0 ~ /^<!-- labelvier-ai:end -->[[:space:]]*$/) { inblock=0; buf="" } ; next }
+      { print }
+      END { if (inblock) printf "%s", buf }
+    ' "$claude_md" > "$tmp_file"
+    for ref in $snippet_refs; do
+      grep -vxF "$ref" "$tmp_file" > "$tmp_file.2"
+      mv "$tmp_file.2" "$tmp_file"
+    done
+    cat "$tmp_file" > "$claude_md"
+    rm -f "$tmp_file"
+  }
+
+  # Inverse of _append_missing_refs, for uninstall: removes only the snippet
+  # (or legacy ref lines) added by this command, plus the @RTK.md line that
+  # `rtk init -g` adds but — unlike its own --uninstall — never removes. Never
+  # the file itself or anything else in it.
   function _remove_refs() {
-    local claude_md="$claude_dir/CLAUDE.md"
     [ -f "$claude_md" ] || return 0
 
-    local ref tmp_file="$claude_md.tmp"
-    for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md" "@RTK.md"; do
-      if grep -qxF "$ref" "$claude_md"; then
-        grep -vxF "$ref" "$claude_md" > "$tmp_file" && mv "$tmp_file" "$claude_md"
-        echo -e "${__green}Removed${__reset} $ref from $claude_md"
-      fi
-    done
+    if [ -n "$(_snippet_version)" ] || grep -qE '^@labelvier/(GLOBAL|WORDPRESS|ANGULAR)\.md$' "$claude_md"; then
+      _strip_snippet
+      echo -e "${__green}Removed${__reset} the labelvier snippet from $claude_md"
+    fi
+
+    if grep -qxF "@RTK.md" "$claude_md"; then
+      grep -vxF "@RTK.md" "$claude_md" > "$claude_md.tmp"
+      cat "$claude_md.tmp" > "$claude_md"
+      rm -f "$claude_md.tmp"
+      echo -e "${__green}Removed${__reset} @RTK.md from $claude_md"
+    fi
   }
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the toon hook, rtk and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the toon hook, rtk and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -423,7 +627,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the toon hook, rtk and the caveman plugin. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the toon hook, rtk and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -461,9 +665,18 @@ ai() (
         continue
       fi
 
-      if [ -f "$target" ] && [ "$force" -ne 0 ]; then
-        echo -e "Already present, skipped: $target ${__blue}(--force to overwrite)${__reset}"
+      local file_status
+      file_status=$(_file_status "$target" "$template")
+      if [ "$file_status" = "ok" ] && [ "$force" -ne 0 ]; then
+        echo -e "Up to date, skipped: $target (version $(_file_version "$target")) ${__blue}(--force to overwrite)${__reset}"
         continue
+      fi
+
+      if [ "$file_status" = "outdated" ]; then
+        cp "$target" "$target.bak"
+        local old_version
+        old_version=$(_file_version "$target")
+        echo -e "Updating $target: ${__bold}${old_version:-unversioned}${__reset} → $(_file_version "$template") (old copy: $target.bak)"
       fi
 
       cp "$template" "$target"
@@ -472,6 +685,9 @@ ai() (
     done < <(_claude_files)
 
     _append_missing_refs
+
+    echo
+    _install_skill "$force"
 
     echo
     _require_rtk
@@ -495,6 +711,7 @@ ai() (
     echo -e "  - the @labelvier/... and @RTK.md reference lines in CLAUDE.md (not the file itself)"
     echo -e "  - rtk's own artifacts (RTK.md, its Claude Code hook) via ${__bold}rtk init -g --uninstall${__reset}, if rtk is installed"
     echo -e "  - the caveman plugin and its marketplace registration, if installed"
+    echo -e "  - the timesheet skill ($skill_dir), if installed"
 
     local pair target
     while IFS= read -r pair; do
@@ -512,6 +729,7 @@ ai() (
 
     _remove_hook
     _remove_caveman
+    _remove_skill
 
     # Delegate to rtk's own uninstall rather than reimplementing it — it
     # removes RTK.md, its settings.json hook entry, and usually the @RTK.md
@@ -668,7 +886,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, toon, rtk, the caveman plugin and the Claude Code config.
+  # @description Checks basecamp, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     if type -P basecamp >/dev/null 2>&1; then
@@ -714,26 +932,46 @@ ai() (
       echo -e "${__red}✗${__reset} caveman plugin ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
-    local pair target
+    local pair target template file_status old_version
     while IFS= read -r pair; do
       target="${pair%%:*}"
-      if [ -f "$target" ]; then
-        echo -e "${__green}✓${__reset} $target"
-      else
-        echo -e "${__red}✗${__reset} $target ${__red}(missing, run: labelvier ai claude install)${__reset}"
-      fi
+      template="${pair##*:}"
+      file_status=$(_file_status "$target" "$template")
+      old_version=$(_file_version "$target")
+      case "$file_status" in
+        ok) echo -e "${__green}✓${__reset} $target (version $(_file_version "$target"))" ;;
+        outdated) echo -e "${__red}✗${__reset} $target ${__red}(outdated: installed ${old_version:-unversioned}, available $(_file_version "$template"); run: labelvier ai claude install)${__reset}" ;;
+        *) echo -e "${__red}✗${__reset} $target ${__red}(missing, run: labelvier ai claude install)${__reset}" ;;
+      esac
     done < <(_claude_files)
 
-    if [ -f "$claude_dir/CLAUDE.md" ]; then
-      echo -e "${__green}✓${__reset} $claude_dir/CLAUDE.md"
-      local ref
-      for ref in "@labelvier/GLOBAL.md" "@labelvier/WORDPRESS.md" "@labelvier/ANGULAR.md"; do
-        if ! grep -qxF "$ref" "$claude_dir/CLAUDE.md"; then
-          echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md does not reference $ref ${__red}(run: labelvier ai claude install)${__reset}"
-        fi
-      done
+    if [ -f "$claude_md" ]; then
+      echo -e "${__green}✓${__reset} $claude_md"
+      local snippet_installed
+      snippet_installed=$(_snippet_version)
+      if [ -z "$snippet_installed" ]; then
+        echo -e "${__red}✗${__reset} labelvier snippet in $claude_md ${__red}(missing or unversioned, run: labelvier ai claude install)${__reset}"
+      elif [ "$snippet_installed" != "$snippet_version" ]; then
+        echo -e "${__red}✗${__reset} labelvier snippet in $claude_md ${__red}(outdated: installed $snippet_installed, available $snippet_version; run: labelvier ai claude install)${__reset}"
+      else
+        echo -e "${__green}✓${__reset} labelvier snippet in $claude_md (version $snippet_installed)"
+      fi
     else
-      echo -e "${__red}✗${__reset} $claude_dir/CLAUDE.md ${__red}(missing, run: labelvier ai claude install)${__reset}"
+      echo -e "${__red}✗${__reset} $claude_md ${__red}(missing, run: labelvier ai claude install)${__reset}"
+    fi
+
+    if ! _skill_installed; then
+      echo -e "${__red}✗${__reset} $skill_dir (timesheet skill) ${__red}(missing or incomplete, run: labelvier ai claude install)${__reset}"
+    elif ! _skill_current; then
+      echo -e "${__red}✗${__reset} $skill_dir (timesheet skill) ${__red}(outdated: installed $(_file_version "$skill_dir/SKILL.md"), available $(_file_version "$skill_tpl_dir/SKILL.md.tpl"); run: labelvier ai claude install)${__reset}"
+    else
+      echo -e "${__green}✓${__reset} $skill_dir (timesheet skill, version $(_file_version "$skill_dir/SKILL.md"))"
+    fi
+
+    if [ -f "$claude_dir/.env" ] && grep -q '^TIMESHEET_API_TOKEN=.' "$claude_dir/.env"; then
+      echo -e "${__green}✓${__reset} TIMESHEET_API_TOKEN set"
+    else
+      echo -e "${__red}✗${__reset} TIMESHEET_API_TOKEN ${__red}(not set in $claude_dir/.env, run: labelvier ai claude install)${__reset}"
     fi
 
     if _hook_registered; then

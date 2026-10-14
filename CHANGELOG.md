@@ -10,16 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `release start` falls back to a `VERSION` file in the root when there is no theme version file and no `package.json` version. It asks `[Y/n]` before bumping it.
 - `release start` with a given version but no version file offers to create a `VERSION` file, so the next release can bump it.
+- `ai claude install` now installs the Claude Code `timesheet` skill (Timesheet API helper: read data, book and delete own hours) into `~/.claude/skills/timesheet` and runs `npm install` for its Playwright dependency. `ai claude uninstall` removes it and `ai check` verifies it.
+- Timesheet skill (v3): "schrijf {x}u voor {y}" adds to an existing own booking instead of asking to replace it, and reports the total hours for that day.
+- Version stamps (`labelvier-ai-version`) on `GLOBAL.md`, `WORDPRESS.md`, `ANGULAR.md` and the timesheet skill, plus a version-stamped managed block in `~/.claude/CLAUDE.md` for the `@labelvier/...` refs. `ai check` reports installed vs. available versions and flags outdated or unversioned copies; `ai claude install` refreshes outdated files (the old copy is kept as `.bak`) and replaces an outdated CLAUDE.md block, leaving the rest of that file untouched.
+- `ai claude install` now asks for your `TIMESHEET_API_TOKEN` interactively when it is not set yet and saves it in `~/.claude/.env` (mode 600). Without a terminal it only prints the instructions. `ai check` reports whether the token is set.
 
 ### Changed
 - `release start` asks `[Y/n]` before bumping a root `package.json`, because that file is only the backup version source when no theme version file is found. Answering `n` still creates the release branch, but leaves `package.json` alone.
 - `release start` now names the file and location in its messages ("Found version 1.0.5 in package.json in the project root", "Bump package.json in the project root from ..."), and the bump prompts no longer start with "No theme version file found".
 - `release start` without a version file and without a given version now asks `[Y/n]` to create a `VERSION` file and then for the version, which becomes the release version, instead of `Version 0 is not semantic`. Answering `n` points to `labelvier release start <version>`.
 - The `release finish` description and the `GLOBAL.md` template (version 2) say that `main` works as well as `master`.
+- Bare `@labelvier/...` lines in `CLAUDE.md` are folded into the new managed block on the next `ai claude install`.
 
 ### Fixed
 - `release start --force` no longer fails with `fatal: ambiguous argument 'HEAD'` in a repository without commits.
 - `release start` reads the `package.json` version when `"version"` is the last key (no trailing comma). Before, this gave `xargs: unterminated quote` and no version was found.
+- `ai claude install` writes `TIMESHEET_API_TOKEN` quoted in `~/.claude/.env` (and quotes an existing unquoted entry).
+- Timesheet skill (v2): new `me` command; the skill now identifies the token owner first and only treats own entries as replaceable, instead of assuming every booked hour on a phase is the user's own.
 
 ## [1.0.5] - 2026-09-11
 
