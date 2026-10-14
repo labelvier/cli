@@ -171,6 +171,29 @@ ai() (
     fi
   }
 
+  # fa is the Font Awesome CLI (icons and kits from the terminal, e.g. into
+  # Sketch). Skips when already installed, so safe to re-run every time.
+  function _require_fa() {
+    if type -P fa >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} fa (Font Awesome CLI)"
+      return 0
+    fi
+
+    echo -e "${__red}fa is not installed.${__reset} It fetches Font Awesome icons and kits from the terminal."
+    local answer
+    read -p "Install it now with the official Font Awesome installer? [y/N] " answer
+    case "$answer" in
+      [yY]*) curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh | bash ;;
+      *) echo "Skipped fa."; return 0 ;;
+    esac
+
+    if ! type -P fa >/dev/null 2>&1; then
+      echo -e "${__red}fa is still not on your PATH after installing.${__reset} Open a new shell and try again."
+      exit 1
+    fi
+    echo -e "Next: run ${__blue}fa login${__reset} to sign in to your fontawesome.com account."
+  }
+
   # claude itself (the Claude Code CLI) is needed to manage plugins like caveman.
   function _require_claude_cli() {
     if type -P claude >/dev/null 2>&1; then
@@ -596,7 +619,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the toon hook, rtk and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -627,7 +650,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the toon hook, rtk and the caveman plugin. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -691,6 +714,9 @@ ai() (
 
     echo
     _require_rtk
+
+    echo
+    _require_fa
 
     echo
     _install_caveman
@@ -885,68 +911,6 @@ ai() (
   }
 
   # ---------------------------------------------------------------------------
-  # @function fontawesome
-  # @description Installs the Font Awesome CLI (fa) to fetch icons and kits straight from the terminal. Subcommands: install.
-  # ---------------------------------------------------------------------------
-  function fontawesome() {
-    case "$1" in
-      install)
-        if [[ "$2" == "--help" ]]; then
-          _fontawesome_subcommand_description "$1"
-          return
-        fi
-        "_fontawesome_$1" "${@:2}"
-        ;;
-      ""|-*)
-        # No subcommand, or it looks like a flag (e.g. a bare `--help`).
-        _fontawesome_documentation
-        ;;
-      *)
-        # A subcommand name was typed but it doesn't exist.
-        echo -e "${__red}✗${__reset} Unknown command: ${__bold}$1${__reset}"
-        echo
-        _fontawesome_documentation
-        return 1
-        ;;
-    esac
-  }
-
-  function _fontawesome_subcommand_description() {
-    case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs the Font Awesome CLI (fa); run fa login afterwards" ;;
-      *) echo -e "${__bold}$1${__reset}" ;;
-    esac
-  }
-
-  function _fontawesome_documentation() {
-    echo -e "${__bold}labelvier ai fontawesome${__reset} — Font Awesome CLI setup (icons and kits from the terminal)."
-    echo
-    echo -e "${__bold}Available functions:${__reset}"
-    echo -e "  $(_fontawesome_subcommand_description install)"
-    echo
-    echo -e "Run ${__blue}labelvier ai check${__reset} for status."
-  }
-
-  # Installs the Font Awesome CLI. Safe to re-run: skips when already installed.
-  function _fontawesome_install() {
-    if type -P fa >/dev/null 2>&1; then
-      echo -e "${__green}✓${__reset} fa is already installed."
-      return 0
-    fi
-
-    echo "Installing the Font Awesome CLI..."
-    curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh | bash
-
-    if type -P fa >/dev/null 2>&1; then
-      echo -e "${__green}Installed${__reset} fa"
-      echo -e "Next: run ${__blue}fa login${__reset} to sign in to your fontawesome.com account."
-    else
-      echo -e "${__red}fa is still not on your PATH after installing.${__reset} Open a new shell and try again."
-      exit 1
-    fi
-  }
-
-  # ---------------------------------------------------------------------------
   # @function check
   # @description Checks basecamp, fa, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
   # ---------------------------------------------------------------------------
@@ -966,7 +930,7 @@ ai() (
     if type -P fa >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} fa (Font Awesome CLI)"
     else
-      echo -e "${__red}✗${__reset} fa (Font Awesome CLI) ${__red}(missing, run: labelvier ai fontawesome install)${__reset}"
+      echo -e "${__red}✗${__reset} fa (Font Awesome CLI) ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
     if type -P toon >/dev/null 2>&1; then
