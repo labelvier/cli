@@ -33,8 +33,20 @@ core() (
     echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$auto_log"
   }
 
-  # Shows a macOS notification. Silent no-op elsewhere.
+  # Shows a macOS notification. Silent no-op elsewhere. Optional $3 is a shell
+  # command that runs in a new Terminal window when the notification is
+  # clicked. That needs terminal-notifier (brew install terminal-notifier);
+  # plain osascript notifications cannot have a click action.
   function _notify() {
+    if [ -n "$3" ] && type -P terminal-notifier >/dev/null 2>&1; then
+      # A .command file opened with `open` runs in Terminal; this avoids nested
+      # shell/AppleScript quoting of the command.
+      mkdir -p "$auto_dir"
+      local launcher="$auto_dir/notification-action.command"
+      printf '#!/bin/bash\n%s\n' "$3" > "$launcher"
+      chmod 700 "$launcher"
+      terminal-notifier -title "$1" -message "$2" -execute "open $(printf '%q' "$launcher")" >/dev/null 2>&1 && return 0
+    fi
     if type -P osascript >/dev/null 2>&1; then
       osascript -e "display notification \"$2\" with title \"$1\"" >/dev/null 2>&1
     fi
@@ -95,7 +107,7 @@ core() (
     result=$("$cli_dir/labelvier" ai check 2>&1)
     if echo "$result" | grep -q '✗'; then
       _auto_log "ai check found problems"
-      _notify "Label Vier CLI" "Something needs attention. Open the terminal and type: labelvier ai update"
+      _notify "Label Vier CLI" "Something needs attention. Open the terminal and type: labelvier ai update" "$(printf '%q' "$cli_dir/labelvier") ai update"
     elif [ "$before" != "$after" ]; then
       _notify "Label Vier CLI" "Updated to the latest version, all checks passed."
     fi
