@@ -7,7 +7,7 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 - `labelvier` — entry point (real file). `l4` and `wp-takeoff` are symlinks to it — one source of truth, dispatched on by `$(basename "$0")`. Sources every `inc/*.sh`, then `main "$@"` runs `$1` as a function.
 - `inc/*.sh` — one command collection per file. Filename == function name (`inc/release.sh` → `release()`).
 - `inc/core.sh` — install/update/alias/generate machinery.
-- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`).
+- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`, `_require_brew`, `_confirm`, `_load_nvm`, `_require_nvm`, `_require_node`, `_require_npm`).
 - `templates/example.sh.tpl` — scaffold template (`labelvier core generate`).
 - `templates/` — files deployed to servers (cron runner, etc.) plus the scaffold template above.
 - `package.json` — only holds `version`.
@@ -16,6 +16,7 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 
 - Each command is a **subshell function** `cmd() ( ... )` (parens, not braces).
 - It contains an inner `main() { _dispatch "$filename" "$@"; }` — don't hand-roll the if/else, `_dispatch` (in `helpers.sh`) already does it: runs `$1` as a function with remaining args, prints that function's `# @description` (via `_echo_function_description`) instead of running it when the very next arg is `--help`, or falls back to `_echo_documentation` when no subcommand was given.
+- `setup.sh` runs its `all` walkthrough when called without a subcommand (a bare `labelvier setup` is what new colleagues type); anything else still goes through `_dispatch`.
 - `ssh.sh` and `ai.sh`'s nested `claude` subcommand are the two exceptions with hand-rolled dispatch (special forwarding / a hand-written second-level doc) — they inline the same `--help`-right-after-the-subcommand check rather than calling `_dispatch`. Mirror that inline check if you add another nested/special dispatcher.
 - Never pass an unguarded arg straight into `type -t`/`declare -f` when it might be `--help` or another flag — bash's `type`/`declare` parse a leading `--...` as their own option and error out instead of just failing the lookup. Guard with a `[[ "$name" == -* ]]` check (or `declare -f --`) before the lookup, as `_dispatch` and the top-level `labelvier` entry script do.
 - The top-level help list is auto-generated from `declare -F` minus names starting with `_` or `main`. So **every internal helper must be `_`-prefixed** to stay hidden.
