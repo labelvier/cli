@@ -47,44 +47,6 @@ ai() (
   # Helpers
   # ---------------------------------------------------------------------------
 
-  # Offers to install Homebrew itself (via the official install script) when
-  # it's missing, so callers can fall through to `brew install <thing>`
-  # instead of just telling the user to go install <thing> by hand. Returns
-  # 1 (without exiting) when brew is still unavailable — declined, or the
-  # install failed — so callers can fall back to their own manual-install message.
-  function _require_brew() {
-    if type -P brew >/dev/null 2>&1; then
-      return 0
-    fi
-
-    echo -e "${__red}Homebrew is not installed.${__reset} It's the easiest way to install missing dependencies."
-    local answer
-    read -p "Install Homebrew now? [y/N] " answer
-    case "$answer" in
-      [yY]*) ;;
-      *) return 1 ;;
-    esac
-
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-    # The installer doesn't update PATH in this already-running shell — pick
-    # up brew from its known install locations ourselves.
-    if ! type -P brew >/dev/null 2>&1; then
-      local candidate
-      for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew; do
-        if [ -x "$candidate" ]; then
-          eval "$("$candidate" shellenv)"
-          break
-        fi
-      done
-    fi
-
-    if ! type -P brew >/dev/null 2>&1; then
-      echo -e "${__red}Homebrew installed but still not on your PATH in this shell.${__reset} Open a new shell and try again."
-      return 1
-    fi
-  }
-
   # jq is used to merge into settings.json without clobbering existing settings.
   # NOTE: `type -P` searches PATH only — `command -v` would also match the shell
   # functions defined in this file.
@@ -119,8 +81,8 @@ ai() (
     fi
 
     echo -e "${__red}The 'toon' command is not installed.${__reset} The hook needs it to convert JSON to TOON."
-    if ! type -P npm >/dev/null 2>&1; then
-      echo -e "npm was not found either. Install Node.js first, then run: ${__blue}npm i -g @toon-format/cli${__reset}"
+    if ! _require_npm; then
+      echo -e "npm was not found either. Run 'labelvier setup tools', then: ${__blue}npm i -g @toon-format/cli${__reset}"
       exit 1
     fi
 
@@ -886,9 +848,28 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
+  # @description Checks basecamp, npm, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
+    local output
+    output=$(_run_checks)
+    echo "$output"
+
+    # Walk the user to `ai update` instead of leaving them with a list of red crosses.
+    # No terminal (launchd, pipe) = no question.
+    if echo "$output" | grep -q '✗' && [ -t 0 ] && [ -t 1 ]; then
+      echo
+      local answer
+      read -p "Some checks failed. Run 'labelvier ai update' now to fix them? [Y/n] " answer
+      case "$answer" in
+        [nN]*) ;;
+        *) update ;;
+      esac
+    fi
+  }
+
+  # The checks themselves, without the follow-up question (used by check and update).
+  function _run_checks() {
     if type -P basecamp >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} basecamp"
     else
@@ -899,6 +880,12 @@ ai() (
       echo -e "${__green}✓${__reset} basecamp plugin for Claude Code"
     else
       echo -e "${__red}✗${__reset} basecamp plugin for Claude Code ${__red}(missing, run: labelvier ai basecamp install)${__reset}"
+    fi
+
+    if type -P npm >/dev/null 2>&1 || { _load_nvm >/dev/null 2>&1 && type -P npm >/dev/null 2>&1; }; then
+      echo -e "${__green}✓${__reset} npm"
+    else
+      echo -e "${__red}✗${__reset} npm ${__red}(missing, run: labelvier setup tools)${__reset}"
     fi
 
     if type -P toon >/dev/null 2>&1; then
@@ -923,6 +910,22 @@ ai() (
         echo "$rtk_status" | grep '^\[dry-run\] would' | sed 's/^/    /'
       else
         echo -e "${__green}✓${__reset} rtk wired into Claude Code"
+      fi
+    fi
+
+    # Clickable notifications from the automatic update (macOS only).
+    # -diagnose reports the permission without showing a notification.
+    if [ "$(uname)" = "Darwin" ]; then
+      if ! type -P terminal-notifier >/dev/null 2>&1; then
+        echo -e "${__red}✗${__reset} terminal-notifier ${__red}(missing, run: labelvier core notifications)${__reset}"
+      else
+        local notification_status
+        notification_status=$(terminal-notifier -diagnose 2>/dev/null | sed -n 's/^ *authorization *//p')
+        if [ "$notification_status" = "authorized" ]; then
+          echo -e "${__green}✓${__reset} terminal-notifier (notifications allowed)"
+        else
+          echo -e "${__red}✗${__reset} terminal-notifier ${__red}(notifications not allowed: ${notification_status:-unknown}; run: labelvier core notifications)${__reset}"
+        fi
       fi
     fi
 
@@ -981,6 +984,67 @@ ai() (
     else
       echo -e "${__red}✗${__reset} $hook_path (toon hook) ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
+  }
+
+  # ---------------------------------------------------------------------------
+  # @function update
+  # @description Runs the checks and offers to apply each suggested fix, one [Y/n] at a time.
+  # ---------------------------------------------------------------------------
+  function update() {
+    local cli="$current_dir/../labelvier"
+    local output
+    output=$(_run_checks)
+
+    if ! echo "$output" | grep -q '✗'; then
+      echo "$output"
+      echo
+      echo -e "${__green}Everything is up to date.${__reset}"
+      _offer_auto_update
+      return 0
+    fi
+
+    echo "$output"
+    echo
+
+    # Suggested actions are printed as "run: labelvier ai ..." — collect the
+    # unique ones (several failed checks often point at the same command).
+    local actions
+    actions=$(echo "$output" | sed 's/\x1b\[[0-9;]*m//g' | grep -o 'run: labelvier [a-z ]*' | sed 's/^run: //; s/ *$//' | awk '!seen[$0]++')
+
+    if [ -z "$actions" ]; then
+      echo "Nothing I can fix automatically, see the list above."
+      _offer_auto_update
+      return 1
+    fi
+
+    echo -e "${__bold}Suggested fixes:${__reset} (nothing changes without your yes)"
+    local action
+    while IFS= read -r action; do
+      # No terminal to answer on (cron, launchd, pipe)? _confirm treats that as "no".
+      _confirm "  Run '$action'?"
+      case $? in
+        0) "$cli" ${action#labelvier } ;;
+        1) echo "  Skipped." ;;
+      esac
+    done <<< "$actions"
+
+    echo
+    echo "Checking again..."
+    _run_checks | grep '✗' || echo -e "${__green}All checks passed.${__reset}"
+    _offer_auto_update
+  }
+
+  # Asks (once per run, only when there is a terminal and macOS) whether to
+  # turn on the daily automatic update. Skipped when it is already enabled.
+  function _offer_auto_update() {
+    [ "$(uname)" = "Darwin" ] || return 0
+    [ -f "$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist" ] && return 0
+    echo
+    _confirm "Want the CLI to update itself automatically once a day?"
+    case $? in
+      0) "$current_dir/../labelvier" core update --enable-auto ;;
+      1) echo "  Ok, turn it on later with: labelvier core update --enable-auto" ;;
+    esac
   }
 
   main "$@"
