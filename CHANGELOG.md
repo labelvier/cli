@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - After updating itself (`core update` or the update question every 12 hours) the CLI now asks `[Y/n]` to run `labelvier setup`, so new tools, notifications and AI config from the update get installed. Before, it only said "Please restart the CLI".
 - After an update from the 12-hour check, the command you typed no longer runs with the old, already loaded code. The CLI stops and asks you to run it again.
+- The daily automatic update (launchd) now also checks the required tools of `labelvier setup`, not only `ai check`. When a tool is missing, the notification opens `labelvier setup` instead of `labelvier ai update`. The "updated" notification names the new version.
 
 ## [1.1.1] - 2026-10-20
 
