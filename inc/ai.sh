@@ -333,13 +333,14 @@ ai() (
     echo -e "The $what needs a ${__bold}$var${__reset}."
     echo -e "$hint"
 
-    if [ ! -t 0 ]; then
-      echo -e "Then add it to $env_file as ${__bold}$var=<token>${__reset}."
-      return 0
-    fi
+    _confirm "Set $var now?"
+    case $? in
+      1) echo -e "Skipped. Add ${__bold}$var=<token>${__reset} to $env_file later."; return 0 ;;
+      2) echo -e "Then add it to $env_file as ${__bold}$var=<token>${__reset}."; return 0 ;;
+    esac
 
     local token
-    read -r -s -p "Paste your token here (leave empty to skip): " token
+    read -r -s -p "Paste your token here (leave empty to skip): " token < /dev/tty
     echo
     if [ -z "$token" ]; then
       echo -e "Skipped. Add ${__bold}$var=<token>${__reset} to $env_file later."
@@ -1131,7 +1132,9 @@ ai() (
       # No terminal to answer on (cron, launchd, pipe)? _confirm treats that as "no".
       _confirm "  Run '$action'?"
       case $? in
-        0) "$cli" ${action#labelvier } ;;
+        # The loop's stdin is the action list, so give the fix the terminal:
+        # otherwise its own prompts (token, optional tools) read EOF and skip.
+        0) "$cli" ${action#labelvier } < /dev/tty ;;
         1) echo "  Skipped." ;;
       esac
     done <<< "$actions"
