@@ -252,14 +252,21 @@ core() (
       _auto_log "up-to-date at $after"
     fi
 
-    # Run the checks of the (possibly just updated) CLI.
-    local result
+    # Run the checks of the (possibly just updated) CLI: the required tools of
+    # `setup` and the AI setup. No terminal here, so `setup tools` only checks;
+    # every install in it asks first.
+    local result tools_ok=1
+    "$cli_dir/labelvier" setup tools </dev/null >/dev/null 2>&1 || tools_ok=0
     result=$("$cli_dir/labelvier" ai check 2>&1)
-    if echo "$result" | grep -q '✗'; then
+    if [ "$tools_ok" -eq 0 ]; then
+      # setup also walks through notifications and `ai update`, so it covers everything.
+      _auto_log "setup tools found missing tools"
+      _notify "Label Vier CLI" "Something needs attention. Open the terminal and type: labelvier setup" "$(printf '%q' "$cli_dir/labelvier") setup"
+    elif echo "$result" | grep -q '✗'; then
       _auto_log "ai check found problems"
       _notify "Label Vier CLI" "Something needs attention. Open the terminal and type: labelvier ai update" "$(printf '%q' "$cli_dir/labelvier") ai update"
     elif [ "$before" != "$after" ]; then
-      _notify "Label Vier CLI" "Updated to the latest version, all checks passed."
+      _notify "Label Vier CLI" "Updated to version $(git describe --tags --abbrev=0 2>/dev/null || echo "$after"), all checks passed."
     fi
   }
 
