@@ -15,7 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `siteground logout` removes the session and browser profile; `logout --forget` also the stored credentials.
 - `ai claude install` offers the Label Vier Dashboard API skill (plugins, WordPress versions, PageSpeed scores and contacts per website). It asks for `LV_DASHBOARD_API_KEY` (stored in `~/.claude/.env`), is optional and, once installed, kept up to date without asking. `ai check` reports the key only when the skill is installed.
 
+- Test suite: `npm test` runs `bash -n` on every file, 516 bats tests (`tests/bats`, one file per command collection, sandboxed with stubbed ssh/rsync/npm/brew/docker/claude) and 142 node tests (`node/siteground/test`). Runs in parallel with GNU parallel (`brew install parallel`), and on GitHub Actions for Ubuntu and macOS. Rules in `tests/README.md`.
+
 ### Fixed
+- Bare `labelvier <command>` and `<command> <sub> --help` exited 1; they now exit 0 (a typo'd subcommand still exits 1).
+- Colour codes are off when `NO_COLOR` is set or output is not a terminal; `_`-prefixed helpers are no longer callable as commands.
+- `core update` exited 1 when already up-to-date. The Bitbucket remote migration pointed at the old `WP-Takeoff-CLI` repository instead of `labelvier/cli`.
+- `migrate staging` built every remote command from the wrong variable, so no remote step worked. `migrate run` created `migration_profiles` in the current directory instead of the CLI directory, so the first profile save failed. The multisite `.htaccess` rewrite used BSD-only `sed -i`; it is now portable. `migrate sync-status` stops with a message instead of running `ssh` with an empty host when there is no migration or profile.
+- `starterkit update`: the `DEV_THEME_PATH` check could never trigger.
+- `storage` used an undefined colour variable.
+- `convert-to-webp` template: without GNU parallel, GIFs were converted with `cwebp` and lost their animation; on macOS, files that already were WebP were converted again.
+- `siteground session:status` crashed on a session file without a valid JWT; `session:import` now rejects invalid tokens with a clear message.
 - `ai update` now asks for missing API tokens and the optional tools instead of silently skipping them: the fix runs with the terminal on stdin, and the action list travels over a separate descriptor.
 - The `claude` CLI is run with stdin from `/dev/null`. With the terminal on stdin it left the tty in non-canonical mode, after which `[Y/n]` prompts were skipped and pasted tokens were lost.
 
