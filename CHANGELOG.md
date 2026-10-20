@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-20
+
 ### Fixed
 - After updating itself (`core update` or the update question every 12 hours) the CLI now asks `[Y/n]` to run `labelvier setup`, so new tools, notifications and AI config from the update get installed. Before, it only said "Please restart the CLI".
 - After an update from the 12-hour check, the command you typed no longer runs with the old, already loaded code. The CLI stops and asks you to run it again.
