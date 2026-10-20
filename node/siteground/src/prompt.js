@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline/promises';
 
-export const interactive = process.stdin.isTTY && process.stdout.isTTY;
+export const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
 let rl;
 function readline() {

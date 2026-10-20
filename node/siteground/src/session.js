@@ -47,10 +47,24 @@ export async function saveLoginEnv({ email, password, totpSecret }) {
 	await chmod(ENV_FILE, 0o600);
 }
 
-/** Decode the payload of a JWT without verifying it. */
+/**
+ * Decode the payload of a JWT without verifying it.
+ * Throws "Not a JWT: …" for anything that is not a three-part token with a JSON object payload.
+ */
 export function decodeJwt(token) {
-	const [, payload] = token.split('.');
-	return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+	if (typeof token !== 'string') throw new Error(`Not a JWT: expected a string, got ${token === null ? 'null' : typeof token}`);
+	const parts = token.split('.');
+	if (parts.length !== 3 || parts.some((p) => !/^[A-Za-z0-9_-]+$/.test(p))) {
+		throw new Error('Not a JWT: expected three base64url parts separated by dots');
+	}
+	let payload;
+	try {
+		payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+	} catch {
+		throw new Error('Not a JWT: payload is not base64url-encoded JSON');
+	}
+	if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Not a JWT: payload is not a JSON object');
+	return payload;
 }
 
 /**

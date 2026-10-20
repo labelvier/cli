@@ -23,7 +23,13 @@ core() (
       --auto) _auto_update ;;
       --enable-auto) _enable_auto_update ;;
       --disable-auto) _disable_auto_update ;;
-      *) _check_and_ask_for_update; [ $? -eq 10 ] && return 0 ;;
+      *)
+        _check_and_ask_for_update
+        local status=$?
+        # 10 = the CLI updated itself; for the caller that is a success.
+        [ "$status" -eq 10 ] && return 0
+        return "$status"
+        ;;
     esac
   }
 
@@ -361,8 +367,8 @@ PLIST
     current_remote=$(git remote get-url origin 2>/dev/null)
     if [[ "$current_remote" == *"bitbucket.org"* ]]; then
       echo "Migrating the CLI remote from Bitbucket to GitHub..."
-      git remote set-url origin git@github.com:labelvier/WP-Takeoff-CLI.git
-      git remote set-url origin git@github.com:labelvier/WP-Takeoff-CLI.git --push
+      git remote set-url origin git@github.com:labelvier/cli.git
+      git remote set-url origin git@github.com:labelvier/cli.git --push
       echo "Remote updated. Future updates will be fetched from GitHub."
     fi
   }

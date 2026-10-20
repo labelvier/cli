@@ -42,6 +42,7 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 
 ## Verify changes safely
 
+- `npm test` — the whole suite: `bash -n` on every file, bats (`tests/bats/<name>.bats`, one per `inc/<name>.sh`) and `node --test` (`node/siteground/test`). `tests/run.sh bats -- tests/bats/<name>.bats` runs one file. Rules and helpers: `tests/README.md`. A change to a command gets or updates tests in its `.bats` file.
 - `bash -n inc/<file>.sh` — syntax.
 - `./labelvier <cmd>` — prints docs (confirms dispatch + parsing).
 - `./labelvier <cmd> <sub>` — runs subcommand.
