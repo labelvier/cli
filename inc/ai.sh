@@ -185,11 +185,18 @@ ai() (
     fi
   }
 
+  # Runs the claude CLI with stdin from /dev/null. With the terminal on stdin
+  # it (Bun) leaves the tty in non-canonical mode, after which every `read`
+  # returns empty at once: prompts get skipped and pasted tokens are lost.
+  function _claude_cli() {
+    command claude "$@" < /dev/null
+  }
+
   # True (0) if the caveman plugin is installed and enabled.
   function _caveman_installed() {
     type -P claude >/dev/null 2>&1 || return 1
     type -P jq >/dev/null 2>&1 || return 1
-    command claude plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "caveman@caveman" and .enabled == true)' >/dev/null 2>&1
+    _claude_cli plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "caveman@caveman" and .enabled == true)' >/dev/null 2>&1
   }
 
   # Installs the caveman Claude Code plugin (github.com/JuliusBrussee/caveman) —
@@ -203,8 +210,8 @@ ai() (
       return 0
     fi
 
-    command claude plugin marketplace add JuliusBrussee/caveman
-    command claude plugin install caveman@caveman -y -s user
+    _claude_cli plugin marketplace add JuliusBrussee/caveman
+    _claude_cli plugin install caveman@caveman -y -s user
 
     if _caveman_installed; then
       echo -e "${__green}Installed${__reset} caveman plugin"
@@ -221,11 +228,11 @@ ai() (
     fi
 
     if _caveman_installed; then
-      command claude plugin uninstall caveman@caveman -y
+      _claude_cli plugin uninstall caveman@caveman -y
       echo -e "${__green}Removed${__reset} caveman plugin"
     fi
 
-    command claude plugin marketplace remove caveman >/dev/null 2>&1 \
+    _claude_cli plugin marketplace remove caveman >/dev/null 2>&1 \
       && echo -e "${__green}Removed${__reset} the caveman marketplace"
   }
 
@@ -852,7 +859,7 @@ ai() (
   function _basecamp_plugin_installed() {
     type -P claude >/dev/null 2>&1 || return 1
     type -P jq >/dev/null 2>&1 || return 1
-    command claude plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "basecamp@37signals" and .enabled == true)' >/dev/null 2>&1
+    _claude_cli plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "basecamp@37signals" and .enabled == true)' >/dev/null 2>&1
   }
 
   # Installs the Basecamp CLI. Safe to re-run: skips when already installed.
@@ -908,7 +915,7 @@ ai() (
     fi
 
     if _basecamp_plugin_installed; then
-      command claude plugin uninstall basecamp@37signals -y
+      _claude_cli plugin uninstall basecamp@37signals -y
       echo -e "${__green}Removed${__reset} the Basecamp plugin for Claude Code"
     fi
 
