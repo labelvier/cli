@@ -23,7 +23,7 @@ core() (
       --auto) _auto_update ;;
       --enable-auto) _enable_auto_update ;;
       --disable-auto) _disable_auto_update ;;
-      *) _check_and_ask_for_update ;;
+      *) _check_and_ask_for_update; [ $? -eq 10 ] && return 0 ;;
     esac
   }
 
@@ -341,7 +341,9 @@ PLIST
       twelve_hours=43200;
       if [ $diff -gt $twelve_hours ]; then
         _check_and_ask_for_update
+        local status=$?
         touch "$last_git_check"
+        return $status
       fi
     fi
   }
@@ -432,9 +434,24 @@ PLIST
         if [ "$answer" == "y" ]; then
           # echo commits which are not in local branch but on remote
           git -P log --pretty=oneline --abbrev-commit "$LOCAL".."$REMOTE"
-          git pull
-          echo "Update complete. Please restart the CLI."
-          exit 0
+          if ! git pull; then
+            cd "$OLDPWD"
+            return 1
+          fi
+          echo -e "${__green}Update complete.${__reset}"
+          touch "$current_dir/../.last_git_check"
+
+          # An update can bring new tools, skills or config. This process still
+          # runs the old functions, so setup runs in a fresh CLI process.
+          cd "$OLDPWD"
+          echo
+          if _confirm "Run 'labelvier setup' now to install what this update needs?"; then
+            "$current_dir/../labelvier" setup
+          else
+            echo "Run it later with: labelvier setup"
+          fi
+          # 10 = updated: the caller must stop, its loaded code is outdated.
+          return 10
         else
           # return to old PWD
           cd "$OLDPWD"
