@@ -6,6 +6,10 @@ core() (
   local filename="core.sh"
   # get the current directory name of this file
   local current_dir=$(dirname "${BASH_SOURCE[0]}")
+  # Official universal (arm64 + x86_64) terminal-notifier build from its GitHub
+  # release, pinned by checksum. Used where Homebrew has no bottle.
+  local notifier_version="3.1.0"
+  local notifier_sha256="e969d4ae20287da1ba55495ae31dcedd8e9069deb8ce4eed24f6561a5fc3e4d5"
 
   # Runs the command.
   function main() {
@@ -66,13 +70,20 @@ core() (
         echo -e "Install it yourself: ${__blue}https://github.com/julienXX/terminal-notifier${__reset}"
         return 1
       fi
-      if ! _can_install_terminal_notifier; then
-        _echo_terminal_notifier_unavailable
-        return 0
+      # Homebrew only has a bottle for recent Apple Silicon macOS. Elsewhere
+      # (Intel Macs, older macOS) it builds from source, which needs the full
+      # Xcode.app. Take the official ready-made build from GitHub there instead.
+      if _notifier_has_bottle; then
+        _confirm "Install it now with 'brew install terminal-notifier'?"
+      else
+        _confirm "Install the official ready-made terminal-notifier $notifier_version from GitHub now?"
       fi
-      _confirm "Install it now with 'brew install terminal-notifier'?"
       case $? in
-        0) brew install terminal-notifier || { echo; _echo_terminal_notifier_unavailable; return 1; } ;;
+        0) if _notifier_has_bottle; then
+             brew install terminal-notifier || return 1
+           else
+             _install_notifier_release || return 1
+           fi ;;
         1) echo "  Skipped. Update notifications stay plain (no click action)."; return 1 ;;
         *) return 1 ;;
       esac
@@ -121,6 +132,49 @@ core() (
         return 1
         ;;
     esac
+  }
+
+  # Succeeds when Homebrew has a ready-made terminal-notifier for this Mac.
+  function _notifier_has_bottle() {
+    brew ruby -e 'puts Formula["terminal-notifier"].bottle ? "bottle" : "source"' 2>/dev/null | grep -qx bottle
+  }
+
+  # Installs the GitHub release build into ~/Applications and puts a wrapper on
+  # PATH next to brew's binaries. A wrapper, not a symlink: through a symlink
+  # terminal-notifier cannot find its own app bundle (that is why Homebrew
+  # uses one too).
+  function _install_notifier_release() {
+    local url="https://github.com/julienXX/terminal-notifier/releases/download/$notifier_version/terminal-notifier-$notifier_version.zip"
+    local app="$HOME/Applications/terminal-notifier.app"
+    local bin="$(brew --prefix)/bin/terminal-notifier"
+    local tmp
+    tmp=$(mktemp -d) || return 1
+
+    echo "Downloading terminal-notifier $notifier_version..."
+    if ! curl -fsSL "$url" -o "$tmp/terminal-notifier.zip"; then
+      echo -e "${__red}Download failed:${__reset} $url"
+      rm -rf "$tmp"
+      return 1
+    fi
+    if [ "$(shasum -a 256 "$tmp/terminal-notifier.zip" | awk '{print $1}')" != "$notifier_sha256" ]; then
+      echo -e "${__red}The download does not match the expected checksum, not installing it.${__reset}"
+      rm -rf "$tmp"
+      return 1
+    fi
+
+    ditto -x -k "$tmp/terminal-notifier.zip" "$tmp" \
+      && mkdir -p "$HOME/Applications" \
+      && rm -rf "$app" \
+      && mv "$tmp/terminal-notifier.app" "$app" \
+      && printf '#!/bin/bash\nexec %q "$@"\n' "$app/Contents/MacOS/terminal-notifier" > "$bin" \
+      && chmod 755 "$bin"
+    local status=$?
+    rm -rf "$tmp"
+    if [ "$status" -ne 0 ]; then
+      echo -e "${__red}Installing terminal-notifier failed.${__reset}"
+      return 1
+    fi
+    echo -e "${__green}✓${__reset} terminal-notifier $notifier_version installed in $app"
   }
 
   # Prints terminal-notifier's authorization status (authorized, denied,
