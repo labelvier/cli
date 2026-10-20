@@ -12,7 +12,9 @@ changed, installs Playwright's Chromium before `login`, and forwards everything 
 Point `SG_CLI_DIR` at another checkout to run that one instead.
 
 ```bash
-labelvier siteground login                           # browser opens, log in incl. 2FA ("Stay logged in" is ticked for you)
+labelvier siteground setup                           # store email + password (TOTP secret optional) for the automatic login
+labelvier siteground login                           # browser opens; logs in by itself after setup, otherwise by hand
+labelvier siteground logout [--forget]               # remove session + browser profile; --forget also the stored credentials
 labelvier siteground accounts                        # plans with site count + disk usage
 labelvier siteground create-site                     # asks for domain, plan, app, extras step by step
 labelvier siteground create-site --domain x.labelvier.dev --account Hamerkop --app wordpress \
@@ -45,6 +47,11 @@ Secrets live in `SG_STATE_DIR` (default `~/.config/labelvier/siteground`), never
 - `.session.json`: client-area tokens (chmod 600). For hosted use pass `SG_REFRESH_TOKEN`.
 - `.credentials/<domain>.json`: generated WP admin and database passwords (chmod 600).
 - `.browser-profile/`: Playwright profile for the login.
+- `.env` (chmod 600, written by `siteground setup`): `SG_LOGIN_EMAIL`, `SG_LOGIN_PASSWORD` and optionally
+  `SG_TOTP_SECRET` (base32 from the authenticator setup). `login` fills these in and never asks for them;
+  without the file you log in by hand. A reCAPTCHA or a missing value is left to the human.
+  Store the TOTP secret on as few machines as possible: with it the file alone logs in.
+  Password and TOTP secret in one file make 2FA single-factor for whoever reads it: keep it local only.
 The wrapper copies `.session.json` and `.credentials/` once from an old `~/Sites/siteground` checkout.
 Never commit, paste or log these.
 

@@ -23,6 +23,10 @@ ai() (
   local skill_dir="$claude_dir/skills/timesheet"
   local skill_tpl_dir="$claude_tpl_dir/skills/timesheet"
 
+  # Claude Code skill for the Label Vier Dashboard API: a single SKILL.md, no deps.
+  local dashboard_skill_dir="$claude_dir/skills/label-vier-dashboard-api"
+  local dashboard_skill_tpl="$claude_tpl_dir/skills/label-vier-dashboard-api/SKILL.md.tpl"
+
   # Every template carries a "labelvier-ai-version: <n>" stamp. install/check
   # compare it with the installed copy, so outdated files get noticed and
   # refreshed. Bump the stamp in a template whenever its content changes.
@@ -181,11 +185,18 @@ ai() (
     fi
   }
 
+  # Runs the claude CLI with stdin from /dev/null. With the terminal on stdin
+  # it (Bun) leaves the tty in non-canonical mode, after which every `read`
+  # returns empty at once: prompts get skipped and pasted tokens are lost.
+  function _claude_cli() {
+    command claude "$@" < /dev/null
+  }
+
   # True (0) if the caveman plugin is installed and enabled.
   function _caveman_installed() {
     type -P claude >/dev/null 2>&1 || return 1
     type -P jq >/dev/null 2>&1 || return 1
-    command claude plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "caveman@caveman" and .enabled == true)' >/dev/null 2>&1
+    _claude_cli plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "caveman@caveman" and .enabled == true)' >/dev/null 2>&1
   }
 
   # Installs the caveman Claude Code plugin (github.com/JuliusBrussee/caveman) —
@@ -199,8 +210,8 @@ ai() (
       return 0
     fi
 
-    command claude plugin marketplace add JuliusBrussee/caveman
-    command claude plugin install caveman@caveman -y -s user
+    _claude_cli plugin marketplace add JuliusBrussee/caveman
+    _claude_cli plugin install caveman@caveman -y -s user
 
     if _caveman_installed; then
       echo -e "${__green}Installed${__reset} caveman plugin"
@@ -217,11 +228,11 @@ ai() (
     fi
 
     if _caveman_installed; then
-      command claude plugin uninstall caveman@caveman -y
+      _claude_cli plugin uninstall caveman@caveman -y
       echo -e "${__green}Removed${__reset} caveman plugin"
     fi
 
-    command claude plugin marketplace remove caveman >/dev/null 2>&1 \
+    _claude_cli plugin marketplace remove caveman >/dev/null 2>&1 \
       && echo -e "${__green}Removed${__reset} the caveman marketplace"
   }
 
@@ -306,46 +317,50 @@ ai() (
     [ "$(_file_version "$skill_dir/SKILL.md")" = "$(_file_version "$skill_tpl_dir/SKILL.md.tpl")" ]
   }
 
-  # Offers to store TIMESHEET_API_TOKEN in ~/.claude/.env. Only asks when the
-  # token is missing and we have a terminal; otherwise just prints the hint.
-  function _setup_skill_token() {
+  # Offers to store an API token ($1, e.g. TIMESHEET_API_TOKEN) in
+  # ~/.claude/.env. $2 names what needs it, $3 says where to create one. Only
+  # asks when the token is missing and we have a terminal; otherwise just
+  # prints the hint.
+  function _setup_env_token() {
+    local var="$1" what="$2" hint="$3"
     local env_file="$claude_dir/.env"
-    if [ -f "$env_file" ] && grep -q '^TIMESHEET_API_TOKEN=.' "$env_file"; then
+    if [ -f "$env_file" ] && grep -q "^$var=." "$env_file"; then
       # Sanctum tokens contain '|': quote an unquoted value so the file stays
       # safe to source.
-      if grep -q "^TIMESHEET_API_TOKEN=[^\"']" "$env_file"; then
-        (umask 077; sed "s/^TIMESHEET_API_TOKEN=\(.*\)\$/TIMESHEET_API_TOKEN=\"\1\"/" "$env_file" > "$env_file.tmp")
+      if grep -q "^$var=[^\"']" "$env_file"; then
+        (umask 077; sed "s/^$var=\(.*\)\$/$var=\"\1\"/" "$env_file" > "$env_file.tmp")
         mv "$env_file.tmp" "$env_file"
         chmod 600 "$env_file"
-        echo -e "${__green}✓${__reset} Quoted TIMESHEET_API_TOKEN in $env_file"
+        echo -e "${__green}✓${__reset} Quoted $var in $env_file"
       fi
-      echo -e "${__green}✓${__reset} TIMESHEET_API_TOKEN is set in $env_file"
+      echo -e "${__green}✓${__reset} $var is set in $env_file"
       return 0
     fi
 
-    echo -e "The timesheet skill needs a ${__bold}TIMESHEET_API_TOKEN${__reset}."
-    echo -e "Create one in the Timesheet app under ${__blue}/profiel${__reset} → API-tokens (tick the write ability if the skill should book hours)."
+    echo -e "The $what needs a ${__bold}$var${__reset}."
+    echo -e "$hint"
 
-    if [ ! -t 0 ]; then
-      echo -e "Then add it to $env_file as ${__bold}TIMESHEET_API_TOKEN=<token>${__reset}."
-      return 0
-    fi
+    _confirm "Set $var now?"
+    case $? in
+      1) echo -e "Skipped. Add ${__bold}$var=<token>${__reset} to $env_file later."; return 0 ;;
+      2) echo -e "Then add it to $env_file as ${__bold}$var=<token>${__reset}."; return 0 ;;
+    esac
 
     local token
-    read -r -s -p "Paste your token here (leave empty to skip): " token
+    read -r -s -p "Paste your token here (leave empty to skip): " token < /dev/tty
     echo
     if [ -z "$token" ]; then
-      echo -e "Skipped. Add ${__bold}TIMESHEET_API_TOKEN=<token>${__reset} to $env_file later."
+      echo -e "Skipped. Add ${__bold}$var=<token>${__reset} to $env_file later."
       return 0
     fi
 
     mkdir -p "$claude_dir"
     # Replace an existing empty/old entry instead of appending a duplicate.
-    if [ -f "$env_file" ] && grep -q '^TIMESHEET_API_TOKEN=' "$env_file"; then
-      (umask 077; grep -v '^TIMESHEET_API_TOKEN=' "$env_file" > "$env_file.tmp")
+    if [ -f "$env_file" ] && grep -q "^$var=" "$env_file"; then
+      (umask 077; grep -v "^$var=" "$env_file" > "$env_file.tmp")
       mv "$env_file.tmp" "$env_file"
     fi
-    printf 'TIMESHEET_API_TOKEN="%s"\n' "$token" >> "$env_file"
+    (umask 077; printf '%s="%s"\n' "$var" "$token" >> "$env_file")
     chmod 600 "$env_file"
     echo -e "${__green}Saved${__reset} the token in $env_file"
   }
@@ -398,7 +413,51 @@ ai() (
     fi
 
     echo
-    _setup_skill_token
+    _setup_env_token TIMESHEET_API_TOKEN "timesheet skill" \
+      "Create one in the Timesheet app under ${__blue}/profiel${__reset} → API-tokens (tick the write ability if the skill should book hours)."
+  }
+
+  # Installs the dashboard API skill (one SKILL.md). Optional: when it is not
+  # installed yet, ask first (no terminal = skip). An up-to-date copy is only
+  # overwritten with --force; an outdated one is always refreshed.
+  function _install_dashboard_skill() {
+    local force="$1" target="$dashboard_skill_dir/SKILL.md"
+
+    if [ ! -f "$dashboard_skill_tpl" ]; then
+      echo -e "${__red}Template not found:${__reset} $dashboard_skill_tpl"
+      return 1
+    fi
+
+    local file_status
+    file_status=$(_file_status "$target" "$dashboard_skill_tpl")
+    if [ "$file_status" = "missing" ] && ! _confirm "Install the optional Label Vier Dashboard skill (websites, plugins, logs, contacts)?"; then
+      echo "Skipped the dashboard skill. Run this install again to add it later."
+      return 0
+    fi
+    if [ "$file_status" = "ok" ] && [ "$force" -ne 0 ]; then
+      echo -e "Up to date, skipped: $target (version $(_file_version "$target")) ${__blue}(--force to overwrite)${__reset}"
+    else
+      if [ "$file_status" = "outdated" ]; then
+        local old_version
+        old_version=$(_file_version "$target")
+        echo -e "dashboard skill is outdated (installed: ${__bold}${old_version:-unversioned}${__reset}, available: ${__bold}$(_file_version "$dashboard_skill_tpl")${__reset}), updating."
+      fi
+      mkdir -p "$dashboard_skill_dir"
+      cp "$dashboard_skill_tpl" "$target"
+      echo -e "${__green}Installed${__reset} $target"
+    fi
+
+    echo
+    _setup_env_token LV_DASHBOARD_API_KEY "dashboard skill" \
+      "Create one in the dashboard: Nova → user menu → ${__blue}API keys${__reset} → Create API key (read-only unless the skill should edit contacts)."
+  }
+
+  # Removes the dashboard skill directory. The key in ~/.claude/.env stays.
+  function _remove_dashboard_skill() {
+    if [ -d "$dashboard_skill_dir" ]; then
+      rm -rf "$dashboard_skill_dir"
+      echo -e "${__green}Removed${__reset} $dashboard_skill_dir"
+    fi
   }
 
   # Removes the timesheet skill directory (incl. node_modules). The token in
@@ -581,7 +640,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -612,7 +671,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -675,6 +734,9 @@ ai() (
     _install_skill "$force"
 
     echo
+    _install_dashboard_skill "$force"
+
+    echo
     _require_rtk
 
     echo
@@ -700,6 +762,7 @@ ai() (
     echo -e "  - rtk's own artifacts (RTK.md, its Claude Code hook) via ${__bold}rtk init -g --uninstall${__reset}, if rtk is installed"
     echo -e "  - the caveman plugin and its marketplace registration, if installed"
     echo -e "  - the timesheet skill ($skill_dir), if installed"
+    echo -e "  - the dashboard skill ($dashboard_skill_dir), if installed"
 
     local pair target
     while IFS= read -r pair; do
@@ -718,6 +781,7 @@ ai() (
     _remove_hook
     _remove_caveman
     _remove_skill
+    _remove_dashboard_skill
 
     # Delegate to rtk's own uninstall rather than reimplementing it — it
     # removes RTK.md, its settings.json hook entry, and usually the @RTK.md
@@ -795,7 +859,7 @@ ai() (
   function _basecamp_plugin_installed() {
     type -P claude >/dev/null 2>&1 || return 1
     type -P jq >/dev/null 2>&1 || return 1
-    command claude plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "basecamp@37signals" and .enabled == true)' >/dev/null 2>&1
+    _claude_cli plugin list --json 2>/dev/null | jq -e '.[] | select(.id == "basecamp@37signals" and .enabled == true)' >/dev/null 2>&1
   }
 
   # Installs the Basecamp CLI. Safe to re-run: skips when already installed.
@@ -851,7 +915,7 @@ ai() (
     fi
 
     if _basecamp_plugin_installed; then
-      command claude plugin uninstall basecamp@37signals -y
+      _claude_cli plugin uninstall basecamp@37signals -y
       echo -e "${__green}Removed${__reset} the Basecamp plugin for Claude Code"
     fi
 
@@ -874,7 +938,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, npm, fa, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
+  # @description Checks basecamp, npm, fa, toon, rtk, the caveman plugin, the timesheet and dashboard skills and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     local output
@@ -1010,6 +1074,25 @@ ai() (
       echo -e "${__red}✗${__reset} TIMESHEET_API_TOKEN ${__red}(not set in $claude_dir/.env, run: labelvier ai claude install)${__reset}"
     fi
 
+    local dashboard_status
+    dashboard_status=$(_file_status "$dashboard_skill_dir/SKILL.md" "$dashboard_skill_tpl")
+    if [ "$dashboard_status" = "missing" ]; then
+      # Optional: not installed is fine, so no ✗ and no "run:" hint for update.
+      echo -e "- $dashboard_skill_dir (dashboard skill, optional, not installed)"
+    elif [ "$dashboard_status" = "outdated" ]; then
+      echo -e "${__red}✗${__reset} $dashboard_skill_dir (dashboard skill) ${__red}(outdated: installed $(_file_version "$dashboard_skill_dir/SKILL.md"), available $(_file_version "$dashboard_skill_tpl"); run: labelvier ai claude install)${__reset}"
+    else
+      echo -e "${__green}✓${__reset} $dashboard_skill_dir (dashboard skill, version $(_file_version "$dashboard_skill_dir/SKILL.md"))"
+    fi
+
+    if [ "$dashboard_status" != "missing" ]; then
+      if [ -f "$claude_dir/.env" ] && grep -q '^LV_DASHBOARD_API_KEY=.' "$claude_dir/.env"; then
+        echo -e "${__green}✓${__reset} LV_DASHBOARD_API_KEY set"
+      else
+        echo -e "${__red}✗${__reset} LV_DASHBOARD_API_KEY ${__red}(not set in $claude_dir/.env, run: labelvier ai claude install)${__reset}"
+      fi
+    fi
+
     if _hook_registered; then
       echo -e "${__green}✓${__reset} $hook_path (toon hook, registered)"
     elif [ -f "$hook_path" ]; then
@@ -1052,14 +1135,17 @@ ai() (
 
     echo -e "${__bold}Suggested fixes:${__reset} (nothing changes without your yes)"
     local action
-    while IFS= read -r action; do
+    # Read the actions on fd 3, so stdin stays the user's terminal: the fix
+    # has prompts of its own (tokens, optional tools). Redirecting it from
+    # /dev/tty instead breaks 'claude' (Bun: "EINVAL: invalid argument, kqueue").
+    while IFS= read -r action <&3; do
       # No terminal to answer on (cron, launchd, pipe)? _confirm treats that as "no".
       _confirm "  Run '$action'?"
       case $? in
         0) "$cli" ${action#labelvier } ;;
         1) echo "  Skipped." ;;
       esac
-    done <<< "$actions"
+    done 3<<< "$actions"
 
     echo
     echo "Checking again..."

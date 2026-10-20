@@ -1,11 +1,51 @@
-import { readFile, writeFile, chmod, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { readFile, writeFile, chmod, mkdir, rm } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
 // Secrets live outside the code checkout so `labelvier core update` (git pull) never touches them.
 export const STATE_DIR = process.env.SG_STATE_DIR || path.join(homedir(), '.config', 'labelvier', 'siteground');
 export const SESSION_FILE = process.env.SG_SESSION_FILE || path.join(STATE_DIR, '.session.json');
+export const ENV_FILE = path.join(STATE_DIR, '.env');
+
+/**
+ * Credentials for the automatic browser login, from the environment or STATE_DIR/.env
+ * (KEY=value lines, # comments, optional quotes). All optional: whatever is missing is
+ * left to the human in the browser window.
+ */
+export function loadLoginEnv() {
+	const fromFile = {};
+	if (existsSync(ENV_FILE)) {
+		for (const raw of readFileSync(ENV_FILE, 'utf8').split('\n')) {
+			const line = raw.trim();
+			if (!line || line.startsWith('#')) continue;
+			const eq = line.indexOf('=');
+			if (eq === -1) continue;
+			const key = line.slice(0, eq).trim();
+			let value = line.slice(eq + 1).trim();
+			if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
+			fromFile[key] = value;
+		}
+	}
+	const get = (key) => process.env[key] || fromFile[key] || null;
+	return {
+		email: get('SG_LOGIN_EMAIL'),
+		password: get('SG_LOGIN_PASSWORD'),
+		totpSecret: get('SG_TOTP_SECRET'),
+	};
+}
+
+/** Write STATE_DIR/.env (chmod 600). Keys with a null/empty value are left out. */
+export async function saveLoginEnv({ email, password, totpSecret }) {
+	const lines = ['# Automatic login for `labelvier siteground login`. Change with `siteground setup`, remove with `logout --forget`.'];
+	const add = (key, value) => value && lines.push(`${key}=${value}`);
+	add('SG_LOGIN_EMAIL', email);
+	add('SG_LOGIN_PASSWORD', password);
+	add('SG_TOTP_SECRET', totpSecret);
+	await mkdir(STATE_DIR, { recursive: true, mode: 0o700 });
+	await writeFile(ENV_FILE, lines.join('\n') + '\n');
+	await chmod(ENV_FILE, 0o600);
+}
 
 /** Decode the payload of a JWT without verifying it. */
 export function decodeJwt(token) {
@@ -33,6 +73,23 @@ export async function saveSession(session) {
 	await mkdir(path.dirname(SESSION_FILE), { recursive: true, mode: 0o700 });
 	await writeFile(SESSION_FILE, JSON.stringify({ token, refreshToken }, null, 2));
 	await chmod(SESSION_FILE, 0o600);
+}
+
+/**
+ * Forget the local session: tokens and the browser profile (its "stay logged in" cookies).
+ * With `forget` also the stored login credentials (.env). Returns what was removed.
+ */
+export async function clearSession({ forget = false } = {}) {
+	const profileDir = path.join(path.dirname(SESSION_FILE), '.browser-profile');
+	const targets = [SESSION_FILE, profileDir];
+	if (forget) targets.push(ENV_FILE);
+	const removed = [];
+	for (const target of targets) {
+		if (!existsSync(target)) continue;
+		await rm(target, { recursive: true, force: true });
+		removed.push(target);
+	}
+	return removed;
 }
 
 /** Seconds until the given JWT expires (negative when expired). */

@@ -97,3 +97,11 @@ labelvier siteground              # all commands
 
 The session and generated passwords are stored in
 `~/.config/labelvier/siteground` (override with `SG_STATE_DIR`).
+
+`labelvier siteground setup` stores your email and password, and optionally
+the TOTP secret (base32 from the authenticator setup), in
+`~/.config/labelvier/siteground/.env` (chmod 600). After that `login` fills
+the form in by itself; without the secret you still type the 2FA code. Without
+setup, `login` just opens the browser for you. A reCAPTCHA or a missing value
+is left for you in the browser window. `logout` removes the session and browser
+profile; `logout --forget` also the stored credentials.
