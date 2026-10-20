@@ -41,7 +41,12 @@ run_bats() {
     echo "${red}✗${reset} bats not found. Install: brew install bats-core"
     return 1
   fi
-  bats --recursive "$ROOT/tests/bats" "$@"
+  # With explicit arguments (files, bats flags) run just those; otherwise the whole directory.
+  if [ $# -gt 0 ]; then
+    bats "$@"
+  else
+    bats --recursive "$ROOT/tests/bats"
+  fi
 }
 
 run_node() {
@@ -50,7 +55,7 @@ run_node() {
     echo "${red}✗${reset} node not found"
     return 1
   fi
-  (cd "$ROOT/node/siteground" && node --test "$@")
+  (cd "$ROOT/node/siteground" && node --test "$@" "test/*.test.js")
 }
 
 case "$what" in
