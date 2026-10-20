@@ -2,8 +2,8 @@
 import { parseArgs } from 'node:util';
 import { existsSync } from 'node:fs';
 import { SiteGroundClient } from './client.js';
-import { interactiveLogin } from './login.js';
-import { saveSession, loadSession, decodeJwt } from './session.js';
+import { interactiveLogin, setupLogin } from './login.js';
+import { saveSession, loadSession, clearSession, decodeJwt } from './session.js';
 import { ask, confirm, select, closePrompt, interactive } from './prompt.js';
 import { task } from './spinner.js';
 import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
@@ -38,9 +38,13 @@ import {
 const HELP = `Usage: labelvier siteground <command> [options]
 
 Session
-  login                          Open browser, log in by hand ("Stay logged in" is ticked), store session
+  setup                          Store email + password (and optionally the TOTP secret) for the
+                                 automatic login in ~/.config/labelvier/siteground/.env
+  login                          Open browser, log in (automatically when setup was done), store session
   session:import                 Read {"token","refreshToken"} JSON from stdin and store it
   session:status                 Show how long the stored session is valid
+  logout [--forget]              Remove the stored session and browser profile; --forget also the
+                                 login credentials (.env)
 
 Overview
   accounts                       Hosting plans with site count and disk usage
@@ -105,6 +109,7 @@ const { positionals, values } = parseArgs({
 		days: { type: 'string' },
 		top: { type: 'string' },
 		sort: { type: 'string' },
+		forget: { type: 'boolean' }, // logout: also remove the stored credentials
 		help: { type: 'boolean', short: 'h' },
 	},
 });
@@ -181,6 +186,10 @@ const describeActivation = (items) =>
 	items.map((it) => `${ACTIVATION_LABELS[it.product_name] || it.product_name} ${STATUS_LABELS[it.status] ?? it.status}`).join(', ');
 
 const commands = {
+	async setup() {
+		await setupLogin();
+	},
+
 	async login() {
 		await interactiveLogin();
 	},
@@ -192,6 +201,16 @@ const commands = {
 		if (!refreshToken) throw new Error('Input JSON needs a "refreshToken" field');
 		await saveSession({ token, refreshToken });
 		console.log('Session stored, refresh token valid until', new Date(decodeJwt(refreshToken).exp * 1000).toLocaleString());
+	},
+
+	async logout() {
+		const removed = await clearSession({ forget: values.forget });
+		if (removed.length === 0) {
+			console.log('Nothing to remove: not logged in.');
+			return;
+		}
+		for (const file of removed) console.log(`Removed ${file}`);
+		console.log(values.forget ? 'Logged out, credentials forgotten.' : 'Logged out. Credentials in .env are kept (use --forget to remove them too).');
 	},
 
 	async 'session:status'() {
@@ -549,7 +568,7 @@ if (!cmd || !commands[cmd] || values.help) {
 }
 
 try {
-	const needsClient = !['login', 'session:import', 'session:status'].includes(cmd);
+	const needsClient = !['setup', 'login', 'logout', 'session:import', 'session:status'].includes(cmd);
 	await commands[cmd](needsClient ? await SiteGroundClient.fromSavedSession() : undefined, args);
 } catch (err) {
 	console.error(`Error: ${err.message}`);
