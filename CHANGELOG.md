@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `ai claude install` offers to install `fa`, the Font Awesome CLI (official installer, asks `[y/N]`). `ai check` lists it as optional, so a skipped `fa` never triggers the auto-update notification.
 - `labelvier siteground` creates and configures SiteGround sites through the my.siteground.com API (browser login incl. 2FA via Playwright, `create-site` with plan, app and extras). It forwards to the Node CLI in `node/siteground` and runs `npm ci` when its lockfile changed; session state lives in `~/.config/labelvier/siteground`.
 - `labelvier setup` walks a new install through the required tools (Homebrew, git with the Xcode Command Line Tools, jq, nvm via Homebrew, Node.js LTS, Docker Desktop, Composer), offering `[Y/n]` to install each missing one, then sets up notifications (`core notifications`) and asks to run `ai update`. `labelvier setup tools` only does the tools. The install script and `core install` now point to it.
 - `release start` falls back to a `VERSION` file in the root when there is no theme version file and no `package.json` version. It asks `[Y/n]` before bumping it.
