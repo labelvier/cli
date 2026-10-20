@@ -29,6 +29,11 @@ jobs:
           detik-install: false
           file-install: false
 
+      - name: Install GNU parallel (bats --jobs)
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install parallel; else sudo apt-get install -y parallel; fi
+          mkdir -p ~/.parallel && touch ~/.parallel/will-cite
+
       - name: Syntax
         run: tests/run.sh syntax
 

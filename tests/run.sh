@@ -41,11 +41,17 @@ run_bats() {
     echo "${red}✗${reset} bats not found. Install: brew install bats-core"
     return 1
   fi
+  # Files run in parallel when GNU parallel is installed (brew install parallel);
+  # BATS_JOBS overrides the job count. Tests are sandboxed, so order never matters.
+  local jobs=()
+  if command -v parallel >/dev/null 2>&1; then
+    jobs=(--jobs "${BATS_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}" --no-parallelize-within-files)
+  fi
   # With explicit arguments (files, bats flags) run just those; otherwise the whole directory.
   if [ $# -gt 0 ]; then
-    bats "$@"
+    bats "${jobs[@]}" "$@"
   else
-    bats --recursive "$ROOT/tests/bats"
+    bats "${jobs[@]}" --recursive "$ROOT/tests/bats"
   fi
 }
 
