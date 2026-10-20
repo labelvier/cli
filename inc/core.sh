@@ -66,9 +66,13 @@ core() (
         echo -e "Install it yourself: ${__blue}https://github.com/julienXX/terminal-notifier${__reset}"
         return 1
       fi
+      if ! _can_install_terminal_notifier; then
+        _echo_terminal_notifier_unavailable
+        return 0
+      fi
       _confirm "Install it now with 'brew install terminal-notifier'?"
       case $? in
-        0) brew install terminal-notifier || return 1 ;;
+        0) brew install terminal-notifier || { echo; _echo_terminal_notifier_unavailable; return 1; } ;;
         1) echo "  Skipped. Update notifications stay plain (no click action)."; return 1 ;;
         *) return 1 ;;
       esac

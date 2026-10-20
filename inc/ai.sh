@@ -950,7 +950,12 @@ ai() (
     # -diagnose reports the permission without showing a notification.
     if [ "$(uname)" = "Darwin" ]; then
       if ! type -P terminal-notifier >/dev/null 2>&1; then
-        echo -e "${__red}✗${__reset} terminal-notifier ${__red}(missing, run: labelvier core notifications)${__reset}"
+        if _can_install_terminal_notifier; then
+          echo -e "${__red}✗${__reset} terminal-notifier ${__red}(missing, run: labelvier core notifications)${__reset}"
+        else
+          # No ✗: nothing to fix here, and the daily auto-update would nag about it forever.
+          echo -e "- terminal-notifier (not available on this Mac; update notifications work, without click action)"
+        fi
       else
         local notification_status
         notification_status=$(terminal-notifier -diagnose 2>/dev/null | sed -n 's/^ *authorization *//p')
