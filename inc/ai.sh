@@ -409,8 +409,9 @@ ai() (
       "Create one in the Timesheet app under ${__blue}/profiel${__reset} → API-tokens (tick the write ability if the skill should book hours)."
   }
 
-  # Installs the dashboard API skill (one SKILL.md). An up-to-date copy is
-  # only overwritten with --force; an outdated one is always refreshed.
+  # Installs the dashboard API skill (one SKILL.md). Optional: when it is not
+  # installed yet, ask first (no terminal = skip). An up-to-date copy is only
+  # overwritten with --force; an outdated one is always refreshed.
   function _install_dashboard_skill() {
     local force="$1" target="$dashboard_skill_dir/SKILL.md"
 
@@ -421,6 +422,10 @@ ai() (
 
     local file_status
     file_status=$(_file_status "$target" "$dashboard_skill_tpl")
+    if [ "$file_status" = "missing" ] && ! _confirm "Install the optional Label Vier Dashboard skill (websites, plugins, logs, contacts)?"; then
+      echo "Skipped the dashboard skill. Run this install again to add it later."
+      return 0
+    fi
     if [ "$file_status" = "ok" ] && [ "$force" -ne 0 ]; then
       echo -e "Up to date, skipped: $target (version $(_file_version "$target")) ${__blue}(--force to overwrite)${__reset}"
     else
@@ -627,7 +632,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet and dashboard skills, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -658,7 +663,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet and dashboard skills, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -1064,17 +1069,20 @@ ai() (
     local dashboard_status
     dashboard_status=$(_file_status "$dashboard_skill_dir/SKILL.md" "$dashboard_skill_tpl")
     if [ "$dashboard_status" = "missing" ]; then
-      echo -e "${__red}✗${__reset} $dashboard_skill_dir (dashboard skill) ${__red}(missing, run: labelvier ai claude install)${__reset}"
+      # Optional: not installed is fine, so no ✗ and no "run:" hint for update.
+      echo -e "- $dashboard_skill_dir (dashboard skill, optional, not installed)"
     elif [ "$dashboard_status" = "outdated" ]; then
       echo -e "${__red}✗${__reset} $dashboard_skill_dir (dashboard skill) ${__red}(outdated: installed $(_file_version "$dashboard_skill_dir/SKILL.md"), available $(_file_version "$dashboard_skill_tpl"); run: labelvier ai claude install)${__reset}"
     else
       echo -e "${__green}✓${__reset} $dashboard_skill_dir (dashboard skill, version $(_file_version "$dashboard_skill_dir/SKILL.md"))"
     fi
 
-    if [ -f "$claude_dir/.env" ] && grep -q '^LV_DASHBOARD_API_KEY=.' "$claude_dir/.env"; then
-      echo -e "${__green}✓${__reset} LV_DASHBOARD_API_KEY set"
-    else
-      echo -e "${__red}✗${__reset} LV_DASHBOARD_API_KEY ${__red}(not set in $claude_dir/.env, run: labelvier ai claude install)${__reset}"
+    if [ "$dashboard_status" != "missing" ]; then
+      if [ -f "$claude_dir/.env" ] && grep -q '^LV_DASHBOARD_API_KEY=.' "$claude_dir/.env"; then
+        echo -e "${__green}✓${__reset} LV_DASHBOARD_API_KEY set"
+      else
+        echo -e "${__red}✗${__reset} LV_DASHBOARD_API_KEY ${__red}(not set in $claude_dir/.env, run: labelvier ai claude install)${__reset}"
+      fi
     fi
 
     if _hook_registered; then
