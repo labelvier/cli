@@ -245,7 +245,6 @@ exit 0'
 }
 
 @test "start saves a profile also when migration_profiles does not exist yet" {
-  skip "bug: run() does 'mkdir -p migration_profiles' in the cwd but copies the profile to \$__dir/migration_profiles, so the first save fails unless the cli dir already has it"
   stub_migration_ssh
   write_migration_config "$CONFIG"
   run migrate start <<< $'1\nyacme\nnniiy'
@@ -424,7 +423,6 @@ exit 0'
 }
 
 @test "run on a subdomain multisite also replaces wp_blogs and rewrites .htaccess" {
-  sed --version 2>/dev/null | grep -q GNU && skip "bug: the .htaccess rewrite uses BSD 'sed -i '"'"''"'"'', which GNU sed rejects"
   stub_migration_ssh
   export MIGRATE_TEST_MULTISITE=1 MIGRATE_TEST_SUBDOMAIN=1
   write_migration_config "$CONFIG"
@@ -449,7 +447,6 @@ exit 0'
 }
 
 @test "run on a subfolder multisite writes the subfolder rewrite rules" {
-  sed --version 2>/dev/null | grep -q GNU && skip "bug: the .htaccess rewrite uses BSD 'sed -i '"'"''"'"'', which GNU sed rejects"
   stub_migration_ssh
   export MIGRATE_TEST_MULTISITE=1 MIGRATE_TEST_SUBDOMAIN=0
   write_migration_config "$CONFIG"
@@ -462,6 +459,24 @@ exit 0'
 }
 
 # --- sync-status -----------------------------------------------------------------------------
+
+@test "sync-status without an active migration or saved profiles exits 1 before any ssh" {
+  stub ssh
+  run migrate sync-status
+  [ "$status" -eq 1 ]
+  assert_output_contains "No active migration found."
+  assert_output_contains "No migration profiles found either"
+  refute_stub_called '^ssh'
+}
+
+@test "sync-status with an empty migration_profiles directory exits 1 before any ssh" {
+  stub ssh
+  mkdir -p "$PROFILES"
+  run migrate sync-status
+  [ "$status" -eq 1 ]
+  assert_output_contains "No migration profiles found either"
+  refute_stub_called '^ssh'
+}
 
 @test "sync-status without an active migration lets you pick a saved profile" {
   stub ssh 'case "$*" in *"ls sync_uploads.sh"*) echo sync_uploads.sh ;; *"ls .sync_running"*) exit 1 ;; *"xargs cat"*) echo "last sync: 1234 files" ;; esac; exit 0'
@@ -602,7 +617,6 @@ make_staging_env() {
 }
 
 @test "staging runs the remote wp cli commands as 'wp --allow-root'" {
-  skip "bug: staging() overwrites the \$wp variable with the 'npm run' grep result, so remote commands start with '  db:export' instead of 'wp --allow-root'"
   stub_staging_env
   make_staging_env
   run migrate staging <<< $'yhttps://staging.example.com\n'

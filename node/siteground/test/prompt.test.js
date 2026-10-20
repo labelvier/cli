@@ -14,8 +14,8 @@ describe('without a terminal', () => {
 		prompt = await import('../src/prompt.js?notty');
 	});
 
-	test('interactive is falsy (undefined: stdin.isTTY is not set on a pipe)', () => {
-		assert.ok(!prompt.interactive);
+	test('interactive is false (a real boolean, even though stdin.isTTY is undefined on a pipe)', () => {
+		assert.equal(prompt.interactive, false);
 	});
 
 	test('ask/confirm/select/askSecret throw "Missing …" naming the flag, or the question without one', async () => {

@@ -179,7 +179,6 @@ exit 0'
 }
 
 @test "update without DEV_THEME_PATH in .env exits 1" {
-  skip "bug: dev_theme_path is prefixed with \$(pwd) so the empty check never triggers; it falls through to 'No package.json file found'"
   stub npm
   make_env "THEME_FOLDER_NAME=foo"
   run_cli starterkit update

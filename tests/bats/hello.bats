@@ -7,6 +7,7 @@ teardown() { teardown_sandbox; }
 
 @test "bare hello prints its documentation" {
   run_cli hello
+  [ "$status" -eq 0 ]
   assert_output_contains "Available functions:"
   assert_output_contains "world - Echo hello with possible arguments"
 }
@@ -25,6 +26,7 @@ teardown() { teardown_sandbox; }
 
 @test "hello world --help prints the description and does not greet" {
   run_cli hello world --help
+  [ "$status" -eq 0 ]
   assert_output_contains "world - Echo hello with possible arguments"
   refute_output_contains "Hello"
 }
@@ -37,7 +39,6 @@ teardown() { teardown_sandbox; }
 }
 
 @test "bare hello exits 0" {
-  skip "bug: _echo_documentation ends on a failing read, so a bare 'hello' (and 'hello world --help') exits 1 instead of 0"
   run_cli hello
   [ "$status" -eq 0 ]
   run_cli hello world --help

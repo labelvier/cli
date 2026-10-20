@@ -39,6 +39,9 @@ function _echo_documentation() {
     echo -e "  ${__bold}$function_name${__reset} - $function_description"
     read -r line
   done <<<"$functions"
+  # The loop ends on a `read` that hits EOF (status 1); printing the docs is
+  # not an error, so don't let that status leak to the caller.
+  return 0
 }
 
 function _echo_function_description() {

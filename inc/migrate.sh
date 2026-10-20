@@ -15,6 +15,25 @@ migrate() (
     _dispatch "$filename" "$@"
   }
 
+  # Replaces the "# BEGIN WordPress" ... "# END WordPress" block in $1 with the text on stdin.
+  # Portable across BSD and GNU userland (no sed -i, no a/i/c text quirks).
+  function _replace_wordpress_block() {
+    local file="$1"
+    local block="$file.block.tmp"
+    cat >"$block"
+    awk -v blockfile="$block" '
+      /# BEGIN WordPress/ && !skip {
+        while ((getline line < blockfile) > 0) print line
+        close(blockfile)
+        skip = 1
+        next
+      }
+      /# END WordPress/ && skip { skip = 0; next }
+      !skip { print }
+    ' "$file" >"$file.tmp" && mv "$file.tmp" "$file"
+    rm -f "$block"
+  }
+
   # @function load
   # @description Loads the configuration file from migration_profiles.
   function load() {
@@ -56,8 +75,9 @@ migrate() (
       exit 1
     fi
     # check if we can run the npm run wp command
-    wp=$(npm run | grep "  db:export");
-    if [[ -z "$wp" ]]; then
+    local npm_db_export
+    npm_db_export=$(npm run | grep "  db:export");
+    if [[ -z "$npm_db_export" ]]; then
       echo "The npm run db:export command is not available, please run this command from a place where \`npm run db:export\` is available."
       exit 1
     fi
@@ -293,7 +313,7 @@ migrate() (
       read -p "Enter a name for the migration profile: " migration_profile_name
       echo "migration_profile_name=$migration_profile_name" >>$migration_config_file
       # create the migration_profiles directory if it does not exist
-      mkdir -p migration_profiles
+      mkdir -p "$__dir/migration_profiles"
       cp $migration_config_file "$__dir/migration_profiles/$migration_profile_name"
       echo "migration_saved=true" >>"$__dir/migration_profiles/$migration_profile_name"
     fi
@@ -563,50 +583,51 @@ migrate() (
     if [[ "$is_subdomain" == "1" ]]; then
       echo "This is a subdomain multisite."
       # replace everything between # BEGIN WordPress and # END WordPress with the above
-      sed -i '' '/# BEGIN WordPress/,/# END WordPress/c\
-# BEGIN WordPress\
-# Using subdomain network type: https://wordpress.org/documentation/article/htaccess/#multisite \
-\
-  RewriteEngine On\
-  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\
-  RewriteBase /\
-  RewriteRule ^index\.php$ - [L]\
-  \
-  # add a trailing slash to /wp-admin\
-  RewriteRule ^wp-admin$ wp-admin/ [R=301,L]\
-  \
-  RewriteCond %{REQUEST_FILENAME} -f [OR]\
-  RewriteCond %{REQUEST_FILENAME} -d\
-  RewriteRule ^ - [L]\
-  RewriteRule ^(wp-(content|admin|includes).*) $1 [L]\
-  RewriteRule ^(.*\.php)$ $1 [L]\
-  RewriteRule . index.php [L]\
-\
-# END WordPress\' .htaccess
+      _replace_wordpress_block .htaccess <<'EOF'
+# BEGIN WordPress
+# Using subdomain network type: https://wordpress.org/documentation/article/htaccess/#multisite 
+
+  RewriteEngine On
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+  RewriteBase /
+  RewriteRule ^index\.php$ - [L]
+  
+  # add a trailing slash to /wp-admin
+  RewriteRule ^wp-admin$ wp-admin/ [R=301,L]
+  
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  RewriteRule ^(wp-(content|admin|includes).*) $1 [L]
+  RewriteRule ^(.*\.php)$ $1 [L]
+  RewriteRule . index.php [L]
+
+# END WordPress
+EOF
     else
       echo "This is a subfolder multisite."
       # replace everything between # BEGIN WordPress and # END WordPress with
-      sed -i '' '/# BEGIN WordPress/,/# END WordPress/c\
-# BEGIN WordPress\
-# Using subfolder network type: https://wordpress.org/documentation/article/htaccess/#multisite \
-\
-  RewriteEngine On\
-  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\
-  RewriteBase /\
-  RewriteRule ^index\.php$ - [L]\
-  \
-  # add a trailing slash to /wp-admin\
-  RewriteRule ^([_0-9a-zA-Z-]+/)?wp-admin$ $1wp-admin/ [R=301,L]\
-  \
-  RewriteCond %{REQUEST_FILENAME} -f [OR]\
-  RewriteCond %{REQUEST_FILENAME} -d\
-  RewriteRule ^ - [L]\
-  RewriteRule ^([_0-9a-zA-Z-]+/)?(wp-(content|admin|includes).*) $2 [L]\
-  RewriteRule ^([_0-9a-zA-Z-]+/)?(.*\.php)$ $2 [L]\
-  RewriteRule . index.php [L]\
-\
-# END WordPress\
-' .htaccess
+      _replace_wordpress_block .htaccess <<'EOF'
+# BEGIN WordPress
+# Using subfolder network type: https://wordpress.org/documentation/article/htaccess/#multisite 
+
+  RewriteEngine On
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+  RewriteBase /
+  RewriteRule ^index\.php$ - [L]
+  
+  # add a trailing slash to /wp-admin
+  RewriteRule ^([_0-9a-zA-Z-]+/)?wp-admin$ $1wp-admin/ [R=301,L]
+  
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  RewriteRule ^([_0-9a-zA-Z-]+/)?(wp-(content|admin|includes).*) $2 [L]
+  RewriteRule ^([_0-9a-zA-Z-]+/)?(.*\.php)$ $2 [L]
+  RewriteRule . index.php [L]
+
+# END WordPress
+EOF
     fi
     # copy the .htaccess file to the destination server
     scp -o StrictHostKeyChecking=no -P $ssh_port_destination .htaccess "$ssh_username_destination@$ssh_hostname_destination:$ssh_path_destination/.htaccess"
@@ -630,6 +651,10 @@ migrate() (
     if [[ ! -f "$migration_config_file" ]]; then
       echo "No active migration found. Please run wt migrate start first or choose a saved profile."
       # list all the saved profiles from migration_profiles, and ask which one to use with a select
+      if [[ ! -d "$__dir/migration_profiles" ]] || [[ -z "$(ls -A "$__dir/migration_profiles")" ]]; then
+        echo "No migration profiles found either, nothing to show the status of."
+        exit 1
+      fi
       migration_profiles=$(ls "$__dir/migration_profiles")
       echo "Saved profiles:"
       select migration_profile in $migration_profiles; do
@@ -646,6 +671,10 @@ migrate() (
       source "$migration_config_file"
     fi
 
+    if [[ -z "$ssh_hostname_destination" ]] || [[ -z "$ssh_username_destination" ]] || [[ -z "$ssh_port_destination" ]]; then
+      echo "The migration has no destination server configured, cannot check the sync status."
+      exit 1
+    fi
 
     # check if the sync_uploads.sh file exists on the destination server
     if [[ ! $(ssh -p "$ssh_port_destination" "$ssh_username_destination@$ssh_hostname_destination" "ls sync_uploads.sh") ]]; then

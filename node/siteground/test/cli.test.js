@@ -132,6 +132,46 @@ test('session:import without a refreshToken fails', async () => {
 	assert.equal(existsSync(stateDir), false);
 });
 
+test('session:import rejects a refreshToken or token that is not a JWT, and non-JSON input', async () => {
+	const bad = await run(['session:import'], { input: JSON.stringify({ refreshToken: 'not-a-jwt' }) });
+	assert.equal(bad.code, 1);
+	assert.match(bad.stderr, /^Error: refreshToken is not a valid JWT \(Not a JWT: .*\)/);
+	assert.equal(existsSync(stateDir), false, 'nothing stored');
+
+	const badAccess = await run(['session:import'], { input: JSON.stringify({ token: 'nope', refreshToken: tokenExpiringIn(86400) }) });
+	assert.equal(badAccess.code, 1);
+	assert.match(badAccess.stderr, /^Error: token is not a valid JWT \(Not a JWT: .*\)/);
+	assert.equal(existsSync(stateDir), false, 'nothing stored');
+
+	const notJson = await run(['session:import'], { input: 'garbage' });
+	assert.equal(notJson.code, 1);
+	assert.match(notJson.stderr, /^Error: Input is not valid JSON: /);
+});
+
+test('session:status with a non-JWT token in the session file prints a clear error instead of crashing', async () => {
+	mkdirSync(stateDir, { recursive: true });
+	writeFileSync(path.join(stateDir, '.session.json'), JSON.stringify({ token: 'garbage', refreshToken: tokenExpiringIn(86400) }));
+	const r = await run(['session:status']);
+	assert.equal(r.code, 1);
+	assert.equal(r.stdout, '');
+	assert.match(r.stderr, /^Error: token is not a valid JWT \(Not a JWT: [^)]+\)\. Run "labelvier siteground login" again/);
+	assert.doesNotMatch(r.stderr, /Buffer|TypeError|at .*\.js/);
+});
+
+test('session:status with a corrupt (non-JSON) session file prints a clear error naming the file', async () => {
+	mkdirSync(stateDir, { recursive: true });
+	const file = path.join(stateDir, '.session.json');
+	writeFileSync(file, '{not json');
+	const r = await run(['session:status']);
+	assert.equal(r.code, 1);
+	assert.equal(r.stderr, `Error: Session file is corrupt (not valid JSON): ${file}. Run "labelvier siteground login" again.\n`);
+
+	writeFileSync(file, 'null');
+	const r2 = await run(['session:status']);
+	assert.equal(r2.code, 1);
+	assert.equal(r2.stderr, `Error: Session file is corrupt: ${file}. Run "labelvier siteground login" again.\n`);
+});
+
 test('setup without a terminal: "Missing Email (no terminal …)", nothing written', async () => {
 	const r = await run(['setup']);
 	assert.equal(r.code, 1);

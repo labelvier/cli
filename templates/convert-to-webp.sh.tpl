@@ -105,11 +105,13 @@ is_webp_file() {
   local file="$1"
 
   # Check de file signature (magic bytes) van WebP
-  # WebP bestanden beginnen met "RIFF" en hebben "WEBP" op byte 8-11
-  local header=$(head -c 12 "$file" 2>/dev/null | od -A n -t x1 2>/dev/null)
+  # WebP bestanden beginnen met "RIFF" en hebben "WEBP" op byte 8-11.
+  # Lees beide als tekst via dd (portable: GNU en BSD, geen od-spacing verschil)
+  local riff=$(dd if="$file" bs=1 count=4 2>/dev/null | tr -d '\0')
+  local webp=$(dd if="$file" bs=1 skip=8 count=4 2>/dev/null | tr -d '\0')
 
   # Check of het RIFF....WEBP patroon bevat
-  if echo "$header" | grep -q "52 49 46 46.*57 45 42 50"; then
+  if [ "$riff" = "RIFF" ] && [ "$webp" = "WEBP" ]; then
     # Log naar skipped file voor tellen
     echo "$(basename "$file")" >> "${LOG_FILE}.skipped"
     return 0  # Is WebP
@@ -402,7 +404,7 @@ if [ "$total_jpg" -gt 0 ]; then
   else
     # Gebruik xargs met line-by-line processing
     find "$WP_CONTENT_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" \) -print0 | \
-      xargs -0 -n 1 -P "$PARALLEL_JOBS" -I {} bash -c 'process_image "$@"' _ {}
+      xargs -0 -n 1 -P "$PARALLEL_JOBS" -I {} bash -c 'process_image "$@"' _ {} "static"
   fi
 
   converted_count=$((converted_count + total_jpg))
@@ -426,7 +428,7 @@ if [ "$total_png" -gt 0 ]; then
       parallel -0 -j "$PARALLEL_JOBS" --line-buffer process_image {} "static"
   else
     find "$WP_CONTENT_DIR" -type f -iname "*.png" -print0 | \
-      xargs -0 -n 1 -P "$PARALLEL_JOBS" -I {} bash -c 'process_image "$@"' _ {}
+      xargs -0 -n 1 -P "$PARALLEL_JOBS" -I {} bash -c 'process_image "$@"' _ {} "static"
   fi
 
   converted_count=$((converted_count + total_png))
@@ -450,7 +452,7 @@ if [ "$total_gif" -gt 0 ]; then
       parallel -0 -j "$PARALLEL_JOBS" --line-buffer process_image {} "gif"
   else
     find "$WP_CONTENT_DIR" -type f -iname "*.gif" -print0 | \
-      xargs -0 -n 1 -P "$PARALLEL_JOBS" -I {} bash -c 'process_image "$@"' _ {}
+      xargs -0 -n 1 -P "$PARALLEL_JOBS" -I {} bash -c 'process_image "$@"' _ {} "gif"
   fi
 
   converted_count=$((converted_count + total_gif))

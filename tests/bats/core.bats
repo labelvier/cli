@@ -101,6 +101,7 @@ stub_notifier() {
 
 @test "core without a subcommand prints its documentation" {
   run_cli core
+  [ "$status" -eq 0 ]
   assert_output_contains "Available functions:"
   assert_output_contains "update"
   assert_output_contains "generate"
@@ -413,12 +414,12 @@ stub_notifier() {
 @test "update reports an up-to-date CLI" {
   make_cli_git
   run "$CLI_COPY/labelvier" core update
+  [ "$status" -eq 0 ]
   assert_output_contains "Checking for updates..."
   assert_output_contains "Up-to-date"
 }
 
 @test "update exits 0 when the CLI is up-to-date" {
-  skip "bug: update ends with '[ \$? -eq 10 ] && return 0', so an up-to-date 'core update' exits 1"
   make_cli_git
   run "$CLI_COPY/labelvier" core update
   [ "$status" -eq 0 ]
@@ -719,8 +720,8 @@ stub_notifier() {
   [ "$status" -eq 0 ]
   assert_output_contains "Migrating the CLI remote from Bitbucket to GitHub"
   assert_output_contains "Remote updated"
-  [ "$(git remote get-url origin)" = "git@github.com:labelvier/WP-Takeoff-CLI.git" ]
-  [ "$(git remote get-url --push origin)" = "git@github.com:labelvier/WP-Takeoff-CLI.git" ]
+  [ "$(git remote get-url origin)" = "git@github.com:labelvier/cli.git" ]
+  [ "$(git remote get-url --push origin)" = "git@github.com:labelvier/cli.git" ]
 }
 
 @test "_migrate_remote_if_needed leaves other origins alone" {

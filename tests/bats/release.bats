@@ -55,6 +55,7 @@ make_package_json() {
 
 @test "release without a subcommand prints its documentation" {
   run_cli release
+  [ "$status" -eq 0 ]
   assert_output_contains "Available functions:"
   assert_output_contains "start"
   assert_output_contains "cancel"
@@ -72,7 +73,6 @@ make_package_json() {
 }
 
 @test "bare release exits 0" {
-  skip "bug: _echo_documentation ends on a failing read, so a bare 'release' exits 1 instead of 0"
   run_cli release
   [ "$status" -eq 0 ]
 }

@@ -65,6 +65,7 @@ LOAD_NVM_FROM_NVM_DIR='_load_nvm() { type nvm >/dev/null 2>&1 && return 0; [ -s 
 
 @test "_dispatch without a subcommand prints the file's documentation" {
   run _dispatch hello.sh
+  [ "$status" -eq 0 ]
   assert_output_contains "Available functions:"
   assert_output_contains "world - Echo hello with possible arguments"
   refute_output_contains "Unknown command"
@@ -72,15 +73,16 @@ LOAD_NVM_FROM_NVM_DIR='_load_nvm() { type nvm >/dev/null 2>&1 && return 0; [ -s 
 
 @test "_dispatch with a flag-like subcommand prints the documentation without an error" {
   run _dispatch hello.sh --help
+  [ "$status" -eq 0 ]
   assert_output_contains "Available functions:"
   refute_output_contains "Unknown command"
   run _dispatch hello.sh -x
+  [ "$status" -eq 0 ]
   assert_output_contains "Available functions:"
   refute_output_contains "Unknown command"
 }
 
 @test "_dispatch returns 0 when it only prints the documentation" {
-  skip "bug: _echo_documentation ends on a failing read, so _dispatch's bare 'return' passes on 1"
   run _dispatch hello.sh
   [ "$status" -eq 0 ]
   run _dispatch hello.sh --help

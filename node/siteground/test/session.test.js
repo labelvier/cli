@@ -79,7 +79,22 @@ test('saveLoginEnv round-trips through loadLoginEnv and overwrites an earlier fi
 
 test('decodeJwt returns the payload without verifying', () => {
 	assert.deepEqual(decodeJwt(jwt({ exp: 123, tokenType: 'access' })), { exp: 123, tokenType: 'access' });
-	assert.throws(() => decodeJwt('not-a-jwt'));
+});
+
+test('decodeJwt throws "Not a JWT" for anything that is not a three-part token with a JSON object payload', () => {
+	const notJwt = { message: /^Not a JWT: / };
+	assert.throws(() => decodeJwt('not-a-jwt'), notJwt);
+	assert.throws(() => decodeJwt(''), notJwt);
+	assert.throws(() => decodeJwt('a.b'), notJwt);
+	assert.throws(() => decodeJwt('a.b.c.d'), notJwt);
+	assert.throws(() => decodeJwt('a.b c.d'), notJwt);
+	assert.throws(() => decodeJwt(undefined), notJwt);
+	assert.throws(() => decodeJwt(null), notJwt);
+	assert.throws(() => decodeJwt(42), notJwt);
+	const b64 = (s) => Buffer.from(s).toString('base64url');
+	assert.throws(() => decodeJwt(`${b64('{}')}.${b64('not json')}.sig`), { message: 'Not a JWT: payload is not base64url-encoded JSON' });
+	assert.throws(() => decodeJwt(`${b64('{}')}.${b64('[1]')}.sig`), { message: 'Not a JWT: payload is not a JSON object' });
+	assert.throws(() => decodeJwt(`${b64('{}')}.${b64('"str"')}.sig`), { message: 'Not a JWT: payload is not a JSON object' });
 });
 
 test('secondsLeft: -1 without a token, positive before exp, negative after', () => {

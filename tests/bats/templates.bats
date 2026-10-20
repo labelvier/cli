@@ -177,7 +177,6 @@ make_uploads() {
 }
 
 @test "convert-to-webp converts gifs with gif2webp when GNU parallel is absent" {
-  skip "bug: the xargs fallback runs process_image with only the file, so the 'gif' type is lost and gifs go through cwebp"
   stub_webp_tools
   mkdir -p "$TEST_TMP/wp-content/uploads"
   head -c 100 /dev/zero > "$TEST_TMP/wp-content/uploads/anim.gif"
@@ -189,9 +188,6 @@ make_uploads() {
 }
 
 @test "convert-to-webp skips files that already hold WebP data" {
-  if [ "$(uname)" = Darwin ]; then
-    skip "bug: is_webp_file greps od output with single spaces, but BSD od prints two per byte, so on macOS nothing is ever detected as WebP"
-  fi
   stub_webp_tools
   mkdir -p "$TEST_TMP/wp-content/uploads"
   printf 'RIFF\0\0\0\0WEBPVP8 ' > "$TEST_TMP/wp-content/uploads/done.jpg"

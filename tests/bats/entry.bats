@@ -101,7 +101,6 @@ package_version() {
 }
 
 @test "an _-prefixed helper cannot be run as a command" {
-  skip "bug: hidden _-helpers are still callable, e.g. 'labelvier _is_semantic_version 1.2.3' runs and exits 0 instead of Unknown command"
   run_cli _is_semantic_version 1.2.3
   [ "$status" -eq 1 ]
   assert_output_contains "Unknown command: _is_semantic_version"
@@ -147,7 +146,6 @@ package_version() {
 }
 
 @test "the usage text honours NO_COLOR too" {
-  skip "bug: _print_usage and the Unknown command line always emit ANSI codes; only the banner checks NO_COLOR and the tty"
   run_cli
   ! printf '%s' "$output" | grep -q $'\033\\['
 }

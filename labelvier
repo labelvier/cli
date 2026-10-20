@@ -15,6 +15,11 @@ __blue="\033[0;34m"
 __green="\033[0;32m"
 __bold="\033[1m"
 __reset="\033[0m" # Reset to default color
+# Honour NO_COLOR and plain (non-tty) output in one place: every command
+# collection inherits these variables, so emptying them here covers them all.
+if [ -n "${NO_COLOR:-}" ] || [ ! -t 1 ]; then
+  __red="" __blue="" __green="" __bold="" __reset=""
+fi
 
 
 # load all functions from the includes directory
@@ -105,8 +110,9 @@ function main() {
   fi
 
   # A command name was typed but it doesn't exist — say so, don't just
-  # silently dump the same usage a bare call would show.
-  if ! declare -f -- "$1" > /dev/null; then
+  # silently dump the same usage a bare call would show. `_`-prefixed
+  # functions are internal helpers (hidden from the usage), not commands.
+  if [[ "$1" == _* ]] || ! declare -f -- "$1" > /dev/null; then
     echo -e "${__red}✗${__reset} Unknown command: ${__bold}$1${__reset}"
     echo
     _print_usage

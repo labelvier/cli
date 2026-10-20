@@ -106,12 +106,14 @@ starterkit() (
     if [ -f .env ]; then
       # get the DEV_THEME_PATH from the .env file
       local current_dir=$(pwd)
-      local dev_theme_path="$current_dir"$(grep DEV_THEME_PATH .env | cut -d '=' -f2)
+      local dev_theme_env
+      dev_theme_env=$(grep '^DEV_THEME_PATH=' .env | cut -d '=' -f2)
       # exit if the DEV_THEME_PATH is not set
-      if [ -z "$dev_theme_path" ]; then
+      if [ -z "$dev_theme_env" ]; then
         echo "DEV_THEME_PATH is not set in the .env file"
         exit 1
       fi
+      local dev_theme_path="$current_dir$dev_theme_env"
     else
       echo "No .env file found"
       exit 1
