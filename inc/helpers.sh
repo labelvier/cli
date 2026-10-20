@@ -138,23 +138,6 @@ function _is_semantic_version() {
 # instead of just telling the user to go install <thing> by hand. Returns
 # 1 (without exiting) when brew is still unavailable — declined, or the
 # install failed — so callers can fall back to their own manual-install message.
-# terminal-notifier only has a Homebrew bottle for recent Apple Silicon macOS.
-# Elsewhere (Intel Macs, older macOS) brew builds it from source, which needs
-# the full Xcode.app; the Command Line Tools are not enough. Succeeds when brew
-# can install it here, or when that cannot be told (no brew yet).
-function _can_install_terminal_notifier() {
-  type -P brew >/dev/null 2>&1 || return 0
-  brew ruby -e 'puts Formula["terminal-notifier"].bottle ? "bottle" : "source"' 2>/dev/null | grep -qx bottle && return 0
-  [ -d /Applications/Xcode.app ]
-}
-
-# Said wherever terminal-notifier cannot be installed on this Mac.
-function _echo_terminal_notifier_unavailable() {
-  echo "Clickable notifications are not available on this Mac: Homebrew has no ready-made terminal-notifier"
-  echo "for $(uname -m) macOS $(sw_vers -productVersion 2>/dev/null), and building it needs the full Xcode.app."
-  echo "The automatic update still notifies you, only without the click action."
-}
-
 function _require_brew() {
   if type -P brew >/dev/null 2>&1; then
     return 0
