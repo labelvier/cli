@@ -1,6 +1,10 @@
 {
   "name": "labelvier-cli",
   "version": "1.2.0",
-  "dependencies": {
+  "dependencies": {},
+  "scripts": {
+    "test": "tests/run.sh",
+    "test:bats": "tests/run.sh bats",
+    "test:node": "tests/run.sh node"
   }
 }

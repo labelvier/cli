@@ -171,8 +171,8 @@ storage() (
     echo -e ""
 
     if [[ "$BACKGROUND_MODE" == "true" ]]; then
-      echo -e "${__yellow}Script will run in background mode on the server.${__reset}"
-      echo -e "${__yellow}You can safely close this SSH connection.${__reset}"
+      echo -e "${__bold}Script will run in background mode on the server.${__reset}"
+      echo -e "${__bold}You can safely close this SSH connection.${__reset}"
       echo -e ""
       echo -e "To monitor progress on the server, connect via SSH and run:"
       echo -e "  tail -f ~/webp_conversion_background_*.log"
@@ -186,7 +186,7 @@ storage() (
 
     echo -e ""
     if [[ "$DRY_RUN" == "true" ]]; then
-      echo -e "${__yellow}Dry run completed - no files were modified.${__reset}"
+      echo -e "${__bold}Dry run completed - no files were modified.${__reset}"
     else
       echo -e "${__green}WebP conversion completed.${__reset}"
     fi

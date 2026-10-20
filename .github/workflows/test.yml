@@ -1,0 +1,44 @@
+name: Test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    name: bats + node:test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install bats
+        uses: bats-core/bats-action@3.0.1
+        with:
+          support-install: false
+          assert-install: false
+          detik-install: false
+          file-install: false
+
+      - name: Install GNU parallel (bats --jobs)
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install parallel; else sudo apt-get install -y parallel; fi
+          mkdir -p ~/.parallel && touch ~/.parallel/will-cite
+
+      - name: Syntax
+        run: tests/run.sh syntax
+
+      - name: Bats
+        run: tests/run.sh bats
+
+      - name: Node
+        run: tests/run.sh node

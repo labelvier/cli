@@ -9,7 +9,8 @@
   },
   "scripts": {
     "sg": "node src/cli.js",
-    "login": "node src/cli.js login"
+    "login": "node src/cli.js login",
+    "test": "node --test \"test/*.test.js\""
   },
   "engines": {
     "node": ">=20"

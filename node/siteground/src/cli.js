@@ -3,7 +3,19 @@ import { parseArgs } from 'node:util';
 import { existsSync } from 'node:fs';
 import { SiteGroundClient } from './client.js';
 import { interactiveLogin, setupLogin } from './login.js';
-import { saveSession, loadSession, clearSession, decodeJwt } from './session.js';
+import { saveSession, loadSession, clearSession, decodeJwt, SESSION_FILE } from './session.js';
+
+/** Expiry Date of a JWT; a clear error naming the field when it is not a JWT or has no exp. */
+function jwtExpiry(token, what) {
+	let payload;
+	try {
+		payload = decodeJwt(token);
+	} catch (err) {
+		throw new Error(`${what} is not a valid JWT (${err.message}). Run "labelvier siteground login" again or import a session exported from the browser.`);
+	}
+	if (typeof payload.exp !== 'number') throw new Error(`${what} is not a valid JWT (no "exp" claim)`);
+	return new Date(payload.exp * 1000);
+}
 import { ask, confirm, select, closePrompt, interactive } from './prompt.js';
 import { task } from './spinner.js';
 import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
@@ -197,10 +209,18 @@ const commands = {
 	async 'session:import'() {
 		let raw = '';
 		for await (const chunk of process.stdin) raw += chunk;
-		const { token, refreshToken } = JSON.parse(raw);
+		let parsed;
+		try {
+			parsed = JSON.parse(raw);
+		} catch (err) {
+			throw new Error(`Input is not valid JSON: ${err.message}`);
+		}
+		const { token, refreshToken } = parsed ?? {};
 		if (!refreshToken) throw new Error('Input JSON needs a "refreshToken" field');
+		const refreshExp = jwtExpiry(refreshToken, 'refreshToken');
+		if (token) jwtExpiry(token, 'token');
 		await saveSession({ token, refreshToken });
-		console.log('Session stored, refresh token valid until', new Date(decodeJwt(refreshToken).exp * 1000).toLocaleString());
+		console.log('Session stored, refresh token valid until', refreshExp.toLocaleString());
 	},
 
 	async logout() {
@@ -214,9 +234,16 @@ const commands = {
 	},
 
 	async 'session:status'() {
-		const s = await loadSession();
-		const fmt = (t) => (t ? new Date(decodeJwt(t).exp * 1000).toLocaleString() : '-');
-		console.log(`access token  until ${fmt(s.token)}\nrefresh token until ${fmt(s.refreshToken)}`);
+		let s;
+		try {
+			s = await loadSession();
+		} catch (err) {
+			if (err instanceof SyntaxError) throw new Error(`Session file is corrupt (not valid JSON): ${SESSION_FILE}. Run "labelvier siteground login" again.`);
+			throw err;
+		}
+		if (!s || typeof s !== 'object') throw new Error(`Session file is corrupt: ${SESSION_FILE}. Run "labelvier siteground login" again.`);
+		const fmt = (t, what) => (t ? jwtExpiry(t, what).toLocaleString() : '-');
+		console.log(`access token  until ${fmt(s.token, 'token')}\nrefresh token until ${fmt(s.refreshToken, 'refreshToken')}`);
 	},
 
 	async accounts(sg) {
