@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-20
+
 ### Fixed
 - `core notifications` (and so `labelvier setup` / `ai update`) failed on Intel Macs and older macOS: Homebrew has no ready-made terminal-notifier there and building it needs the full Xcode.app. On those Macs it now installs the official universal build of terminal-notifier 3.1.0 from GitHub (checksum-pinned) into `~/Applications`, with a `terminal-notifier` wrapper next to brew's binaries. No Xcode needed.
 
