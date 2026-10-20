@@ -4,3 +4,4 @@
 !.github/
 /migration_profiles/
 /debug.sh
+/node/*/node_modules/

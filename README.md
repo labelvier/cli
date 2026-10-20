@@ -82,3 +82,18 @@ Run this from the folder where all your projects live:
 ```sh
 labelvier starterkit install
 ```
+
+### SiteGround
+
+`labelvier siteground` creates and configures SiteGround sites through the
+same API as my.siteground.com. It is a Node CLI in `node/siteground`; the
+first run installs its dependencies.
+
+```sh
+labelvier siteground login        # browser opens, log in incl. 2FA
+labelvier siteground create-site  # asks for domain, plan, app and extras
+labelvier siteground              # all commands
+```
+
+The session and generated passwords are stored in
+`~/.config/labelvier/siteground` (override with `SG_STATE_DIR`).
