@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-20
+
 ### Added
 - `deploy staging` and `deploy production` purge the SiteGround cache after a successful deploy with `wp sg purge` over SSH (`DEPLOY_<ENV>_HOSTNAME/USER/PORT/PATH` from `.env`). Servers without `wp` or `wp sg` are skipped, and a failed purge never fails the deploy. Use `--skip-purge` to keep the cache.
 - `ai claude install` offers to install `fa`, the Font Awesome CLI (official installer, asks `[y/N]`). `ai check` lists it as optional, so a skipped `fa` never triggers the auto-update notification.
