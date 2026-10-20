@@ -1128,16 +1128,17 @@ ai() (
 
     echo -e "${__bold}Suggested fixes:${__reset} (nothing changes without your yes)"
     local action
-    while IFS= read -r action; do
+    # Read the actions on fd 3, so stdin stays the user's terminal: the fix
+    # has prompts of its own (tokens, optional tools). Redirecting it from
+    # /dev/tty instead breaks 'claude' (Bun: "EINVAL: invalid argument, kqueue").
+    while IFS= read -r action <&3; do
       # No terminal to answer on (cron, launchd, pipe)? _confirm treats that as "no".
       _confirm "  Run '$action'?"
       case $? in
-        # The loop's stdin is the action list, so give the fix the terminal:
-        # otherwise its own prompts (token, optional tools) read EOF and skip.
-        0) "$cli" ${action#labelvier } < /dev/tty ;;
+        0) "$cli" ${action#labelvier } ;;
         1) echo "  Skipped." ;;
       esac
-    done <<< "$actions"
+    done 3<<< "$actions"
 
     echo
     echo "Checking again..."
