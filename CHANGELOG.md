@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-20
+
+### Added
+- `siteground setup` stores your email and password, and optionally the TOTP secret (base32 from the authenticator setup), in `~/.config/labelvier/siteground/.env` (chmod 600). Store the TOTP secret on as few machines as possible: with it the file alone logs in.
+- `siteground login` logs in by itself after `setup`: it fills the form and the 2FA code, waits for the login app to load before submitting, and ticks "Stay logged in" so the session lasts 30 days instead of 24 hours. Without `setup` it opens the browser for you as before. A reCAPTCHA or a missing value is left to you in the browser window.
+- `siteground logout` removes the session and browser profile; `logout --forget` also the stored credentials.
+- `ai claude install` offers the Label Vier Dashboard API skill (plugins, WordPress versions, PageSpeed scores and contacts per website). It asks for `LV_DASHBOARD_API_KEY` (stored in `~/.claude/.env`), is optional and, once installed, kept up to date without asking. `ai check` reports the key only when the skill is installed.
+
+### Fixed
+- `ai update` now asks for missing API tokens and the optional tools instead of silently skipping them: the fix runs with the terminal on stdin, and the action list travels over a separate descriptor.
+- The `claude` CLI is run with stdin from `/dev/null`. With the terminal on stdin it left the tty in non-canonical mode, after which `[Y/n]` prompts were skipped and pasted tokens were lost.
+
 ## [1.1.2] - 2026-10-20
 
 ### Fixed
