@@ -15,7 +15,7 @@ deploy() (
   }
 
   # @function staging
-  # @description merges the current branch to staging branch and deploys the staging branch  to the staging environment. Use --all-features to deploy all feature/ branches to staging.
+  # @description merges the current branch to staging branch and deploys the staging branch  to the staging environment, then purges the SiteGround cache. Use --all-features to deploy all feature/ branches to staging, --skip-purge to keep the cache.
   function staging() {
     # get current branch
     local current_branch=$(git branch --list | grep \* | sed 's/\* //g')
@@ -94,12 +94,14 @@ deploy() (
     # deploy to staging
     npm run deploy-staging || { echo "npm run deploy-staging failed, aborting deploy"; exit 1; }
 
+    _flag_is_present "skip-purge" "$@" || _purge_siteground_cache "STAGING"
+
     # return to original branch
     git checkout "$current_branch" || { echo "git checkout $current_branch failed, please check the state of your repository and try again"; exit 1; }
   }
 
   # @function production
-  # @description Deploys the current branch to the production environment with the local `npm run deploy` script and keeps track of who deployed what and when. Only allowed from master/main or a release/* branch. Use --force to skip the branch, working directory and remote checks, --yes to skip the confirmation and --skip-deploy-check to skip the npm script check.
+  # @description Deploys the current branch to the production environment with the local `npm run deploy` script and keeps track of who deployed what and when. Only allowed from master/main or a release/* branch. Purges the SiteGround cache afterwards. Use --force to skip the branch, working directory and remote checks, --yes to skip the confirmation, --skip-deploy-check to skip the npm script check and --skip-purge to keep the cache.
   function production() {
     # check if we are in a git repository
     if [ ! -d .git ]; then
@@ -177,12 +179,48 @@ deploy() (
     if [ "$deploy_status" -eq 0 ]; then
       _log_deploy "success" "$version" "$commit" "$branch" "$deployer"
       echo -e "${__green}Deployed $project $version to the production environment.${__reset}"
+      _flag_is_present "skip-purge" "$@" || _purge_siteground_cache "PRODUCTION"
     else
       _log_deploy "failed" "$version" "$commit" "$branch" "$deployer"
       echo -e "${__red}npm run deploy failed with exit code $deploy_status.${__reset}"
     fi
 
     exit $deploy_status
+  }
+
+  # Read one value from the project .env without sourcing it (quotes stripped).
+  function _env_value() {
+    [ -f .env ] || return 1
+    grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+  }
+
+  # Purge the SiteGround cache of the server we just deployed to, via `wp sg purge`
+  # (SiteGround Optimizer). Skips quietly when the server has no wp or no `wp sg`, so
+  # non-SiteGround hosts are unaffected. A failed purge never fails the deployment.
+  function _purge_siteground_cache() {
+    local environment="$1"
+    local hostname=$(_env_value "DEPLOY_${environment}_HOSTNAME")
+    local user=$(_env_value "DEPLOY_${environment}_USER")
+    local port=$(_env_value "DEPLOY_${environment}_PORT")
+    local path=$(_env_value "DEPLOY_${environment}_PATH")
+
+    if [ -z "$hostname" ] || [ -z "$user" ] || [ -z "$path" ]; then
+      echo "No DEPLOY_${environment}_HOSTNAME/USER/PATH in .env, skipping the cache purge."
+      return 0
+    fi
+
+    # wp-cli walks up from the theme path to find WordPress, so cd'ing into the deploy path is enough.
+    echo "Purging the SiteGround cache on $hostname..."
+    command ssh ${port:+-p "$port"} -o ConnectTimeout=10 "$user@$hostname" \
+      "cd '$path' 2>/dev/null || exit 3; command -v wp >/dev/null 2>&1 || exit 4; wp help sg >/dev/null 2>&1 || exit 5; wp sg purge"
+    case $? in
+      0) echo -e "${__green}SiteGround cache purged.${__reset}" ;;
+      3) echo -e "${__red}Could not find $path on $hostname, cache not purged.${__reset}" ;;
+      4) echo "No wp-cli on $hostname, skipping the cache purge." ;;
+      5) echo "No 'wp sg' (SiteGround Optimizer) on $hostname, skipping the cache purge." ;;
+      *) echo -e "${__red}Purging the SiteGround cache failed, purge it manually: wp sg purge${__reset}" ;;
+    esac
+    return 0
   }
 
   # @function log <optional-amount>
