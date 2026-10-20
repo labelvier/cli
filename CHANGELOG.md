@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `siteground login` logs in by itself after `setup`: it fills the form and the 2FA code, waits for the login app to load before submitting, and ticks "Stay logged in" so the session lasts 30 days instead of 24 hours. Without `setup` it opens the browser for you as before. A reCAPTCHA or a missing value is left to you in the browser window.
 - `siteground logout` removes the session and browser profile; `logout --forget` also the stored credentials.
 - `ai claude install` offers the Label Vier Dashboard API skill (plugins, WordPress versions, PageSpeed scores and contacts per website). It asks for `LV_DASHBOARD_API_KEY` (stored in `~/.claude/.env`), is optional and, once installed, kept up to date without asking. `ai check` reports the key only when the skill is installed.
-
 - Test suite: `npm test` runs `bash -n` on every file, 516 bats tests (`tests/bats`, one file per command collection, sandboxed with stubbed ssh/rsync/npm/brew/docker/claude) and 142 node tests (`node/siteground/test`). Runs in parallel with GNU parallel (`brew install parallel`), and on GitHub Actions for Ubuntu and macOS. Rules in `tests/README.md`.
 
 ### Fixed
