@@ -133,6 +133,29 @@ ai() (
     fi
   }
 
+  # fa is the Font Awesome CLI (icons and kits from the terminal, e.g. into
+  # Sketch). Skips when already installed, so safe to re-run every time.
+  function _require_fa() {
+    if type -P fa >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} fa (Font Awesome CLI)"
+      return 0
+    fi
+
+    echo -e "${__red}fa is not installed.${__reset} It fetches Font Awesome icons and kits from the terminal."
+    local answer
+    read -p "Install it now with the official Font Awesome installer? [y/N] " answer
+    case "$answer" in
+      [yY]*) curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh | bash ;;
+      *) echo "Skipped fa."; return 0 ;;
+    esac
+
+    if ! type -P fa >/dev/null 2>&1; then
+      echo -e "${__red}fa is still not on your PATH after installing.${__reset} Open a new shell and try again."
+      exit 1
+    fi
+    echo -e "Next: run ${__blue}fa login${__reset} to sign in to your fontawesome.com account."
+  }
+
   # claude itself (the Claude Code CLI) is needed to manage plugins like caveman.
   function _require_claude_cli() {
     if type -P claude >/dev/null 2>&1; then
@@ -558,7 +581,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the toon hook, rtk and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -589,7 +612,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the toon hook, rtk and the caveman plugin. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -653,6 +676,9 @@ ai() (
 
     echo
     _require_rtk
+
+    echo
+    _require_fa
 
     echo
     _install_caveman
@@ -848,7 +874,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, npm, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
+  # @description Checks basecamp, npm, fa, toon, rtk, the caveman plugin, the timesheet skill and the Claude Code config.
   # ---------------------------------------------------------------------------
   function check() {
     local output
@@ -886,6 +912,13 @@ ai() (
       echo -e "${__green}✓${__reset} npm"
     else
       echo -e "${__red}✗${__reset} npm ${__red}(missing, run: labelvier setup tools)${__reset}"
+    fi
+
+    if type -P fa >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} fa (Font Awesome CLI)"
+    else
+      # Optional (install asks [y/N]), so no ✗: that would make the daily auto-update nag about it.
+      echo -e "- fa (Font Awesome CLI) (optional, not installed; labelvier ai claude install offers it)"
     fi
 
     if type -P toon >/dev/null 2>&1; then
