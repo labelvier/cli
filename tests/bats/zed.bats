@@ -11,12 +11,7 @@ TEMPLATES="$CLI_ROOT/templates/zed"
 # A PATH where jq cannot be found but the tools the CLI needs still can
 # (macOS ships jq in /usr/bin, so /usr/bin as a whole has to go).
 path_without_jq() {
-  local bin="$TEST_TMP/bin" tool
-  mkdir -p "$bin"
-  for tool in dirname basename grep cut sed awk mktemp tput env head tail tr sort uniq wc touch find; do
-    [ -x "/usr/bin/$tool" ] && ln -sf "/usr/bin/$tool" "$bin/$tool"
-  done
-  echo "$STUB_DIR:$bin:/bin"
+  bare_path jq
 }
 
 # --- docs & help ------------------------------------------------------------

@@ -11,15 +11,15 @@ teardown() { teardown_sandbox; }
 
 TPL="$CLI_ROOT/templates"
 
-# A PATH with only the stubs and the base system: no Homebrew, no nvm, so
-# `command -v cwebp|parallel|toon` only finds what a test stubbed.
-# jq is a hard requirement of the basecamp hook, so it alone is linked in.
-bare_path() {
-  mkdir -p "$TEST_TMP/bare-bin"
+# The base system without cwebp, gif2webp, GNU parallel and toon, so
+# `command -v` only finds what a test stubbed (jq stays: the basecamp hook needs it).
+tpl_path() {
+  local path
+  path="$(bare_path cwebp gif2webp parallel toon)"
   if command -v jq >/dev/null 2>&1 && [ ! -e "$TEST_TMP/bare-bin/jq" ]; then
     ln -s "$(command -v jq)" "$TEST_TMP/bare-bin/jq"
   fi
-  echo "$STUB_DIR:$TEST_TMP/bare-bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  echo "$path"
 }
 
 # Fill example.sh.tpl the way `core generate` does. Prints the rendered path.
@@ -136,7 +136,7 @@ make_uploads() {
 @test "convert-to-webp dry run lists what it would convert without touching anything" {
   stub_webp_tools
   make_uploads
-  run env PATH="$(bare_path)" DRY_RUN=true bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
+  run env PATH="$(tpl_path)" DRY_RUN=true bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
   [ "$status" -eq 0 ]
   assert_output_contains "Dry Run:        true"
   assert_output_contains "Gevonden: 1 JPG bestanden"
@@ -149,7 +149,7 @@ make_uploads() {
 @test "convert-to-webp converts a jpg in place via cwebp, keeps a backup and writes stats" {
   stub_webp_tools
   make_uploads
-  run env PATH="$(bare_path)" AUTO_YES=true bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
+  run env PATH="$(tpl_path)" AUTO_YES=true bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
   [ "$status" -eq 0 ]
   assert_output_contains "GNU Parallel niet beschikbaar"
   assert_output_contains "Auto-proceed modus"
@@ -169,7 +169,7 @@ make_uploads() {
 @test "convert-to-webp honours QUALITY and CREATE_BACKUP=false" {
   stub_webp_tools
   make_uploads
-  run env PATH="$(bare_path)" AUTO_YES=true QUALITY=60 CREATE_BACKUP=false bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
+  run env PATH="$(tpl_path)" AUTO_YES=true QUALITY=60 CREATE_BACKUP=false bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
   [ "$status" -eq 0 ]
   assert_output_contains "GEEN backup wordt gemaakt"
   assert_stub_called "^cwebp -q 60 $TEST_TMP/wp-content/uploads/photo.jpg -o "
@@ -180,7 +180,7 @@ make_uploads() {
   stub_webp_tools
   mkdir -p "$TEST_TMP/wp-content/uploads"
   head -c 100 /dev/zero > "$TEST_TMP/wp-content/uploads/anim.gif"
-  run env PATH="$(bare_path)" AUTO_YES=true CREATE_BACKUP=false bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
+  run env PATH="$(tpl_path)" AUTO_YES=true CREATE_BACKUP=false bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
   [ "$status" -eq 0 ]
   assert_stub_called "^gif2webp -q 85 $TEST_TMP/wp-content/uploads/anim.gif -o "
   refute_stub_called '^cwebp'
@@ -191,7 +191,7 @@ make_uploads() {
   stub_webp_tools
   mkdir -p "$TEST_TMP/wp-content/uploads"
   printf 'RIFF\0\0\0\0WEBPVP8 ' > "$TEST_TMP/wp-content/uploads/done.jpg"
-  run env PATH="$(bare_path)" AUTO_YES=true bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
+  run env PATH="$(tpl_path)" AUTO_YES=true bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
   [ "$status" -eq 0 ]
   assert_output_contains "Skip (al WebP): done.jpg"
   assert_output_contains "Overgeslagen:  1 (al WebP formaat)"
@@ -200,7 +200,7 @@ make_uploads() {
 
 @test "convert-to-webp stops when cwebp is not installed" {
   make_uploads
-  run env PATH="$(bare_path)" bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
+  run env PATH="$(tpl_path)" bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/wp-content"
   [ "$status" -eq 1 ]
   assert_output_contains "Missende afhankelijkheden: cwebp gif2webp"
   assert_output_contains "brew install webp"
@@ -208,7 +208,7 @@ make_uploads() {
 
 @test "convert-to-webp fails for a directory that does not exist" {
   stub_webp_tools
-  run env PATH="$(bare_path)" bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/nope"
+  run env PATH="$(tpl_path)" bash "$TPL/convert-to-webp.sh.tpl" "$TEST_TMP/nope"
   [ "$status" -eq 1 ]
   assert_output_contains "Directory niet gevonden: $TEST_TMP/nope"
 }
@@ -252,7 +252,7 @@ hook_input() {
 
 run_hook() {
   command -v jq >/dev/null 2>&1 || skip "jq not installed"
-  run env PATH="$(bare_path)" bash "$TPL/basecamp-toon.sh.tpl" <<< "$(hook_input "$1")"
+  run env PATH="$(tpl_path)" bash "$TPL/basecamp-toon.sh.tpl" <<< "$(hook_input "$1")"
 }
 
 @test "basecamp hook appends the npx toon formatter to a plain basecamp command" {
@@ -288,10 +288,10 @@ run_hook() {
 
 @test "basecamp hook ignores input without a command" {
   command -v jq >/dev/null 2>&1 || skip "jq not installed"
-  run env PATH="$(bare_path)" bash "$TPL/basecamp-toon.sh.tpl" <<< '{"tool_name":"Read","tool_input":{"file_path":"x"}}'
+  run env PATH="$(tpl_path)" bash "$TPL/basecamp-toon.sh.tpl" <<< '{"tool_name":"Read","tool_input":{"file_path":"x"}}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
-  run env PATH="$(bare_path)" bash "$TPL/basecamp-toon.sh.tpl" <<< ''
+  run env PATH="$(tpl_path)" bash "$TPL/basecamp-toon.sh.tpl" <<< ''
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
