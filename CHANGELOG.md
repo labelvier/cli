@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-23
+
+### Fixed
+- `core generate` and `release start` used BSD-only `sed -i ''` and failed on Linux. The test suite now passes on Ubuntu and macOS in CI.
+
 ## [1.2.0] - 2026-10-20
 
 ### Added
