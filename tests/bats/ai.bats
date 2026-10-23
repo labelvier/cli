@@ -323,7 +323,7 @@ hook_entries_in_settings() {
   local name
   for name in GLOBAL WORDPRESS ANGULAR; do
     cmp -s "$TPL_DIR/labelvier/$name.md.tpl" "$CLAUDE_DIR/labelvier/$name.md"
-    [ "$(stat -f '%Lp' "$CLAUDE_DIR/labelvier/$name.md" 2>/dev/null || stat -c '%a' "$CLAUDE_DIR/labelvier/$name.md")" = "600" ]
+    [ "$(file_mode "$CLAUDE_DIR/labelvier/$name.md")" = "600" ]
     assert_output_contains "Installed $CLAUDE_DIR/labelvier/$name.md"
   done
 
@@ -563,12 +563,14 @@ EOF
     expect \"Set TIMESHEET_API_TOKEN now?\"
     send \"y\r\"
     expect \"Paste your token here\"
+    after 300
     send \"ts-token|abc\r\"
     expect \"Install the optional Label Vier Dashboard skill\"
     send \"y\r\"
     expect \"Set LV_DASHBOARD_API_KEY now?\"
     send \"\r\"
     expect \"Paste your token here\"
+    after 300
     send \"dash-key-123\r\"
     expect eof
   "
@@ -578,7 +580,7 @@ EOF
   grep -qxF 'LV_DASHBOARD_API_KEY="dash-key-123"' "$ENV_FILE"
   grep -qxF 'OTHER=1' "$ENV_FILE"
   [ "$(grep -c '^LV_DASHBOARD_API_KEY=' "$ENV_FILE")" -eq 1 ]
-  [ "$(stat -f '%Lp' "$ENV_FILE" 2>/dev/null || stat -c '%a' "$ENV_FILE")" = "600" ]
+  [ "$(file_mode "$ENV_FILE")" = "600" ]
   [ -f "$DASH_SKILL" ]
   refute_output_contains "dash-key-123"
 }
@@ -615,7 +617,7 @@ EOF
   assert_output_contains "✓ Quoted TIMESHEET_API_TOKEN in $ENV_FILE"
   assert_output_contains "✓ TIMESHEET_API_TOKEN is set in $ENV_FILE"
   [ "$(cat "$ENV_FILE")" = 'TIMESHEET_API_TOKEN="12|abc"' ]
-  [ "$(stat -f '%Lp' "$ENV_FILE" 2>/dev/null || stat -c '%a' "$ENV_FILE")" = "600" ]
+  [ "$(file_mode "$ENV_FILE")" = "600" ]
   refute_output_contains "needs a TIMESHEET_API_TOKEN"
 }
 

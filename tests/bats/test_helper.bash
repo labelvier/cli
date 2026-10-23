@@ -154,6 +154,38 @@ make_git_repo() {
   echo "$dir"
 }
 
+# bare_path [excluded...]
+# A PATH with the stubs plus the base system tools, minus the named commands.
+# Links every executable from the system directories into $TEST_TMP/bare-bin,
+# so "absent" really is absent on every machine (on Ubuntu /bin is /usr/bin and
+# apt installs parallel, jq, cwebp there too; Homebrew/nvm are never included).
+bare_path() {
+  local bin="$TEST_TMP/bare-bin" dir tool name
+  if [ ! -d "$bin" ]; then
+    mkdir -p "$bin"
+    for dir in /usr/bin /bin /usr/sbin /sbin; do
+      [ -d "$dir" ] || continue
+      for tool in "$dir"/*; do
+        name="${tool##*/}"
+        [ -x "$tool" ] && [ ! -e "$bin/$name" ] && ln -s "$tool" "$bin/$name"
+      done
+    done
+  fi
+  for name in "$@"; do
+    rm -f "$bin/$name"
+  done
+  echo "$STUB_DIR:$bin"
+}
+
+# Octal permission bits of a file, e.g. 600 (BSD and GNU stat differ).
+file_mode() {
+  if stat -f '%Lp' "$1" >/dev/null 2>&1 && [ "$(uname)" = "Darwin" ]; then
+    stat -f '%Lp' "$1"
+  else
+    stat -c '%a' "$1"
+  fi
+}
+
 # Write a .env file in the current directory from KEY=value arguments.
 make_env() {
   printf '%s\n' "$@" > .env

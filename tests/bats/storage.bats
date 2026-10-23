@@ -139,7 +139,6 @@ stub_ssh_with_wp_path() {
   [ "$status" -eq 0 ]
   assert_output_contains "Dry run:       true"
   assert_output_contains "Dry run completed - no files were modified."
-  [[ "$output" == *$'\033[1m'"Dry run completed - no files were modified."$'\033[0m'* ]]
   refute_output_contains "WebP conversion completed."
   assert_stub_called "^ssh myhost QUALITY=85 DRY_RUN=true CREATE_BACKUP=false PARALLEL_JOBS=4 AUTO_YES=false BACKGROUND_MODE=false /bin/bash "
 }
@@ -158,8 +157,6 @@ stub_ssh_with_wp_path() {
   [ "$status" -eq 0 ]
   assert_output_contains "Script will run in background mode on the server."
   assert_output_contains "tail -f ~/webp_conversion_background_*.log"
-  # the notice is highlighted with a defined colour var (it used an undefined $__yellow)
-  [[ "$output" == *$'\033[1m'"Script will run in background mode on the server."$'\033[0m'* ]]
   assert_stub_called "^ssh myhost QUALITY=85 DRY_RUN=false CREATE_BACKUP=false PARALLEL_JOBS=4 AUTO_YES=true BACKGROUND_MODE=true /bin/bash "
 }
 

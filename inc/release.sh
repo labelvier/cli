@@ -269,7 +269,7 @@ release() (
       root_path=$(pwd);
       path="${path#$root_path/}"
       # replace the version in the style.scss file
-      sed -i '' "s/Version: $oldversion/Version: $version/g" "$path"
+      sed -i.bak "s/Version: $oldversion/Version: $version/g" "$path" && rm -f "$path.bak"
       message="Updated version in $path to $version"
       # commit the changed file
       git add "$path"
@@ -277,7 +277,7 @@ release() (
 
     if [ "$using_package_json" = "1" ]; then
       # Update and stage package.json when it is the active version source.
-      sed -i '' "s/\"version\": \"$oldversion\"/\"version\": \"$version\"/g" package.json
+      sed -i.bak "s/\"version\": \"$oldversion\"/\"version\": \"$version\"/g" package.json && rm -f package.json.bak
       message="chore(package.json): updated version to $version"
       # commit the changed file
       git add package.json

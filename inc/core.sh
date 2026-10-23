@@ -594,7 +594,7 @@ PLIST
     # Copy example.sh.tpl to the command name
     cp "$current_dir/../templates/example.sh.tpl" "$current_dir/$command_name.sh"
     # Replace the command name in the file
-    sed -i '' "s/global_command_name/$command_name/g" "$current_dir/$command_name.sh"
+    sed -i.bak "s/global_command_name/$command_name/g" "$current_dir/$command_name.sh" && rm -f "$current_dir/$command_name.sh.bak"
     # Ask for the first command name if it wasn't passed as an argument
     if [[ -z "$first_command_name" ]]; then
       echo "What is the name of the first command (i.e. list, install, deploy)?"
@@ -606,7 +606,7 @@ PLIST
       exit 1
     fi
     # Replace the command name in the file
-    sed -i '' "s/first_command_name/$first_command_name/g" "$current_dir/$command_name.sh"
+    sed -i.bak "s/first_command_name/$first_command_name/g" "$current_dir/$command_name.sh" && rm -f "$current_dir/$command_name.sh.bak"
     echo "Generated $current_dir/$command_name.sh"
   }
 
