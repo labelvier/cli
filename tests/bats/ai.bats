@@ -100,6 +100,8 @@ make_everything_installed() {
   touch "$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist"
   run_ai claude install < /dev/null
   [ "$status" -eq 0 ]
+  # After the install: with fa present, install would ask about updating it.
+  stub fa
 }
 
 template_version() {
@@ -201,7 +203,7 @@ hook_entries_in_settings() {
   assert_output_contains "✗ basecamp (missing"
   assert_output_contains "✗ basecamp plugin for Claude Code"
   assert_output_contains "✗ npm (missing, run: labelvier setup tools)"
-  assert_output_contains "- fa (Font Awesome CLI) (optional"
+  assert_output_contains "✗ fa (Font Awesome CLI) (missing, run: labelvier ai claude install)"
   assert_output_contains "✗ toon (missing"
   assert_output_contains "✗ rtk (missing"
   assert_output_contains "✗ caveman plugin (missing"
@@ -875,6 +877,7 @@ EOF
 
 @test "ai update runs an accepted fix through the CLI and checks again" {
   stub_toolchain
+  stub fa
   mkdir -p "$CLAUDE_DIR" "$HOME/Library/LaunchAgents"
   printf 'TIMESHEET_API_TOKEN="t"\n' > "$ENV_FILE"
   touch "$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist"

@@ -996,8 +996,7 @@ ai() (
     if type -P fa >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} fa (Font Awesome CLI)"
     else
-      # Optional (install asks [y/N]), so no ✗: that would make the daily auto-update nag about it.
-      echo -e "- fa (Font Awesome CLI) (optional, not installed; labelvier ai claude install offers it)"
+      echo -e "${__red}✗${__reset} fa (Font Awesome CLI) ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
 
     if type -P toon >/dev/null 2>&1; then
