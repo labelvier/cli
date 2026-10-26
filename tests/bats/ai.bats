@@ -673,7 +673,7 @@ EOF
   stub_toolchain
   unstub claude
   stub fa
-  run_ai claude install <<< "y"
+  run_ai claude install <<< $'n\ny'
   [ "$status" -eq 1 ]
   assert_stub_called '^brew install --cask claude-code$'
   assert_output_contains "'claude' is still not on your PATH after installing."
@@ -696,6 +696,32 @@ EOF
   assert_output_contains "fa is not installed."
   assert_stub_called '^curl .*https://fontawesome.com/fa-cli/install.sh$'
   assert_output_contains "fa is still not on your PATH after installing."
+}
+
+@test "ai claude install offers to update an installed fa and reruns the installer on 'y'" {
+  stub_toolchain
+  stub fa
+  stub curl
+  run_ai claude install <<< "y"
+  assert_output_contains "✓ fa (Font Awesome CLI)"
+  assert_stub_called '^curl .*https://fontawesome.com/fa-cli/install.sh$'
+}
+
+@test "ai claude install skips the fa update on 'n' and keeps going" {
+  stub_toolchain
+  stub fa
+  run_ai claude install <<< "n"
+  assert_output_contains "Skipped fa update."
+  refute_stub_called '^curl '
+}
+
+@test "ai claude install reports a failed fa update without aborting" {
+  stub_toolchain
+  stub fa
+  stub curl 'exit 22'
+  run_ai claude install <<< "y"
+  assert_output_contains "fa update failed."
+  assert_output_contains "rtk wired into Claude Code"
 }
 
 @test "ai claude install reports a failed rtk init without aborting" {

@@ -138,15 +138,30 @@ ai() (
   }
 
   # fa is the Font Awesome CLI (icons and kits from the terminal, e.g. into
-  # Sketch). Skips when already installed, so safe to re-run every time.
+  # Sketch). fa has no update command of its own; the official installer is
+  # versioned, so re-running it is the update. A failed update never aborts
+  # install.
   function _require_fa() {
+    local answer
+
     if type -P fa >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} fa (Font Awesome CLI)"
+      read -p "Update it with the official Font Awesome installer? [y/N] " answer
+      case "$answer" in
+        [yY]*)
+          # Download first: a failed curl piped into bash would still exit 0.
+          local installer
+          if ! installer=$(curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh) \
+            || ! printf '%s\n' "$installer" | bash; then
+            echo -e "${__red}fa update failed.${__reset} Run the installer from https://docs.fontawesome.com/web/use-with/fa-cli yourself."
+          fi
+          ;;
+        *) echo "Skipped fa update." ;;
+      esac
       return 0
     fi
 
     echo -e "${__red}fa is not installed.${__reset} It fetches Font Awesome icons and kits from the terminal."
-    local answer
     read -p "Install it now with the official Font Awesome installer? [y/N] " answer
     case "$answer" in
       [yY]*) curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh | bash ;;
