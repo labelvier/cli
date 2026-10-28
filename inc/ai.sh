@@ -33,10 +33,10 @@ ai() (
   # The managed block in CLAUDE.md has its own version (bump it when the list
   # of @labelvier/... refs changes).
   local claude_md="$claude_dir/CLAUDE.md"
-  local snippet_version="1"
+  local snippet_version="2"
   local snippet_start="<!-- labelvier-ai:start version=$snippet_version -->"
   local snippet_end="<!-- labelvier-ai:end -->"
-  local snippet_refs="@labelvier/GLOBAL.md @labelvier/WORDPRESS.md @labelvier/ANGULAR.md"
+  local snippet_refs="@labelvier/GLOBAL.md @labelvier/WORDPRESS.md @labelvier/ANGULAR.md @labelvier/BACKEND.md"
 
   # Where the Basecamp CLI keeps its OAuth credentials and its cache.
   local basecamp_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/basecamp"
@@ -290,6 +290,8 @@ ai() (
     echo "$labelvier_dir/GLOBAL.md:$claude_tpl_dir/labelvier/GLOBAL.md.tpl"
     echo "$labelvier_dir/WORDPRESS.md:$claude_tpl_dir/labelvier/WORDPRESS.md.tpl"
     echo "$labelvier_dir/ANGULAR.md:$claude_tpl_dir/labelvier/ANGULAR.md.tpl"
+    echo "$labelvier_dir/BACKEND.md:$claude_tpl_dir/labelvier/BACKEND.md.tpl"
+    echo "$labelvier_dir/LARAVEL.md:$claude_tpl_dir/labelvier/LARAVEL.md.tpl"
   }
 
   # "target file:template file" pairs of the timesheet skill. Kept separate
@@ -640,7 +642,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md config (wired into your own CLAUDE.md), the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config (wired into your own CLAUDE.md; BACKEND.md loads LARAVEL.md on demand), the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `LARAVEL.md` global Claude config: the default Label Vier Laravel stack (latest Laravel, Livewire + Flux UI free, MariaDB, Sail, Pest, Playwright, Deployer) and its conventions, distilled from the existing Laravel projects. New projects and dependencies always start on the latest stable versions. Deploys go through GitOps, set up with `labelvier gitops setup`.
+- `BACKEND.md`: a short router that is always loaded and tells Claude to read `LARAVEL.md` only for Laravel work, so other sessions don't spend tokens on it. `ai claude install` installs both and wires `BACKEND.md` into `~/.claude/CLAUDE.md`. The managed snippet moves to version 2, so `ai check` flags existing installs as outdated until the next install.
+
 ## [1.2.1] - 2026-10-23
 
 ### Fixed
