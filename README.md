@@ -92,7 +92,6 @@ by GitHub Actions. Run it from the project:
 ```sh
 labelvier gitops setup     # wizard: project files, server, deploy key, public_html symlink, GitHub secrets, first deploy
 labelvier gitops status    # what is in place and what is missing
-labelvier gitops scaffold  # only write deploy.php and the workflow
 ```
 
 The app `.env` stays on the server (`shared/.env`) and is never sent to GitHub;

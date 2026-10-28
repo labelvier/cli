@@ -62,13 +62,6 @@ gitops() (
     _publish
   }
 
-  # @function scaffold
-  # @description Write deploy.php and the GitHub workflow from the templates and require deployer/deployer; skips files that exist.
-  function scaffold() {
-    _preflight || return 1
-    _scaffold_files
-  }
-
   # @function status
   # @description Show what is in place for GitOps: project files, deploy key, GitHub environment, secrets and branch.
   function status() {

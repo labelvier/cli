@@ -56,7 +56,7 @@ wizard_answers() {
 
 @test "gitops outside a Laravel project stops before touching anything" {
   echo '{"require":{}}' > composer.json
-  run_cli gitops scaffold
+  run_cli gitops setup
   [ "$status" -eq 1 ]
   assert_output_contains "No Laravel project found"
   refute_stub_called '^ssh'
@@ -64,13 +64,13 @@ wizard_answers() {
 
 @test "gitops without a gh login stops" {
   stub gh 'case "$1 $2" in "auth status") exit 1 ;; esac'
-  run_cli gitops scaffold
+  run_cli gitops setup
   [ "$status" -eq 1 ]
   assert_output_contains "GitHub CLI is not logged in"
 }
 
-@test "gitops scaffold writes deploy.php and the workflow with the placeholders filled in" {
-  run_cli gitops scaffold <<< $'\n8.4\nn\n'
+@test "gitops setup writes deploy.php and the workflow with the placeholders filled in" {
+  run_cli gitops setup <<< "$(wizard_answers 1)"
   [ "$status" -eq 0 ]
   grep -q "set('application', 'shop')" deploy.php
   ! grep -q "bin/php" deploy.php
@@ -80,17 +80,17 @@ wizard_answers() {
   ! grep -rqE "__(APP|REPO_URL|PHP_BIN|PHP_VERSION|BASE_BRANCH)__" deploy.php .github/workflows/deploy-staging.yml
 }
 
-@test "gitops scaffold leaves existing files alone and does not ask again" {
+@test "gitops setup leaves existing files alone and does not ask again" {
   echo "// mine" > deploy.php
   mkdir -p .github/workflows && echo "mine" > .github/workflows/deploy-staging.yml
-  run_cli gitops scaffold <<< "n"
+  run_cli gitops setup <<< $'example.com\ny\ny\n1\ny\nn\nn\n'
   [ "$status" -eq 0 ]
   [ "$(cat deploy.php)" = "// mine" ]
   assert_output_contains "already exist"
 }
 
-@test "gitops scaffold requires deployer when it is missing and the answer is yes" {
-  run_cli gitops scaffold <<< $'\n8.4\ny\n'
+@test "gitops setup requires deployer when it is missing and the answer is yes" {
+  run_cli gitops setup <<< "$(wizard_answers 1)"
   assert_stub_called '^composer require --dev deployer/deployer'
 }
 
