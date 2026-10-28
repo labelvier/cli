@@ -32,9 +32,9 @@ setup() {
 teardown() { teardown_sandbox; }
 
 # Answers in prompt order: domain, base branch, composer require,
-# authorize key, public_html choice, create github secrets, create staging branch.
+# authorize key, public_html choice, create github secrets, create staging branch, commit files.
 wizard_answers() {
-  printf '%s\n' "example.com" "" "y" "y" "${1:-1}" "y" "n"
+  printf '%s\n' "example.com" "" "y" "y" "${1:-1}" "y" "n" "n"
 }
 
 @test "gitops --help and subcommand help print the documentation" {
@@ -88,7 +88,7 @@ wizard_answers() {
 @test "gitops setup walks through the server, key, web root and GitHub" {
   run_cli gitops <<< "$(wizard_answers 1)"
   [ "$status" -eq 0 ]
-  assert_output_contains "Step 7/7"
+  assert_output_contains "Step 8/8"
   # Deploy key: created outside the project, 600 for the private part, authorized on the server.
   [ -f "$TEST_TMP/state/acme_shop-staging" ]
   [ "$(file_mode "$TEST_TMP/state")" = "700" ]
@@ -124,7 +124,7 @@ wizard_answers() {
 }
 
 @test "gitops setup deletes public_html when the domain is typed" {
-  run_cli gitops <<< $'example.com\n\ny\ny\n2\nexample.com\ny\nn\n'
+  run_cli gitops <<< $'example.com\n\ny\ny\n2\nexample.com\ny\nn\nn\n'
   [ "$status" -eq 0 ]
   assert_stub_called "rm -rf ~/www/example.com/public_html"
 }
@@ -136,7 +136,7 @@ wizard_answers() {
     *"[ -L "*) echo link ;;
     *readlink*) echo /home/u1-abc/www/example.com/app/current/public ;;
   esac'
-  run_cli gitops <<< $'example.com\n\ny\ny\ny\nn\n'
+  run_cli gitops <<< $'example.com\n\ny\ny\ny\nn\nn\n'
   [ "$status" -eq 0 ]
   assert_output_contains "already a symlink"
   refute_stub_called "mv "
@@ -212,4 +212,38 @@ php_too_old() {
   run_cli gitops <<< "$(wizard_answers 1)"
   assert_output_contains "Server PHP 8.4"
   refute_output_contains "needs >="
+}
+
+# A project with the files written by the wizard, a bare origin and the answers up to the publish step.
+publish_setup() {
+  git init -q --bare "$TEST_TMP/origin.git"
+  git remote add origin "$TEST_TMP/origin.git"
+  git push -q origin master develop
+}
+
+@test "gitops setup commits the files and pushes to the base branch when asked" {
+  publish_setup
+  git checkout -q develop
+  run_cli gitops <<< "$(printf '%s\n' example.com "" y y 1 y n y y)"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Step 8/8 · Activate GitOps"
+  [ "$(git log -1 --format=%s)" = "ci: deploy staging with Deployer via GitHub Actions" ]
+  [ "$(git rev-parse develop)" = "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
+  assert_output_contains "GitHub Actions deploys from now on"
+}
+
+@test "gitops setup pushes a feature branch to the base branch only as a fast-forward" {
+  publish_setup
+  git checkout -q -b feature/x
+  run_cli gitops <<< "$(printf '%s\n' example.com "" y y 1 y n y y)"
+  [ "$status" -eq 0 ]
+  [ "$(git rev-parse feature/x)" = "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
+}
+
+@test "gitops setup leaves everything unpushed when the push is declined" {
+  publish_setup
+  git checkout -q develop
+  run_cli gitops <<< "$(printf '%s\n' example.com "" y y 1 y n y n)"
+  assert_output_contains "Not pushed"
+  [ "$(git rev-parse develop)" != "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
 }

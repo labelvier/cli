@@ -62,7 +62,10 @@ gitops() (
     _github || return 1
 
     _step 7 "First deploy"
-    _first_deploy
+    _first_deploy || return 1
+
+    _step 8 "Activate GitOps"
+    _publish
   }
 
   # @function scaffold
@@ -113,7 +116,7 @@ gitops() (
 
   function _step() {
     echo
-    echo -e "${__bold}${__blue}Step $1/7 · $2${__reset}"
+    echo -e "${__bold}${__blue}Step $1/8 · $2${__reset}"
   }
   function _ok() { echo -e "  ${__green}✓${__reset} $1"; }
   function _warn() { echo -e "  ${__red}!${__reset} $1"; }
@@ -488,7 +491,7 @@ gitops() (
     fi
     echo "  The first deploy runs from this machine with the deploy key; later deploys run in GitHub Actions."
     if ! _yes "Deploy $(git rev-parse --abbrev-ref HEAD) to $stage now?"; then
-      _warn "Skipped. Commit deploy.php and the workflow, merge to $(_default_base_branch) and the action does the rest."
+      _warn "Skipped the first deploy; the action does it after the next push to $(_default_base_branch)."
       return 0
     fi
     DEPLOY_STAGING_HOSTNAME="$host" DEPLOY_STAGING_USER="$user" DEPLOY_STAGING_PORT="$port" \
@@ -498,7 +501,50 @@ gitops() (
       return 1
     }
     echo
-    _ok "Done. Commit deploy.php and .github/workflows/deploy-$stage.yml; merges to $(_default_base_branch) deploy from now on."
+    _ok "Deployed."
+  }
+
+  # GitHub Actions only runs a workflow that is on the pushed branch, so without this push nothing deploys.
+  function _publish() {
+    local base="${base_branch:-$(_default_base_branch)}" current files changed
+    current=$(git rev-parse --abbrev-ref HEAD)
+    local f
+    files=""
+    for f in deploy.php ".github/workflows/deploy-$stage.yml" composer.json composer.lock; do
+      [ -e "$f" ] && files="$files $f"
+    done
+    changed=$(git status --porcelain -- $files 2>/dev/null)
+
+    if [ -z "$changed" ]; then
+      _ok "deploy.php and the workflow are already committed"
+    else
+      echo "$changed" | sed 's/^/    /'
+      if ! _yes "Commit these files on '$current'?"; then
+        _warn "Not committed: no deploy runs until deploy.php and the workflow are on $base."
+        return 0
+      fi
+      git add -- $files || return 1
+      git commit -q -m "ci: deploy $stage with Deployer via GitHub Actions" -- $files || return 1
+      _ok "Committed on $current"
+    fi
+
+    if [ "$current" = "$base" ]; then
+      _yes "Push $base to origin now? Every merge here then deploys to $stage." || {
+        _warn "Not pushed. Push $base yourself to activate GitOps."
+        return 0
+      }
+      git push origin "$base" || return 1
+    else
+      _yes "Push '$current' to origin/$base now (fast-forward only)? Every merge there then deploys to $stage." || {
+        _warn "Not pushed. Merge '$current' into $base to activate GitOps."
+        return 0
+      }
+      git push origin "refs/heads/$current:refs/heads/$base" || {
+        _warn "Push to $base was rejected. Open a PR from '$current' into $base instead."
+        return 0
+      }
+    fi
+    _ok "Pushed to $base. GitHub Actions deploys from now on: gh run watch"
   }
 
   # Extra ssh options (the deploy key once it exists); kept as a function-wide array.
