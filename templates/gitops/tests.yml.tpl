@@ -1,9 +1,9 @@
 name: Tests
 
-# Runs on every PR into __BASE_BRANCH__ and, as a reusable workflow, before each staging deploy.
+# Runs on every PR into __BASE_BRANCH__ that is opened or updated, and as a reusable workflow before each staging deploy.
 on:
-  pull_request:
-    branches: [__BASE_BRANCH__]
+  #PR#pull_request:
+  #PR#  branches: [__BASE_BRANCH__]
   workflow_call:
 
 permissions:

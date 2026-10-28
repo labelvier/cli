@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `labelvier gitops setup`: wizard that sets up GitOps for a Laravel project on SiteGround. It creates a deploy key, prepares the server (shared `.env`/storage, `public_html` symlink), sets the GitHub environment secrets, scaffolds `deploy.php` and the workflow, and runs the first deploy. Also `gitops status` and `gitops tests`, which checks for local tests and offers to run them in GitHub Actions on every PR and before each staging deploy (a failing test blocks the deploy).
+- `labelvier gitops setup`: wizard that sets up GitOps for a Laravel project on SiteGround. It creates a deploy key, prepares the server (shared `.env`/storage, `public_html` symlink), sets the GitHub environment secrets, scaffolds `deploy.php` and the workflow, and runs the first deploy. Also `gitops status` and `gitops tests`, which checks for local tests and offers to run them in GitHub Actions before each staging deploy (a failing test blocks it) and on every PR that is opened or updated. CI uses the PHP version SiteGround runs for the site.
 
 ## [1.2.1] - 2026-10-23
 

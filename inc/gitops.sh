@@ -235,7 +235,10 @@ gitops() (
       fi
     fi
 
-    if ! _yes "Run these tests in GitHub Actions too (every PR into ${base_branch:-$(_default_base_branch)}; a failing test blocks the $stage deploy)?"; then
+    local gate=0 pr=0
+    _yes "Run the tests in GitHub Actions before each $stage deploy (a failing test blocks the deploy)?" && gate=1
+    _yes "Run the tests on every PR into ${base_branch:-$(_default_base_branch)} that is opened or updated?" && pr=1
+    if [ "$gate" = 0 ] && [ "$pr" = 0 ]; then
       _warn "Skipped. Add them later with: labelvier gitops tests"
       return 0
     fi
@@ -243,22 +246,39 @@ gitops() (
       _warn "phpunit.xml sets no DB_CONNECTION: CI has no database, so set sqlite there if the tests need one."
     fi
 
-    php_version="${php_version:-$(_ask "PHP version for CI" "$(_required_php || true)")}"
-    php_version="${php_version:-8.4}"
+    _ci_php_version
     mkdir -p .github/workflows
-    _render_tests "$cmd"
-    _gate_deploy "$workflow"
+    _render_tests "$cmd" "$pr"
+    [ "$gate" = 1 ] && _gate_deploy "$workflow"
+    return 0
+  }
+
+  # CI runs the PHP version SiteGround gives the site, not a guess from composer.json.
+  function _ci_php_version() {
+    [ -n "$php_version" ] && return 0
+    if [ -z "$domain" ]; then
+      domain=$(_ask "Domain of the staging site (to read its PHP version from SiteGround)" "")
+    fi
+    [ -n "$domain" ] && php_version=$(_site_php)
+    if [ -n "$php_version" ]; then
+      _ok "PHP $php_version, as set on SiteGround for $domain"
+    else
+      _warn "Could not read the PHP version from SiteGround."
+      php_version=$(_ask "PHP version for CI" "$(_required_php || true)")
+      php_version="${php_version:-8.4}"
+    fi
   }
 
   # Write the tests workflow; the Node steps are only kept when package.json has a build script.
   function _render_tests() {
-    local to=".github/workflows/tests.yml" node_filter="/#NODE#/d"
+    local to=".github/workflows/tests.yml" node_filter="/#NODE#/d" pr_filter="/#PR#/d"
     if [ -f "$to" ]; then
       _ok "$to already exists, left alone"
       return
     fi
     grep -qs '"build"[[:space:]]*:' package.json && node_filter="s/#NODE#//"
-    sed -e "$node_filter" \
+    [ "$2" = "1" ] && pr_filter="s/#PR#//"
+    sed -e "$node_filter" -e "$pr_filter" \
       -e "s#__PHP_VERSION__#$php_version#g" \
       -e "s#__BASE_BRANCH__#${base_branch:-$(_default_base_branch)}#g" \
       -e "s#__TEST_CMD__#$1#g" \
@@ -356,23 +376,27 @@ gitops() (
     _ok "Deploy path $deploy_path, web root $public_path"
   }
 
-  # The server's default `php` is what Deployer uses. Warn when it is older than the project needs
-  # and offer to change it with `labelvier siteground site:php`.
+  # Deployer uses the server's default `php`, the site itself runs the version set in SiteGround. CI follows the
+  # site. Warn when either is older than the project needs and offer to change it with `labelvier siteground site:php`.
   function _check_php() {
-    local required installed
+    local required cli site
     required=$(_required_php)
-    installed=$(_server_php)
-    if [ -z "$installed" ]; then
-      _warn "Could not read the PHP version on the server (php -v)."
+    cli=$(_server_php)
+    site=$(_site_php)
+    php_version="${site:-$cli}"
+    if [ -z "$php_version" ]; then
+      _warn "Could not read the PHP version from SiteGround or the server (php -v)."
       return 0
     fi
-    php_version="$installed"
-    if [ -z "$required" ] || _version_gte "$installed" "$required"; then
-      _ok "Server PHP $installed${required:+ (project needs >= $required)}"
+    [ -n "$site" ] && _ok "SiteGround PHP for $domain: $site"
+    [ -n "$cli" ] && _ok "Server php (cli, used by Deployer): $cli"
+
+    if [ -z "$required" ] || { { [ -z "$site" ] || _version_gte "$site" "$required"; } && { [ -z "$cli" ] || _version_gte "$cli" "$required"; }; }; then
+      [ -n "$required" ] && _ok "Both are at least $required, what the project needs"
       return 0
     fi
 
-    _warn "Server PHP is $installed, the project needs >= $required. Composer would fail on the server."
+    _warn "PHP is older than the $required the project needs. Composer would fail on the server."
     if ! _yes "Change the PHP version of $domain with 'labelvier siteground site:php' now?"; then
       _warn "Left as is. Fix it in Site Tools → Devs → PHP Manager before the first deploy."
       return 0
@@ -384,13 +408,19 @@ gitops() (
       _fail "Changing the PHP version failed."
       return 1
     }
-    installed=$(_server_php)
-    if [ -n "$installed" ] && _version_gte "$installed" "$required"; then
-      php_version="$installed"
-      _ok "Server PHP is now $installed"
+    cli=$(_server_php)
+    site=$(_site_php)
+    php_version="${site:-$cli}"
+    if { [ -z "$site" ] || _version_gte "$site" "$required"; } && { [ -z "$cli" ] || _version_gte "$cli" "$required"; }; then
+      _ok "PHP is now ${php_version}"
     else
-      _warn "The server still reports PHP ${installed:-unknown}; check Site Tools → Devs → PHP Manager."
+      _warn "SiteGround reports ${site:-unknown}, the server ${cli:-unknown}; check Site Tools → Devs → PHP Manager."
     fi
+  }
+
+  # Major.minor of the PHP version SiteGround runs for the site (`siteground site:info`), empty when "managed" or unknown.
+  function _site_php() {
+    ${GITOPS_SITEGROUND:-siteground} site:info "$domain" 2>/dev/null | sed -n 's/^[[:space:]]*PHP[[:space:]]*PHP \([0-9]*\.[0-9]*\).*/\1/p' | head -n 1
   }
 
   # Major.minor of the default php on the server, empty when it cannot be read.

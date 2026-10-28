@@ -15,7 +15,12 @@ setup() {
   stub composer
   stub scp
   # SiteGround knows example.com; the stub replaces the siteground function, which would win over a stub on PATH.
-  stub siteground-stub 'case "$1" in site:ssh) echo "ssh -p 18765 u1-abc@c1.sgvps.net" ;; *) exit 0 ;; esac'
+  echo 8.4 > "$TEST_TMP/site-php"
+  stub siteground-stub 'case "$1" in
+    site:ssh) echo "ssh -p 18765 u1-abc@c1.sgvps.net" ;;
+    site:info) [ -s "$TEST_TMP/site-php" ] && printf "example.com (1) on Acct / 1.2.3.4, status active\n  PHP        PHP %s\n  Memcached  off\n" "$(cat "$TEST_TMP/site-php")" ;;
+    *) exit 0 ;;
+  esac'
   export GITOPS_SITEGROUND=siteground-stub
   stub ssh-keygen 'f=""; while [ $# -gt 0 ]; do [ "$1" = "-f" ] && f="$2"; shift; done
     echo "PRIVATE-KEY-BODY" > "$f"; echo "ssh-ed25519 AAAATEST gitops" > "$f.pub"'
@@ -202,12 +207,14 @@ php_too_old() {
     *"grep -qF"*) exit 1 ;;
   esac'
   echo "PHP 8.1.9 (cli)" > "$TEST_TMP/server-php"
+  echo 8.1 > "$TEST_TMP/site-php"
 }
 
 @test "gitops setup warns when the default server PHP is too old and offers siteground" {
   php_too_old
   run_cli gitops setup <<< $'example.com\ny\n8.3\nn\n'
-  assert_output_contains "Server PHP is 8.1, the project needs >= 8.3"
+  assert_output_contains "SiteGround PHP for example.com: 8.1"
+  assert_output_contains "PHP is older than the 8.3 the project needs"
   assert_stub_called "^siteground-stub site:php example.com --php 8.3"
 }
 
@@ -220,8 +227,9 @@ php_too_old() {
 
 @test "gitops setup is quiet about PHP when the default version is new enough" {
   run_cli gitops setup <<< "$(wizard_answers 1)"
-  assert_output_contains "Server PHP 8.4"
-  refute_output_contains "needs >="
+  assert_output_contains "SiteGround PHP for example.com: 8.4"
+  assert_output_contains "Server php (cli, used by Deployer): 8.4"
+  refute_output_contains "older than"
 }
 
 # A project with the files written by the wizard, a bare origin and the answers up to the publish step.
@@ -275,7 +283,7 @@ make_tests() {
 
 @test "gitops tests writes the tests workflow when you want them in GitHub Actions" {
   make_tests
-  run_cli gitops tests <<< $'n\ny\n8.4\n'
+  run_cli gitops tests <<< $'n\ny\ny\nexample.com\n'
   [ "$status" -eq 0 ]
   assert_output_contains "1 test files (PHPUnit), run with: php artisan test"
   grep -q "branches: \[develop\]" .github/workflows/tests.yml
@@ -290,7 +298,7 @@ make_tests() {
   make_tests
   echo '{"require":{"laravel/framework":"^12.0"},"scripts":{"test":"phpunit"}}' > composer.json
   echo '{"scripts":{"build":"vite build"}}' > package.json
-  run_cli gitops tests <<< $'n\ny\n8.4\n'
+  run_cli gitops tests <<< $'n\ny\ny\nexample.com\n'
   grep -q "run: composer test" .github/workflows/tests.yml
   grep -q "node-version: 24" .github/workflows/tests.yml
   grep -q "npm run build" .github/workflows/tests.yml
@@ -300,7 +308,7 @@ make_tests() {
   make_tests
   mkdir -p .github/workflows
   printf 'name: Deploy\non:\n  push:\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n' > .github/workflows/deploy-staging.yml
-  run_cli gitops tests <<< $'n\ny\n8.4\n'
+  run_cli gitops tests <<< $'n\ny\ny\nexample.com\n'
   grep -q "uses: ./.github/workflows/tests.yml" .github/workflows/deploy-staging.yml
   grep -q "needs: tests" .github/workflows/deploy-staging.yml
   # Running it again changes nothing.
@@ -312,7 +320,7 @@ make_tests() {
 
 @test "gitops tests leaves the workflows alone when declined" {
   make_tests
-  run_cli gitops tests <<< $'n\nn\n'
+  run_cli gitops tests <<< $'n\nn\nn\n'
   [ "$status" -eq 0 ]
   [ ! -f .github/workflows/tests.yml ]
   assert_output_contains "Add them later with: labelvier gitops tests"
@@ -329,8 +337,43 @@ make_tests() {
 
 @test "gitops setup walks through the tests step" {
   make_tests
-  run_cli gitops setup <<< "$(printf '%s\n' example.com "" y n y y 1 y n n)"
+  run_cli gitops setup <<< "$(printf '%s\n' example.com "" y n y y y 1 y n n)"
   [ "$status" -eq 0 ]
   [ -f .github/workflows/tests.yml ]
   grep -q "needs: tests" .github/workflows/deploy-staging.yml
+}
+
+@test "gitops tests takes the PHP version for CI from SiteGround" {
+  make_tests
+  echo 8.3 > "$TEST_TMP/site-php"
+  run_cli gitops tests <<< $'n\ny\ny\nexample.com\n'
+  assert_output_contains "PHP 8.3, as set on SiteGround for example.com"
+  assert_stub_called "^siteground-stub site:info example.com"
+  grep -q "php-version: '8.3'" .github/workflows/tests.yml
+}
+
+@test "gitops tests asks for the PHP version only when SiteGround does not tell" {
+  make_tests
+  : > "$TEST_TMP/site-php"
+  run_cli gitops tests <<< $'n\ny\ny\nexample.com\n8.2\n'
+  assert_output_contains "Could not read the PHP version from SiteGround"
+  grep -q "php-version: '8.2'" .github/workflows/tests.yml
+}
+
+@test "gitops tests only runs on PRs when you ask for it" {
+  make_tests
+  run_cli gitops tests <<< $'n\ny\nn\nexample.com\n'
+  grep -q "workflow_call" .github/workflows/tests.yml
+  ! grep -q "pull_request" .github/workflows/tests.yml
+  ! grep -q "#PR#" .github/workflows/tests.yml
+}
+
+@test "gitops tests can run on PRs without blocking the deploy" {
+  make_tests
+  mkdir -p .github/workflows
+  printf 'jobs:\n  deploy:\n    runs-on: ubuntu-latest\n' > .github/workflows/deploy-staging.yml
+  run_cli gitops tests <<< $'n\nn\ny\nexample.com\n'
+  grep -q "pull_request:" .github/workflows/tests.yml
+  grep -q "branches: \[develop\]" .github/workflows/tests.yml
+  ! grep -q "needs: tests" .github/workflows/deploy-staging.yml
 }
