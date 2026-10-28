@@ -77,6 +77,7 @@ wizard_answers() {
   grep -q "git@github.com:acme/shop.git" deploy.php
   grep -q "branches: \[develop\]" .github/workflows/deploy-staging.yml
   grep -q "php-version: '8.4'" .github/workflows/deploy-staging.yml
+  grep -q "node-version: 24" .github/workflows/deploy-staging.yml
   ! grep -rqE "__(APP|REPO_URL|PHP_BIN|PHP_VERSION|BASE_BRANCH)__" deploy.php .github/workflows/deploy-staging.yml
 }
 
