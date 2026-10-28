@@ -193,18 +193,39 @@ test("installLetsEncrypt(): POST /ssl-le with the domain id only (no 'generate' 
 
 // --- PHP -------------------------------------------------------------------------
 
-test('phpVersion() / setPhpVersion(): apache uservice settings; managed = empty settings; no apache throws', async (t) => {
+test('phpVersion() / setPhpVersion() on Ultrafast PHP: apache uservice settings; managed = empty settings', async (t) => {
 	const { st, calls } = client(t, { 'GET /uservice': [{ id: 11, type: 'apache', settings: { php_version: 83 } }], 'PUT /uservice/11': {} });
 	assert.equal(await st.phpVersion(), 83);
 	await st.setPhpVersion(82);
 	assert.deepEqual(calls.at(-1).body, { settings: { php_version: 82 } });
 	await st.setPhpVersion(null);
 	assert.deepEqual(calls.at(-1).body, { settings: {} });
+	assert.ok(calls.every((c) => c.method !== 'POST'), 'already Ultrafast: no switch');
 
 	const { st: st2 } = client(t, { 'GET /uservice': [{ id: 11, type: 'apache', settings: {} }] });
 	assert.equal(await st2.phpVersion(), null);
-	const { st: st3 } = client(t, { 'GET /uservice': [] });
-	await assert.rejects(st3.setPhpVersion(83), /No apache uservice found/);
+});
+
+test('standard PHP (no apache uservice): reads the main domain php_version, setting switches to Ultrafast first', async (t) => {
+	const domains = [{ id: 7, name: 'www.x.nl', main: 0, php_version: 81 }, { id: 5, name: 'x.nl', main: 1, php_version: 82 }];
+	let services = [{ id: 4, type: 'memcached' }];
+	const { st, calls } = client(t, {
+		'GET /uservice': () => jsonResponse({ status: 200, data: services }),
+		'GET /domain': domains,
+		'POST /uservice': () => {
+			services = [...services, { id: 12, type: 'apache', settings: {} }];
+			return jsonResponse({ status: 200, data: {} });
+		},
+		'PUT /uservice/12': {},
+	});
+	assert.equal(await st.phpVersion(), 82);
+	await st.setPhpVersion(84);
+	const writes = calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.endpoint, c.body]);
+	assert.deepEqual(writes, [['POST', '/uservice', { type: 'apache' }], ['PUT', '/uservice/12', { settings: { php_version: 84 } }]]);
+
+	const { st: st2 } = client(t, { 'GET /uservice': [], 'GET /domain': [{ id: 5, domain_type: 'main_domain', php_version: 0 }], 'POST /uservice': {} });
+	assert.equal(await st2.phpVersion(), null, '0 = managed');
+	await assert.rejects(st2.setPhpVersion(83), /Switching to Ultrafast PHP failed/);
 });
 
 // --- SSH / MySQL / cron payloads -----------------------------------------------------
@@ -236,6 +257,18 @@ test('Cron: create/update/delete payloads, day-of-week 7 is sent as 0', async (t
 	await st.deleteCronJob(4);
 	assert.equal(calls[2].method, 'DELETE');
 	assert.equal(calls[2].body, undefined);
+});
+
+test('WordPress: wordpressApps lists /wordpress, wpAutoLoginUrl PUTs auto_login=1 and returns the link', async (t) => {
+	const { st, calls } = client(t, {
+		'GET /wordpress': [{ id: 2, app: 'wordpress' }],
+		'PUT /wordpress/2?auto_login=1': { autologin_url: 'http://x.labelvier.dev/wp_auto_login_abc.php' },
+		'PUT /wordpress/3?auto_login=1': {},
+	});
+	assert.deepEqual(await st.wordpressApps(), [{ id: 2, app: 'wordpress' }]);
+	assert.equal(await st.wpAutoLoginUrl(2), 'http://x.labelvier.dev/wp_auto_login_abc.php');
+	assert.deepEqual(calls[1], { ...calls[1], method: 'PUT', endpoint: '/wordpress/2?auto_login=1', body: {} });
+	await assert.rejects(st.wpAutoLoginUrl(3), /No auto-login link returned for WordPress install 3/);
 });
 
 test('get() unwraps data; the list helpers hit their resources', async (t) => {

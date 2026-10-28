@@ -324,3 +324,14 @@ test('create-site --demo --dry-run: server details hidden, demo plan name shown'
 	assert.match(r.stderr, /✔ new\.labelvier\.dev points to the server\n/);
 	rmSync(sandbox, { recursive: true, force: true });
 });
+
+test('site:login: prints the one-time admin link when stdout is not a terminal, also from a URL', async () => {
+	const r = await run(['site:login', 'https://www.analytics.labelvier.dev/wp-admin/'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.equal(r.stdout, 'http://analytics.labelvier.dev/wp_auto_login_abc.php\n');
+	assert.match(r.stderr, /✔ 1 app\(s\) with an admin login/);
+	assert.doesNotMatch(r.stderr, /wp_auto_login/, 'the link never shows up in the progress output');
+	assert.deepEqual(requested().filter((c) => c.includes('/wordpress')), ['GET /wordpress', 'PUT /wordpress/3?auto_login=1']);
+	const missing = await run(['site:login'], { env: loggedIn() });
+	assert.equal(missing.stderr, 'Error: Domain is required, e.g. labelvier siteground site:info example.com\n');
+});
