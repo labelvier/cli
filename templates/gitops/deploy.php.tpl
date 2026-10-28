@@ -52,11 +52,10 @@ set('keep_releases', 5);
 // SiteGround shared hosting: the SSH user owns the files, there is no separate web user.
 set('writable_mode', 'chmod');
 
-// Pin the PHP version of the host (Site Tools -> PHP Manager); the default `php` may differ.
-set('bin/php', '__PHP_BIN__');
+// Uses the server's default `php` (Site Tools -> PHP Manager). `labelvier gitops` warns when it is too old.
 
-// `/usr/local/bin/composer` is a bash wrapper on SiteGround; run the phar with the pinned PHP.
-set('bin/composer', '{{bin/php}} -d memory_limit=-1 /usr/local/bin/composer.phar');
+// `/usr/local/bin/composer` is a bash wrapper on SiteGround; run the phar with the default PHP.
+set('bin/composer', 'php -d memory_limit=-1 /usr/local/bin/composer.phar');
 
 // public/.htaccess carries the host's PHP handler line, so it lives on the server.
 add('shared_files', ['public/.htaccess']);

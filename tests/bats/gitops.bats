@@ -17,10 +17,11 @@ setup() {
   stub scp
   stub ssh-keygen 'f=""; while [ $# -gt 0 ]; do [ "$1" = "-f" ] && f="$2"; shift; done
     echo "PRIVATE-KEY-BODY" > "$f"; echo "ssh-ed25519 AAAATEST gitops" > "$f.pub"'
-  # Server: logs in, has php84, does not know the key yet, has shared/.env and .htaccess,
+  # Server: logs in, default php is 8.4, does not know the key yet, has shared/.env and .htaccess,
   # carries over .env from the old layout and has public_html as a real directory.
   stub ssh 'case "$*" in
     "-G prod") printf "hostname c1.sgvps.net\nuser u1-abc\nport 18765\n" ;;
+    *"php -v"*) printf "PHP 8.4.2 (cli)\n" ;;
     *"grep -qF"*) exit 1 ;;
     *"[ -L "*) echo dir ;;
     *"cd ~/www/example.com/app"*) echo .env ;;
@@ -29,10 +30,10 @@ setup() {
 }
 teardown() { teardown_sandbox; }
 
-# Answers in prompt order: base branch, php version, composer require, ssh alias, domain, deploy path,
-# web root, authorize key, public_html choice, create github secrets, create staging branch.
+# Answers in prompt order: ssh alias, domain, deploy path, web root, base branch, composer require,
+# authorize key, public_html choice, create github secrets, create staging branch.
 wizard_answers() {
-  printf '%s\n' "" "" "y" "prod" "example.com" "" "" "y" "${1:-1}" "y" "n"
+  printf '%s\n' "prod" "example.com" "" "" "" "y" "y" "${1:-1}" "y" "n"
 }
 
 @test "gitops --help and subcommand help print the documentation" {
@@ -59,10 +60,10 @@ wizard_answers() {
 }
 
 @test "gitops scaffold writes deploy.php and the workflow with the placeholders filled in" {
-  run_cli gitops scaffold <<< $'\n\nn\n'
+  run_cli gitops scaffold <<< $'\n8.4\nn\n'
   [ "$status" -eq 0 ]
   grep -q "set('application', 'shop')" deploy.php
-  grep -q "/usr/local/bin/php84" deploy.php
+  ! grep -q "bin/php" deploy.php
   grep -q "git@github.com:acme/shop.git" deploy.php
   grep -q "branches: \[develop\]" .github/workflows/deploy-staging.yml
   grep -q "php-version: '8.4'" .github/workflows/deploy-staging.yml
@@ -79,14 +80,14 @@ wizard_answers() {
 }
 
 @test "gitops scaffold requires deployer when it is missing and the answer is yes" {
-  run_cli gitops scaffold <<< $'\n\ny\n'
+  run_cli gitops scaffold <<< $'\n8.4\ny\n'
   assert_stub_called '^composer require --dev deployer/deployer'
 }
 
 @test "gitops setup walks through the server, key, web root and GitHub" {
   run_cli gitops <<< "$(wizard_answers 1)"
   [ "$status" -eq 0 ]
-  assert_output_contains "Step 6/6"
+  assert_output_contains "Step 7/7"
   # Deploy key: created outside the project, 600 for the private part, authorized on the server.
   [ -f "$TEST_TMP/state/acme_shop-staging" ]
   [ "$(file_mode "$TEST_TMP/state")" = "700" ]
@@ -122,7 +123,7 @@ wizard_answers() {
 }
 
 @test "gitops setup deletes public_html when the domain is typed" {
-  run_cli gitops <<< $'\n\ny\nprod\nexample.com\n\n\ny\n2\nexample.com\ny\nn\n'
+  run_cli gitops <<< $'prod\nexample.com\n\n\n\ny\ny\n2\nexample.com\ny\nn\n'
   [ "$status" -eq 0 ]
   assert_stub_called "rm -rf ~/www/example.com/public_html"
 }
@@ -130,11 +131,12 @@ wizard_answers() {
 @test "gitops setup leaves a symlinked public_html alone" {
   stub ssh 'case "$*" in
     "-G prod") printf "hostname c1.sgvps.net\nuser u1-abc\nport 18765\n" ;;
+    *"php -v"*) printf "PHP 8.4.2 (cli)\n" ;;
     *"grep -qF"*) exit 1 ;;
     *"[ -L "*) echo link ;;
     *readlink*) echo /home/u1-abc/www/example.com/app/current/public ;;
   esac'
-  run_cli gitops <<< $'\n\ny\nprod\nexample.com\n\n\ny\ny\nn\n'
+  run_cli gitops <<< $'prod\nexample.com\n\n\n\ny\ny\ny\nn\n'
   [ "$status" -eq 0 ]
   assert_output_contains "already a symlink"
   refute_stub_called "mv "
@@ -142,7 +144,7 @@ wizard_answers() {
 
 @test "gitops setup stops when the server login fails" {
   stub ssh 'case "$*" in "-G prod") echo "hostname h" ;; *) exit 255 ;; esac'
-  run_cli gitops <<< $'\n\ny\nprod\n'
+  run_cli gitops <<< $'prod\n'
   [ "$status" -eq 1 ]
   assert_output_contains "Cannot log in as 'prod'"
   refute_stub_called "^gh secret set"
@@ -154,4 +156,37 @@ wizard_answers() {
   assert_output_contains "no deploy key yet"
   assert_output_contains "secret DEPLOY_STAGING_PORT"
   assert_output_contains "secret DEPLOY_STAGING_SSH_KEY missing"
+}
+
+# Project that needs PHP 8.3 on a server whose default php is 8.1.
+php_too_old() {
+  echo '{"require":{"php":"^8.3","laravel/framework":"^12.0"}}' > composer.json
+  stub siteground-stub
+  export GITOPS_SITEGROUND=siteground-stub
+  stub ssh 'case "$*" in
+    "-G prod") printf "hostname c1.sgvps.net\nuser u1-abc\nport 18765\n" ;;
+    *"php -v"*) cat "$TEST_TMP/server-php" ;;
+    *"grep -qF"*) exit 1 ;;
+  esac'
+  echo "PHP 8.1.9 (cli)" > "$TEST_TMP/server-php"
+}
+
+@test "gitops setup warns when the default server PHP is too old and offers siteground" {
+  php_too_old
+  run_cli gitops <<< $'prod\nexample.com\n\n\ny\n8.3\nn\n'
+  assert_output_contains "Server PHP is 8.1, the project needs >= 8.3"
+  assert_stub_called "^siteground-stub site:php example.com --php 8.3"
+}
+
+@test "gitops setup leaves PHP alone when the update is declined" {
+  php_too_old
+  run_cli gitops <<< $'prod\nexample.com\n\n\nn\n\nn\n'
+  assert_output_contains "Fix it in Site Tools"
+  refute_stub_called "^siteground-stub"
+}
+
+@test "gitops setup is quiet about PHP when the default version is new enough" {
+  run_cli gitops <<< "$(wizard_answers 1)"
+  assert_output_contains "Server PHP 8.4"
+  refute_output_contains "needs >="
 }

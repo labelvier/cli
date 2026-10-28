@@ -14,7 +14,7 @@ gitops() (
 
   # Answers collected by the wizard, shared by its steps.
   local repo="" repo_url="" ssh_alias="" host="" user="" port="" domain=""
-  local deploy_path="" public_path="" php_bin="" php_version="" base_branch="" key_file=""
+  local deploy_path="" public_path="" php_version="" base_branch="" key_file=""
 
   # Runs the command. Unlike the other commands, a bare `labelvier gitops`
   # runs the wizard instead of printing the docs. Subcommands and --help still
@@ -36,23 +36,26 @@ gitops() (
 
     _step 1 "Project"
     _preflight || return 1
-    _scaffold_files || return 1
 
     _step 2 "Server"
     _pick_server || return 1
     _pick_paths || return 1
+    _check_php || return 1
 
-    _step 3 "Deploy key"
+    _step 3 "Project files"
+    _scaffold_files || return 1
+
+    _step 4 "Deploy key"
     _deploy_key || return 1
 
-    _step 4 "Server layout"
+    _step 5 "Server layout"
     _prepare_server || return 1
     _webroot || return 1
 
-    _step 5 "GitHub"
+    _step 6 "GitHub"
     _github || return 1
 
-    _step 6 "First deploy"
+    _step 7 "First deploy"
     _first_deploy
   }
 
@@ -104,7 +107,7 @@ gitops() (
 
   function _step() {
     echo
-    echo -e "${__bold}${__blue}Step $1/6 · $2${__reset}"
+    echo -e "${__bold}${__blue}Step $1/7 · $2${__reset}"
   }
   function _ok() { echo -e "  ${__green}✓${__reset} $1"; }
   function _warn() { echo -e "  ${__red}!${__reset} $1"; }
@@ -188,17 +191,14 @@ gitops() (
 
   # Write deploy.php and the workflow from the templates; never overwrite.
   function _scaffold_files() {
-    local app php_default
-    app=$(basename "$repo")
     base_branch="${base_branch:-$(_default_base_branch)}"
-    php_default="${php_version:-8.4}"
 
     if [ -f deploy.php ] && [ -f ".github/workflows/deploy-$stage.yml" ]; then
       _ok "deploy.php and the workflow already exist"
     else
       base_branch=$(_ask "Branch whose merges get deployed" "$base_branch")
-      php_version=$(_ask "PHP version on the server (and in CI)" "$php_default")
-      php_bin="/usr/local/bin/php$(echo "$php_version" | tr -d '.')"
+      # CI runs the same PHP as the server; the wizard read it in step 2.
+      php_version="${php_version:-$(_ask "PHP version for CI" "8.4")}"
       mkdir -p .github/workflows
       _render "$templates_dir/deploy.php.tpl" deploy.php
       _render "$templates_dir/deploy-staging.yml.tpl" ".github/workflows/deploy-$stage.yml"
@@ -226,7 +226,6 @@ gitops() (
     fi
     sed -e "s#__APP__#$(basename "$repo")#g" \
       -e "s#__REPO_URL__#$repo_url#g" \
-      -e "s#__PHP_BIN__#$php_bin#g" \
       -e "s#__PHP_VERSION__#$php_version#g" \
       -e "s#__BASE_BRANCH__#$base_branch#g" \
       "$from" >"$to"
@@ -272,16 +271,61 @@ gitops() (
     fi
     deploy_path=$(_home_path "$(_ask "Deploy path on the server (releases/, shared/ and current end up here)" "www/$domain/app")")
     public_path=$(_home_path "$(_ask "Web root symlink (SiteGround public_html)" "www/$domain/public_html")")
+  }
 
-    local php_check="${php_bin:-/usr/local/bin/php$(echo "${php_version:-8.4}" | tr -d '.')}"
-    if _remote "test -x $php_check"; then
-      _ok "$php_check exists on the server"
+  # The server's default `php` is what Deployer uses. Warn when it is older than the project needs
+  # and offer to change it with `labelvier siteground site:php`.
+  function _check_php() {
+    local required installed
+    required=$(_required_php)
+    installed=$(_server_php)
+    if [ -z "$installed" ]; then
+      _warn "Could not read the PHP version on the server (php -v)."
+      return 0
+    fi
+    php_version="$installed"
+    if [ -z "$required" ] || _version_gte "$installed" "$required"; then
+      _ok "Server PHP $installed${required:+ (project needs >= $required)}"
+      return 0
+    fi
+
+    _warn "Server PHP is $installed, the project needs >= $required. Composer would fail on the server."
+    if ! _yes "Change the PHP version of $domain with 'labelvier siteground site:php' now?"; then
+      _warn "Left as is. Fix it in Site Tools → Devs → PHP Manager before the first deploy."
+      return 0
+    fi
+    local wanted
+    wanted=$(_ask "PHP version to set" "$required")
+    # GITOPS_SITEGROUND swaps in another command (the tests stub it, a function would win over a stub on PATH).
+    ${GITOPS_SITEGROUND:-siteground} site:php "$domain" --php "$wanted" || {
+      _fail "Changing the PHP version failed."
+      return 1
+    }
+    installed=$(_server_php)
+    if [ -n "$installed" ] && _version_gte "$installed" "$required"; then
+      php_version="$installed"
+      _ok "Server PHP is now $installed"
     else
-      _warn "$php_check not found on the server; set 'bin/php' in deploy.php to the right binary"
+      _warn "The server still reports PHP ${installed:-unknown}; check Site Tools → Devs → PHP Manager."
     fi
   }
 
-  # ---------------------------------------------------------------- step 3
+  # Major.minor of the default php on the server, empty when it cannot be read.
+  function _server_php() {
+    _remote "php -v" 2>/dev/null | head -n 1 | sed -n 's/^PHP \([0-9]*\.[0-9]*\).*/\1/p'
+  }
+
+  # Lowest major.minor that composer.json's "require.php" allows, empty when not set.
+  function _required_php() {
+    sed -n 's/.*"php"[[:space:]]*:[[:space:]]*"[^0-9]*\([0-9]*\.[0-9]*\).*/\1/p' composer.json | head -n 1
+  }
+
+  # Succeeds when major.minor $1 is at least $2.
+  function _version_gte() {
+    awk -v a="$1" -v b="$2" 'BEGIN { split(a, x, "."); split(b, y, "."); exit !((x[1] * 1000 + x[2]) >= (y[1] * 1000 + y[2])) }'
+  }
+
+  # ---------------------------------------------------------------- step 4
 
   function _deploy_key() {
     key_file=$(_key_path)
@@ -317,7 +361,7 @@ gitops() (
     fi
   }
 
-  # ---------------------------------------------------------------- step 4
+  # ---------------------------------------------------------------- step 5
 
   # shared/ holds what must survive releases: .env, storage and the host's .htaccess.
   function _prepare_server() {
@@ -393,7 +437,7 @@ gitops() (
     esac
   }
 
-  # ---------------------------------------------------------------- step 5
+  # ---------------------------------------------------------------- step 6
 
   function _github() {
     echo "  Environment '$stage' in $repo gets these secrets (names only, values never printed):"
@@ -425,7 +469,7 @@ gitops() (
     fi
   }
 
-  # ---------------------------------------------------------------- step 6
+  # ---------------------------------------------------------------- step 7
 
   # A workflow_dispatch only works once the workflow is on the default branch, so deploy from here once.
   function _first_deploy() {
