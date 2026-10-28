@@ -25,7 +25,7 @@ setup() {
     *"php -v"*) printf "PHP 8.4.2 (cli)\n" ;;
     *"grep -qF"*) exit 1 ;;
     *"[ -L "*) echo dir ;;
-    *"cd ~/www/example.com/app"*) echo .env ;;
+    *"cd ~/www/example.com"*) echo .env ;;
   esac'
   export GITOPS_STATE_DIR="$TEST_TMP/state"
 }
@@ -95,7 +95,7 @@ wizard_answers() {
   assert_stub_called "authorized_keys"
   assert_stub_called "-p 18765 -i $TEST_TMP/state/acme_shop-staging -o IdentitiesOnly=yes u1-abc@c1.sgvps.net true"
   # Server layout: shared/ prepared, old .env carried over, existing public_html moved aside, never deleted.
-  assert_stub_called "mkdir -p ~/www/example.com/app/shared/public"
+  assert_stub_called "mkdir -p ~/www/example.com/shared/public"
   assert_stub_called "mv ~/www/example.com/public_html ~/www/example.com/public_html.bak-"
   refute_stub_called "rm -rf"
   # GitHub: environment and the five secrets, scoped to the environment.
@@ -103,7 +103,7 @@ wizard_answers() {
   assert_stub_called "^gh secret set DEPLOY_STAGING_HOSTNAME --env staging --repo acme/shop --body c1.sgvps.net"
   assert_stub_called "^gh secret set DEPLOY_STAGING_USER --env staging --repo acme/shop --body u1-abc"
   assert_stub_called "^gh secret set DEPLOY_STAGING_PORT --env staging --repo acme/shop --body 18765"
-  assert_stub_called "^gh secret set DEPLOY_STAGING_PATH --env staging --repo acme/shop --body ~/www/example.com/app"
+  assert_stub_called "^gh secret set DEPLOY_STAGING_PATH --env staging --repo acme/shop --body ~/www/example.com"
   assert_stub_called "^gh secret set DEPLOY_STAGING_SSH_KEY --env staging --repo acme/shop"
 }
 

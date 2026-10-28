@@ -31,10 +31,10 @@ gitops() (
   # @description Wizard: set up GitOps for a Laravel project on SiteGround (deploy key, server, public_html symlink, GitHub secrets, first deploy). Runs when no subcommand is given.
   function setup() {
     echo -e "${__bold}Label Vier GitOps setup${__reset}"
-    echo "Push to ${__bold}develop${__reset} and GitHub puts it on ${__bold}staging${__reset} for you: no more deploying by hand."
+    echo -e "Push to ${__red}develop${__reset} and GitHub puts it on ${__red}staging${__reset} for you: no more deploying by hand."
     echo
     echo "What this wizard does:"
-    echo "  · GitHub deploys to staging every time something changes on develop or staging."
+    echo -e "  · GitHub deploys to staging every time something changes on ${__red}develop${__reset} or ${__red}staging${__reset}."
     echo "  · Passwords and keys are set once, in the right places, so they stay safe:"
     echo "      - the deploy key goes into GitHub as an encrypted secret,"
     echo "      - the app .env stays on the server and never touches GitHub."
@@ -283,7 +283,7 @@ gitops() (
   }
 
   function _pick_paths() {
-    deploy_path=$(_home_path "$(_ask "Deploy path on the server (releases/, shared/ and current end up here)" "www/$domain/app")")
+    deploy_path=$(_home_path "$(_ask "Deploy path on the server (releases/, shared/ and current end up here)" "www/$domain")")
     public_path=$(_home_path "$(_ask "Web root symlink (SiteGround public_html)" "www/$domain/public_html")")
   }
 
@@ -381,13 +381,15 @@ gitops() (
   function _prepare_server() {
     _remote "mkdir -p $deploy_path/shared/public" || return 1
 
-    # First setup of an existing rsync-style install: carry over its state.
+    # First setup of an existing rsync-style install (state in the deploy path or in an app/ folder): carry it over.
     local moved
     moved=$(_remote "
       cd $deploy_path || exit 1
-      [ -f .env ] && [ ! -f shared/.env ] && cp .env shared/.env && echo .env
-      [ -d storage ] && [ ! -d shared/storage ] && cp -a storage shared/storage && echo storage
-      [ -f public/.htaccess ] && [ ! -f shared/public/.htaccess ] && cp public/.htaccess shared/public/.htaccess && echo .htaccess
+      for old in . app; do
+        [ -f \$old/.env ] && [ ! -f shared/.env ] && cp \$old/.env shared/.env && echo .env
+        [ -d \$old/storage ] && [ ! -d shared/storage ] && cp -a \$old/storage shared/storage && echo storage
+        [ -f \$old/public/.htaccess ] && [ ! -f shared/public/.htaccess ] && cp \$old/public/.htaccess shared/public/.htaccess && echo .htaccess
+      done
       true")
     [ -n "$moved" ] && _ok "Copied into shared/: $(echo "$moved" | tr '\n' ' ')"
 
