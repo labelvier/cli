@@ -16,19 +16,13 @@ gitops() (
   local repo="" repo_url="" host="" user="" port="" domain=""
   local deploy_path="" public_path="" php_version="" base_branch="" key_file=""
 
-  # Runs the command. Unlike the other commands, a bare `labelvier gitops`
-  # runs the wizard instead of printing the docs. Subcommands and --help still
-  # go through _dispatch.
+  # Runs the command.
   function main() {
-    if [ $# -eq 0 ]; then
-      setup
-    else
-      _dispatch "$filename" "$@"
-    fi
+    _dispatch "$filename" "$@"
   }
 
   # @function setup
-  # @description Wizard: set up GitOps for a Laravel project on SiteGround (deploy key, server, public_html symlink, GitHub secrets, first deploy). Runs when no subcommand is given.
+  # @description Wizard: set up GitOps for a Laravel project on SiteGround (deploy key, server, public_html symlink, GitHub secrets, first deploy).
   function setup() {
     echo -e "${__bold}Label Vier GitOps setup${__reset}"
     echo -e "Push to ${__red}develop${__reset} and GitHub puts it on ${__red}staging${__reset} for you: no more deploying by hand."
@@ -455,7 +449,7 @@ gitops() (
     echo "  Environment '$stage' in $repo gets these secrets (names only, values never printed):"
     echo "    DEPLOY_STAGING_SSH_KEY, _HOSTNAME, _USER, _PORT, _PATH"
     if ! _yes "Create the environment and set the secrets?"; then
-      _warn "Skipped. Set them yourself or re-run: labelvier gitops"
+      _warn "Skipped. Set them yourself or re-run: labelvier gitops setup"
       return 0
     fi
 
@@ -497,7 +491,7 @@ gitops() (
     DEPLOY_STAGING_HOSTNAME="$host" DEPLOY_STAGING_USER="$user" DEPLOY_STAGING_PORT="$port" \
       DEPLOY_STAGING_PATH="$deploy_path" DEPLOY_STAGING_PUBLIC_PATH="$public_path" \
       DEPLOY_STAGING_KEY_FILE="$key_file" vendor/bin/dep deploy "$stage" -v || {
-      _fail "Deploy failed. Fix the error above and run: labelvier gitops"
+      _fail "Deploy failed. Fix the error above and run: labelvier gitops setup"
       return 1
     }
     echo

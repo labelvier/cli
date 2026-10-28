@@ -37,6 +37,15 @@ wizard_answers() {
   printf '%s\n' "example.com" "" "y" "y" "${1:-1}" "y" "n" "n"
 }
 
+@test "bare gitops prints the documentation and does not start the wizard" {
+  run_cli gitops
+  [ "$status" -eq 0 ]
+  assert_output_contains "setup - Wizard"
+  assert_output_contains "status - Show what is in place"
+  refute_output_contains "Step 1/8"
+  [ -z "$(stub_calls)" ]
+}
+
 @test "gitops --help and subcommand help print the documentation" {
   run_cli gitops --help
   assert_output_contains "setup - Wizard"
@@ -86,7 +95,7 @@ wizard_answers() {
 }
 
 @test "gitops setup walks through the server, key, web root and GitHub" {
-  run_cli gitops <<< "$(wizard_answers 1)"
+  run_cli gitops setup <<< "$(wizard_answers 1)"
   [ "$status" -eq 0 ]
   assert_output_contains "Step 8/8"
   # Deploy key: created outside the project, 600 for the private part, authorized on the server.
@@ -108,7 +117,7 @@ wizard_answers() {
 }
 
 @test "gitops setup never prints the private key or sends an .env to GitHub" {
-  run_cli gitops <<< "$(wizard_answers 1)"
+  run_cli gitops setup <<< "$(wizard_answers 1)"
   refute_output_contains "PRIVATE-KEY-BODY"
   refute_stub_called "PRIVATE-KEY-BODY"
   refute_stub_called "^gh secret set .*ENV"
@@ -116,7 +125,7 @@ wizard_answers() {
 }
 
 @test "gitops setup deletes public_html only after the domain is typed" {
-  run_cli gitops <<< "$(wizard_answers 2)"
+  run_cli gitops setup <<< "$(wizard_answers 2)"
   [ "$status" -ne 0 ]
   assert_output_contains "Not confirmed, nothing deleted"
   refute_stub_called "rm -rf"
@@ -124,7 +133,7 @@ wizard_answers() {
 }
 
 @test "gitops setup deletes public_html when the domain is typed" {
-  run_cli gitops <<< $'example.com\n\ny\ny\n2\nexample.com\ny\nn\nn\n'
+  run_cli gitops setup <<< $'example.com\n\ny\ny\n2\nexample.com\ny\nn\nn\n'
   [ "$status" -eq 0 ]
   assert_stub_called "rm -rf ~/www/example.com/public_html"
 }
@@ -136,7 +145,7 @@ wizard_answers() {
     *"[ -L "*) echo link ;;
     *readlink*) echo /home/u1-abc/www/example.com/app/current/public ;;
   esac'
-  run_cli gitops <<< $'example.com\n\ny\ny\ny\nn\nn\n'
+  run_cli gitops setup <<< $'example.com\n\ny\ny\ny\nn\nn\n'
   [ "$status" -eq 0 ]
   assert_output_contains "already a symlink"
   refute_stub_called "mv "
@@ -144,7 +153,7 @@ wizard_answers() {
 
 @test "gitops setup stops when SiteGround does not know the domain" {
   stub siteground-stub 'exit 1'
-  run_cli gitops <<< $'nope.example\n'
+  run_cli gitops setup <<< $'nope.example\n'
   [ "$status" -eq 1 ]
   assert_output_contains "SiteGround does not know 'nope.example'"
   refute_stub_called "^ssh"
@@ -152,7 +161,7 @@ wizard_answers() {
 }
 
 @test "gitops setup uses the SiteGround host and checks your own key" {
-  run_cli gitops <<< "$(wizard_answers 1)"
+  run_cli gitops setup <<< "$(wizard_answers 1)"
   assert_output_contains "example.com found in SiteGround: u1-abc@c1.sgvps.net:18765"
   assert_output_contains "Your own SSH key can log in"
   assert_stub_called "^siteground-stub site:ssh example.com"
@@ -161,7 +170,7 @@ wizard_answers() {
 
 @test "gitops setup offers to authorize your key when the login fails" {
   stub ssh 'exit 255'
-  run_cli gitops <<< $'example.com\ny\n'
+  run_cli gitops setup <<< $'example.com\ny\n'
   [ "$status" -eq 1 ]
   assert_output_contains "Your own SSH key cannot log in yet"
   assert_stub_called "^siteground-stub site:ssh-key example.com"
@@ -171,7 +180,7 @@ wizard_answers() {
 
 @test "gitops setup stops when authorizing your key is declined" {
   stub ssh 'exit 255'
-  run_cli gitops <<< $'example.com\nn\n'
+  run_cli gitops setup <<< $'example.com\nn\n'
   [ "$status" -eq 1 ]
   refute_stub_called "site:ssh-key"
 }
@@ -196,20 +205,20 @@ php_too_old() {
 
 @test "gitops setup warns when the default server PHP is too old and offers siteground" {
   php_too_old
-  run_cli gitops <<< $'example.com\ny\n8.3\nn\n'
+  run_cli gitops setup <<< $'example.com\ny\n8.3\nn\n'
   assert_output_contains "Server PHP is 8.1, the project needs >= 8.3"
   assert_stub_called "^siteground-stub site:php example.com --php 8.3"
 }
 
 @test "gitops setup leaves PHP alone when the update is declined" {
   php_too_old
-  run_cli gitops <<< $'example.com\nn\n\nn\n'
+  run_cli gitops setup <<< $'example.com\nn\n\nn\n'
   assert_output_contains "Fix it in Site Tools"
   refute_stub_called "site:php"
 }
 
 @test "gitops setup is quiet about PHP when the default version is new enough" {
-  run_cli gitops <<< "$(wizard_answers 1)"
+  run_cli gitops setup <<< "$(wizard_answers 1)"
   assert_output_contains "Server PHP 8.4"
   refute_output_contains "needs >="
 }
@@ -224,7 +233,7 @@ publish_setup() {
 @test "gitops setup commits the files and pushes to the base branch when asked" {
   publish_setup
   git checkout -q develop
-  run_cli gitops <<< "$(printf '%s\n' example.com "" y y 1 y n y y)"
+  run_cli gitops setup <<< "$(printf '%s\n' example.com "" y y 1 y n y y)"
   [ "$status" -eq 0 ]
   assert_output_contains "Step 8/8 · Activate GitOps"
   [ "$(git log -1 --format=%s)" = "ci: deploy staging with Deployer via GitHub Actions" ]
@@ -235,7 +244,7 @@ publish_setup() {
 @test "gitops setup pushes a feature branch to the base branch only as a fast-forward" {
   publish_setup
   git checkout -q -b feature/x
-  run_cli gitops <<< "$(printf '%s\n' example.com "" y y 1 y n y y)"
+  run_cli gitops setup <<< "$(printf '%s\n' example.com "" y y 1 y n y y)"
   [ "$status" -eq 0 ]
   [ "$(git rev-parse feature/x)" = "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
 }
@@ -243,7 +252,7 @@ publish_setup() {
 @test "gitops setup leaves everything unpushed when the push is declined" {
   publish_setup
   git checkout -q develop
-  run_cli gitops <<< "$(printf '%s\n' example.com "" y y 1 y n y n)"
+  run_cli gitops setup <<< "$(printf '%s\n' example.com "" y y 1 y n y n)"
   assert_output_contains "Not pushed"
   [ "$(git rev-parse develop)" != "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
 }

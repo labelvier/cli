@@ -85,12 +85,12 @@ labelvier starterkit install
 
 ### GitOps (Laravel on SiteGround)
 
-`labelvier gitops` walks you through GitOps for a Laravel project: every PR
+`labelvier gitops setup` walks you through GitOps for a Laravel project: every PR
 merged into the base branch is merged into `staging` and deployed with Deployer
 by GitHub Actions. Run it from the project:
 
 ```sh
-labelvier gitops           # wizard: project files, server, deploy key, public_html symlink, GitHub secrets, first deploy
+labelvier gitops setup     # wizard: project files, server, deploy key, public_html symlink, GitHub secrets, first deploy
 labelvier gitops status    # what is in place and what is missing
 labelvier gitops scaffold  # only write deploy.php and the workflow
 ```
