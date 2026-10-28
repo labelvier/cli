@@ -47,6 +47,10 @@ import {
 	parseCronSchedule,
 	cronSchedule,
 	addCronJob,
+	domainFromUrl,
+	loginApps,
+	adminLoginUrl,
+	openInBrowser,
 } from './actions.js';
 
 const HELP = `Usage: labelvier siteground <command> [options]
@@ -87,6 +91,8 @@ Site Tools (existing site)
                                              Authorize a public key (default ~/.ssh/id_ed25519.pub)
                                              and add a Host alias to ~/.ssh/config (via labelvier ssh alias)
   site:ssh <domain>                          Print the ssh command
+  site:login <domain|url> [--print]          Log in to the admin panel (WordPress) in the browser with a
+                                             one-time link; --print prints the link instead of opening it
   site:db <domain> [--db <label>]            Create MySQL database + user with all privileges
   site:cron <domain>                         List cron jobs
   site:cron <domain> --add "<command>" [--at "<min hour day mon dow>"]
@@ -123,6 +129,7 @@ const { positionals, values } = parseArgs({
 		days: { type: 'string' },
 		top: { type: 'string' },
 		sort: { type: 'string' },
+		print: { type: 'boolean' }, // site:login: print the link instead of opening it
 		forget: { type: 'boolean' }, // logout: also remove the stored credentials
 		help: { type: 'boolean', short: 'h' },
 	},
@@ -551,6 +558,22 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 	async 'site:ssh'(sg, [domain]) {
 		const { st } = await siteToolsFor(sg, domain);
 		console.log(await task('Getting SSH details…', () => sshCommand(st), { done: 'SSH details fetched' }));
+	},
+
+	/** Log in to the admin panel of a site; takes a domain or a URL on it (https://www.x.nl/wp-admin). */
+	async 'site:login'(sg, [input]) {
+		const domain = input && domainFromUrl(input);
+		const { st } = await siteToolsFor(sg, domain);
+		const apps = await task('Getting installed apps…', () => loginApps(st, domain), { done: (a) => `${a.length} app(s) with an admin login` });
+		if (!apps.length) throw new Error(`No WordPress install found on ${domain}`);
+		const app = apps.length > 1 && interactive
+			? await select('Log in to:', apps.map((a) => ({ label: `${a.app_url}${a.is_staging ? '  (staging)' : ''}`, value: a })))
+			: apps[0];
+		const url = await task(`Creating login link for ${app.app_url}…`, () => adminLoginUrl(st, app), { done: 'Login link created (one-time)' });
+		// The link is a login: only on stdout when asked for or piped, never in the spinner text.
+		if (values.print || !process.stdout.isTTY) return console.log(url);
+		if (await openInBrowser(url)) return console.log(`Opened the admin panel of ${app.app_url} in the browser.`);
+		console.log(`Could not open a browser. One-time login link:\n${url}`);
 	},
 
 	async 'site:db'(sg, [domain]) {

@@ -27,6 +27,9 @@
 - [ ] Check the refresh-token lifetime after a login with "Stay logged in" (`npm run sg -- session:status`).
 - [x] Cron jobs: `site:cron` lists, adds (`--add`, `--at`) and deletes (`--remove`). Listing verified on
       `analytics.labelvier.dev`; adding and deleting not yet verified live.
+- [x] `site:login <domain|url>`: wp-admin via the Site Tools one-time auto-login link (`--print` prints it).
+      Verified live on `chat.labelvier.dev` (2026-10-28).
+- [ ] `site:login` for Laravel: add an entry to `LOGIN_APPS` (src/actions.js) once we know how to get a login link.
 - [ ] More Site Tools options when needed: staging, backups, redirects, email.
 - [ ] `delete-site` (endpoints known: `GET /sites/{id}/delete`, `DELETE /sites/{id}`), only with explicit confirm.
 - [ ] Tests for the payload builders (no network).

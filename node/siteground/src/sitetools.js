@@ -208,6 +208,23 @@ export class SiteToolsClient {
 		return this.post('/db-mysql_grant', { db_id: dbId, dbuser_id: dbUserId, grants: { all: 1 } });
 	}
 
+	// --- WordPress ---------------------------------------------------------
+
+	/** Installed apps: [{ id, app: 'wordpress'|'woocommerce', app_url, admin_url, path, is_staging, … }]. */
+	wordpressApps() {
+		return this.get('/wordpress');
+	}
+
+	/**
+	 * One-time link that logs in to wp-admin (wp_auto_login_<hash>.php on the site). Same call as
+	 * "Log in to admin panel" in Site Tools. Treat the link as a secret: it is a login.
+	 */
+	async wpAutoLoginUrl(appId) {
+		const { data } = await this.request('PUT', `/wordpress/${appId}`, { body: {}, params: { auto_login: 1 } });
+		if (!data?.autologin_url) throw new Error(`No auto-login link returned for WordPress install ${appId}`);
+		return data.autologin_url;
+	}
+
 	// --- Cron --------------------------------------------------------------
 
 	/** Cron jobs: [{ id, cmd, min, hour, day, mon, dow }]. */

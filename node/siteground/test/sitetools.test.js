@@ -238,6 +238,18 @@ test('Cron: create/update/delete payloads, day-of-week 7 is sent as 0', async (t
 	assert.equal(calls[2].body, undefined);
 });
 
+test('WordPress: wordpressApps lists /wordpress, wpAutoLoginUrl PUTs auto_login=1 and returns the link', async (t) => {
+	const { st, calls } = client(t, {
+		'GET /wordpress': [{ id: 2, app: 'wordpress' }],
+		'PUT /wordpress/2?auto_login=1': { autologin_url: 'http://x.labelvier.dev/wp_auto_login_abc.php' },
+		'PUT /wordpress/3?auto_login=1': {},
+	});
+	assert.deepEqual(await st.wordpressApps(), [{ id: 2, app: 'wordpress' }]);
+	assert.equal(await st.wpAutoLoginUrl(2), 'http://x.labelvier.dev/wp_auto_login_abc.php');
+	assert.deepEqual(calls[1], { ...calls[1], method: 'PUT', endpoint: '/wordpress/2?auto_login=1', body: {} });
+	await assert.rejects(st.wpAutoLoginUrl(3), /No auto-login link returned for WordPress install 3/);
+});
+
 test('get() unwraps data; the list helpers hit their resources', async (t) => {
 	const routes = Object.fromEntries(['/ssl', '/ssh', '/db-mysql_db', '/db-mysql_user', '/db-mysql_grant', '/cron', '/php-version'].map((e) => [`GET ${e}`, [e]]));
 	const { st, calls } = client(t, routes);
