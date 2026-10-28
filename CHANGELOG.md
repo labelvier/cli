@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `labelvier gitops`: wizard that sets up GitOps for a Laravel project on SiteGround. It creates a deploy key, prepares the server (shared `.env`/storage, `public_html` symlink), sets the GitHub environment secrets, scaffolds `deploy.php` and the workflow, and runs the first deploy. Also `gitops scaffold` and `gitops status`.
+
 ## [1.2.1] - 2026-10-23
 
 ### Fixed
