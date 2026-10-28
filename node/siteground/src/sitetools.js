@@ -123,19 +123,35 @@ export class SiteToolsClient {
 		return this.get('/php-version');
 	}
 
-	/**
-	 * Current PHP version of the main domain. Sites run mod_php via the "apache" uservice;
-	 * no php_version in its settings means "managed" (SiteGround picks and upgrades it).
-	 */
-	async phpVersion() {
-		const apache = (await this.get('/uservice')).find((s) => s?.type === 'apache');
-		return apache?.settings?.php_version ?? null;
+	/** The "apache" uservice: present when the site runs Ultrafast PHP (mod_php), else null. */
+	async apacheService() {
+		return (await this.get('/uservice')).find((s) => s?.type === 'apache') || null;
 	}
 
-	/** versionId: e.g. 83, or null for managed. Same call the Site Tools UI makes for the main domain. */
+	/**
+	 * Current PHP version id of the main domain; null = "managed" (SiteGround picks and upgrades it).
+	 * Ultrafast PHP keeps it in the apache uservice settings; standard PHP on the main domain (GET /domain).
+	 */
+	async phpVersion() {
+		const apache = await this.apacheService();
+		if (apache) return apache.settings?.php_version ?? null;
+		const domains = await this.get('/domain');
+		const main = domains.find((d) => d.main === 1) || domains.find((d) => d.domain_type === 'main_domain');
+		return main?.php_version || null;
+	}
+
+	/**
+	 * versionId: e.g. 83, or null for managed. We always want Ultrafast PHP: a site on standard PHP is
+	 * switched first (POST /uservice {type: "apache"}, the "PHP Setup" switch in Site Tools), then the
+	 * version goes into the apache uservice settings (empty settings = managed).
+	 */
 	async setPhpVersion(versionId) {
-		const apache = (await this.get('/uservice')).find((s) => s?.type === 'apache');
-		if (!apache) throw new Error('No apache uservice found; per-domain PHP version is not supported yet');
+		let apache = await this.apacheService();
+		if (!apache) {
+			await this.post('/uservice', { type: 'apache' });
+			apache = await this.apacheService();
+			if (!apache) throw new Error('Switching to Ultrafast PHP failed: no apache uservice after creating it');
+		}
 		return this.put(`/uservice/${apache.id}`, { settings: versionId ? { php_version: versionId } : {} });
 	}
 

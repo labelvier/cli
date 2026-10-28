@@ -523,15 +523,15 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 
 	async 'site:php'(sg, [domain]) {
 		const { st } = await siteToolsFor(sg, domain);
-		const [versions, current] = await task('Getting PHP versions…', () => Promise.all([st.phpVersions(), st.phpVersion()]), {
-			done: ([v, c]) => `Current: ${phpLabel(v, c)}`,
+		const [versions, current, apache] = await task('Getting PHP versions…', () => Promise.all([st.phpVersions(), st.phpVersion(), st.apacheService()]), {
+			done: ([v, c, a]) => `Current: ${phpLabel(v, c)}${a ? '' : ' (standard PHP; setting a version switches to Ultrafast PHP)'}`,
 		});
 		let target;
 		if (values.php !== undefined) target = parsePhpVersion(values.php, versions);
 		else if (interactive) {
 			target = await askPhp(versions);
 		} else return;
-		if (target === current) return console.log('Unchanged.');
+		if (apache && target === current) return console.log('Unchanged.');
 		await task(`Setting ${phpLabel(versions, target)}…`, () => setPhpVersion(st, target), { done: (m) => m });
 	},
 
