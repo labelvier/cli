@@ -83,6 +83,22 @@ Run this from the folder where all your projects live:
 labelvier starterkit install
 ```
 
+### GitOps (Laravel on SiteGround)
+
+`labelvier gitops setup` walks you through GitOps for a Laravel project: every PR
+merged into the base branch is merged into `staging` and deployed with Deployer
+by GitHub Actions. Run it from the project:
+
+```sh
+labelvier gitops setup     # wizard: project files, server, deploy key, public_html symlink, GitHub secrets, first deploy
+labelvier gitops tests     # run the local tests in GitHub Actions too: before each deploy and/or on every opened or updated PR
+labelvier gitops status    # what is in place, whether the workflows are live on origin, and the state of the tests
+```
+
+The app `.env` stays on the server (`shared/.env`) and is never sent to GitHub;
+GitHub only gets the deploy key and the SSH target. An existing `public_html`
+directory is moved aside (or deleted after typing the domain), never silently.
+
 ### SiteGround
 
 `labelvier siteground` creates and configures SiteGround sites through the
