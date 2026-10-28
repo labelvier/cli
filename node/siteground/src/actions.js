@@ -56,6 +56,26 @@ export function describeAccount(a) {
 	return `${a.name.padEnd(22)} ${String(a.siteCount).padStart(3)} sites  ${disk.padEnd(34)} ${a.plan_description.replace(/\s+/g, ' ')}  ${a.server.location}`;
 }
 
+/**
+ * Disk usage of one site, from the stats of its hosting account (MB):
+ * { siteMb, accountMb, limitMb }, siteMb null when the account lists no figure for the site.
+ */
+export async function siteDiskUsage(sg, site) {
+	const disk = await sg.get(`/account/${site.account_id}/stats/disk`);
+	const entry = (disk.site_stats_responses || []).find((s) => String(s.id) === String(site.id) || s.domain === site.domain);
+	return { siteMb: entry ? entry.value : null, accountMb: disk.total, limitMb: disk.limit };
+}
+
+const formatMb = (mb) => (mb < 1024 ? `${Math.round(mb)} MB` : `${(mb / 1024).toFixed(1)} GB`);
+
+export function describeDiskUsage(disk) {
+	if (!disk) return 'unknown';
+	const hasLimit = disk.limitMb > 0;
+	const plan = hasLimit ? `plan ${formatMb(disk.accountMb)} of ${formatMb(disk.limitMb)}` : `plan ${formatMb(disk.accountMb)}`;
+	if (disk.siteMb == null) return `unknown (${plan})`;
+	return `${formatMb(disk.siteMb)} (${hasLimit ? `${Math.round((disk.siteMb / disk.limitMb) * 100)}% of plan; ` : ''}${plan})`;
+}
+
 export async function findSite(sg, domain) {
 	const site = (await sg.sites()).find((s) => s.domain === domain);
 	if (!site) throw new Error(`No site found for ${domain}`);

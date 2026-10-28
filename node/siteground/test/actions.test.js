@@ -11,6 +11,8 @@ import {
 	accountsOverview,
 	describeAccount,
 	findSite,
+	siteDiskUsage,
+	describeDiskUsage,
 	USAGE_METRICS,
 	siteUsage,
 	rankSites,
@@ -125,6 +127,31 @@ test('describeAccount(): one aligned line, whitespace in the plan description co
 	const [a, b] = await accountsOverview(fakeSg());
 	assert.equal(describeAccount(a), 'Develop - Hamerkop       2 sites  10/40 GB (25%), 30 GB free         GoGeek Dev  Amsterdam');
 	assert.equal(describeAccount(b), 'Basis - Albatros         1 sites  disk usage unknown                 GrowBig  Amsterdam');
+});
+
+test('siteDiskUsage(): the site figure from its plan disk stats, null when the site is not listed', async () => {
+	const sg = fakeSg({
+		get: async (p) => {
+			assert.equal(p, '/account/A1/stats/disk');
+			return { total: 10240, limit: 40960, site_stats_responses: [{ id: 'S1', domain: 'analytics.labelvier.dev', value: 1536 }] };
+		},
+	});
+	assert.deepEqual(await siteDiskUsage(sg, SITES[0]), { siteMb: 1536, accountMb: 10240, limitMb: 40960 });
+	assert.deepEqual(await siteDiskUsage(sg, SITES[1]), { siteMb: null, accountMb: 10240, limitMb: 40960 });
+	const numeric = fakeSg({ get: async () => ({ total: 1, limit: 2, site_stats_responses: [{ id: 1, domain: 'other.nl', value: 5 }] }) });
+	assert.equal((await siteDiskUsage(numeric, { ...SITES[0], id: '1' })).siteMb, 5);
+});
+
+test('describeDiskUsage(): MB below 1 GB, GB above, share of the plan limit', () => {
+	assert.equal(describeDiskUsage({ siteMb: 1536, accountMb: 10240, limitMb: 40960 }), '1.5 GB (4% of plan; plan 10.0 GB of 40.0 GB)');
+	assert.equal(describeDiskUsage({ siteMb: 199, accountMb: 10240, limitMb: 40960 }), '199 MB (0% of plan; plan 10.0 GB of 40.0 GB)');
+	assert.equal(describeDiskUsage({ siteMb: null, accountMb: 10240, limitMb: 40960 }), 'unknown (plan 10.0 GB of 40.0 GB)');
+	assert.equal(describeDiskUsage(null), 'unknown');
+});
+
+test('describeDiskUsage(): leaves out the percentage when the plan limit is missing or 0', () => {
+	assert.equal(describeDiskUsage({ siteMb: 1536, accountMb: 10240, limitMb: 0 }), '1.5 GB (plan 10.0 GB)');
+	assert.equal(describeDiskUsage({ siteMb: 1536, accountMb: 10240, limitMb: undefined }), '1.5 GB (plan 10.0 GB)');
 });
 
 test('findSite(): by exact domain, or throws', async () => {

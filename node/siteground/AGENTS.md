@@ -97,7 +97,7 @@ Documentation = the SPA bundles. Every endpoint is a one-liner, grep for paths:
 - `GET /accounts?sort_field=created&sort_order=DESC` → `data.accounts[]`: id, name, `server.ip/location`,
   `can_create_sites`, `status`, `plan_description`. **`quota_info.usage` is the number of sites**, not disk.
 - `GET /accounts/{id}` → plan + `websites[]`.
-- `GET /account/{id}/stats/disk` → `{ total, limit, other, site_stats_responses[{domain,value}] }` in MB.
+- `GET /account/{id}/stats/disk` → `{ total, limit, other, site_stats_responses[{id,domain,value}] }` in MB (`site:info` shows the site figure).
 - `GET /account/{id}/stats/{metric}?fromDate=<unix>&toDate=<unix>&step=h|d|m` for `cpu_seconds` and
   `program_executions` → `{ limit, points[], aggregated_site_stats_responses[{id,domain,points[]}] }`.
   Daily points are stamped 23:59:59 UTC; the range is also padded with zero points at other timestamps.
