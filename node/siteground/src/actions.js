@@ -62,7 +62,7 @@ export function describeAccount(a) {
  */
 export async function siteDiskUsage(sg, site) {
 	const disk = await sg.get(`/account/${site.account_id}/stats/disk`);
-	const entry = (disk.site_stats_responses || []).find((s) => s.id === site.id || s.domain === site.domain);
+	const entry = (disk.site_stats_responses || []).find((s) => String(s.id) === String(site.id) || s.domain === site.domain);
 	return { siteMb: entry ? entry.value : null, accountMb: disk.total, limitMb: disk.limit };
 }
 
@@ -70,9 +70,10 @@ const formatMb = (mb) => (mb < 1024 ? `${Math.round(mb)} MB` : `${(mb / 1024).to
 
 export function describeDiskUsage(disk) {
 	if (!disk) return 'unknown';
-	const plan = `plan ${formatMb(disk.accountMb)} of ${formatMb(disk.limitMb)}`;
+	const hasLimit = disk.limitMb > 0;
+	const plan = hasLimit ? `plan ${formatMb(disk.accountMb)} of ${formatMb(disk.limitMb)}` : `plan ${formatMb(disk.accountMb)}`;
 	if (disk.siteMb == null) return `unknown (${plan})`;
-	return `${formatMb(disk.siteMb)} (${Math.round((disk.siteMb / disk.limitMb) * 100)}% of plan; ${plan})`;
+	return `${formatMb(disk.siteMb)} (${hasLimit ? `${Math.round((disk.siteMb / disk.limitMb) * 100)}% of plan; ` : ''}${plan})`;
 }
 
 export async function findSite(sg, domain) {

@@ -138,6 +138,8 @@ test('siteDiskUsage(): the site figure from its plan disk stats, null when the s
 	});
 	assert.deepEqual(await siteDiskUsage(sg, SITES[0]), { siteMb: 1536, accountMb: 10240, limitMb: 40960 });
 	assert.deepEqual(await siteDiskUsage(sg, SITES[1]), { siteMb: null, accountMb: 10240, limitMb: 40960 });
+	const numeric = fakeSg({ get: async () => ({ total: 1, limit: 2, site_stats_responses: [{ id: 1, domain: 'other.nl', value: 5 }] }) });
+	assert.equal((await siteDiskUsage(numeric, { ...SITES[0], id: '1' })).siteMb, 5);
 });
 
 test('describeDiskUsage(): MB below 1 GB, GB above, share of the plan limit', () => {
@@ -145,6 +147,11 @@ test('describeDiskUsage(): MB below 1 GB, GB above, share of the plan limit', ()
 	assert.equal(describeDiskUsage({ siteMb: 199, accountMb: 10240, limitMb: 40960 }), '199 MB (0% of plan; plan 10.0 GB of 40.0 GB)');
 	assert.equal(describeDiskUsage({ siteMb: null, accountMb: 10240, limitMb: 40960 }), 'unknown (plan 10.0 GB of 40.0 GB)');
 	assert.equal(describeDiskUsage(null), 'unknown');
+});
+
+test('describeDiskUsage(): leaves out the percentage when the plan limit is missing or 0', () => {
+	assert.equal(describeDiskUsage({ siteMb: 1536, accountMb: 10240, limitMb: 0 }), '1.5 GB (plan 10.0 GB)');
+	assert.equal(describeDiskUsage({ siteMb: 1536, accountMb: 10240, limitMb: undefined }), '1.5 GB (plan 10.0 GB)');
 });
 
 test('findSite(): by exact domain, or throws', async () => {
