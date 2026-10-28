@@ -377,3 +377,14 @@ make_tests() {
   grep -q "branches: \[develop\]" .github/workflows/tests.yml
   ! grep -q "needs: tests" .github/workflows/deploy-staging.yml
 }
+
+@test "gitops tests ends with committing and pushing, so the workflow is live" {
+  publish_setup
+  git checkout -q develop
+  make_tests
+  run_cli gitops tests <<< $'n\ny\ny\nexample.com\ny\ny\n'
+  [ "$status" -eq 0 ]
+  assert_output_contains "Step 2/2 · Activate"
+  [ "$(git rev-parse develop)" = "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
+  git --git-dir="$TEST_TMP/origin.git" ls-tree -r --name-only develop | grep -q "^.github/workflows/tests.yml$"
+}

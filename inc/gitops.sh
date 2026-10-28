@@ -66,9 +66,15 @@ gitops() (
   # @function tests
   # @description Check for local tests and offer to run them in GitHub Actions on every PR and before each staging deploy.
   function tests() {
+    local _steps_total=2
+    _step 1 "Tests"
     _preflight || return 1
     base_branch="${base_branch:-$(_default_base_branch)}"
-    _tests
+    _tests || return 1
+
+    # A workflow only runs once it is on the pushed branch, same as at the end of setup.
+    _step 2 "Activate"
+    _publish
   }
 
   # @function status
@@ -112,7 +118,7 @@ gitops() (
 
   function _step() {
     echo
-    echo -e "${__bold}${__blue}Step $1/8 · $2${__reset}"
+    echo -e "${__bold}${__blue}Step $1/${_steps_total:-8} · $2${__reset}"
   }
   function _ok() { echo -e "  ${__green}✓${__reset} $1"; }
   function _warn() { echo -e "  ${__red}!${__reset} $1"; }
