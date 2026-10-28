@@ -23,6 +23,8 @@ import {
 	accountsOverview,
 	describeAccount,
 	findSite,
+	siteDiskUsage,
+	describeDiskUsage,
 	siteUsage,
 	rankSites,
 	dnsPointsTo,
@@ -77,7 +79,7 @@ Create (asks for everything that is missing when run in a terminal)
               [--ssh-alias <name>|--no-ssh-alias] [--db <label>|--no-db] [--yes] [--dry-run]
 
 Site Tools (existing site)
-  site:info <domain>                         Domains, SSL, Memcached, SSH, databases
+  site:info <domain>                         Domains, SSL, PHP, Memcached, SSH, storage, databases
   site:memcached <domain> [--off]            Enable (or disable) Memcached
   site:php <domain> [--php <8.3|managed>]    Show or set the PHP version
   site:ssl <domain> [--no-https]             Let's Encrypt when DNS points to the server, force HTTPS
@@ -489,8 +491,8 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 
 	async 'site:info'(sg, [domain]) {
 		const { site, account, st } = await siteToolsFor(sg, domain);
-		const [domains, certs, memcached, keys, dbs, ssh, phpVersions, php] = await task('Getting Site Tools details…', () =>
-			Promise.all([st.domains(), st.certificates(), st.memcached(), st.sshKeys(), st.databases(), sshCommand(st), st.phpVersions(), st.phpVersion()]),
+		const [domains, certs, memcached, keys, dbs, ssh, phpVersions, php, disk] = await task('Getting Site Tools details…', () =>
+			Promise.all([st.domains(), st.certificates(), st.memcached(), st.sshKeys(), st.databases(), sshCommand(st), st.phpVersions(), st.phpVersion(), siteDiskUsage(sg, site).catch(() => null)]),
 		);
 		console.log(`${site.domain} (${site.id}) on ${account.name} / ${account.server.ip}, status ${site.status}`);
 		for (const d of domains) {
@@ -501,6 +503,7 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		console.log(`  PHP        ${phpLabel(phpVersions, php)}`);
 		console.log(`  Memcached  ${memcached ? 'on' : 'off'}`);
 		console.log(`  SSH        ${ssh}  (${keys.length} key(s): ${keys.map((k) => k.comment).join(', ') || '-'})`);
+		console.log(`  Storage    ${describeDiskUsage(disk)}`);
 		console.log(`  Databases  ${dbs.map((d) => `${d.name} "${d.label}"`).join(', ') || '-'}`);
 	},
 
