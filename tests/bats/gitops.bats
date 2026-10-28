@@ -388,3 +388,41 @@ make_tests() {
   [ "$(git rev-parse develop)" = "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
   git --git-dir="$TEST_TMP/origin.git" ls-tree -r --name-only develop | grep -q "^.github/workflows/tests.yml$"
 }
+
+@test "gitops status reports whether the workflows are live on origin" {
+  publish_setup
+  git checkout -q develop
+  mkdir -p .github/workflows
+  echo "name: Deploy" > .github/workflows/deploy-staging.yml
+  echo "// mine" > deploy.php
+  run_cli gitops status
+  assert_output_contains "deploy.php has uncommitted changes: not live"
+  git add -A && git commit -q -m "add deploy files"
+  run_cli gitops status
+  assert_output_contains "deploy.php is not on origin/develop: not live until it is pushed or merged"
+  git push -q origin develop
+  run_cli gitops status
+  assert_output_contains "deploy.php is live on origin/develop"
+  assert_output_contains ".github/workflows/deploy-staging.yml is live on origin/develop"
+}
+
+@test "gitops status reports the state of the tests workflow" {
+  publish_setup
+  git checkout -q develop
+  make_tests
+  mkdir -p .github/workflows
+  printf 'jobs:\n  deploy:\n    runs-on: ubuntu-latest\n' > .github/workflows/deploy-staging.yml
+  run_cli gitops status
+  assert_output_contains "1 local test files, not run in GitHub Actions"
+  run_cli gitops tests <<< $'n\ny\ny\nexample.com\nn\n'
+  run_cli gitops status
+  assert_output_contains "1 local test files, run in GitHub Actions"
+  assert_output_contains "tests run on every PR that is opened or updated"
+  assert_output_contains "a failing test blocks the staging deploy"
+  assert_output_contains ".github/workflows/tests.yml has uncommitted changes: not live"
+}
+
+@test "gitops status says so when there are no local tests" {
+  run_cli gitops status
+  assert_output_contains "no local tests"
+}

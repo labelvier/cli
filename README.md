@@ -92,7 +92,7 @@ by GitHub Actions. Run it from the project:
 ```sh
 labelvier gitops setup     # wizard: project files, server, deploy key, public_html symlink, GitHub secrets, first deploy
 labelvier gitops tests     # run the local tests in GitHub Actions too: before each deploy and/or on every opened or updated PR
-labelvier gitops status    # what is in place and what is missing
+labelvier gitops status    # what is in place, whether the workflows are live on origin, and the state of the tests
 ```
 
 The app `.env` stays on the server (`shared/.env`) and is never sent to GitHub;

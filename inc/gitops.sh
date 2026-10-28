@@ -82,8 +82,12 @@ gitops() (
   function status() {
     _preflight || return 1
     echo
+    git fetch -q origin 2>/dev/null
     _check_file deploy.php
     _check_file .github/workflows/deploy-$stage.yml
+    _check_live deploy.php
+    _check_live ".github/workflows/deploy-$stage.yml"
+    _status_tests
     if [ -f composer.json ] && grep -q '"deployer/deployer"' composer.json; then
       _ok "deployer/deployer in composer.json"
     else
@@ -111,6 +115,48 @@ gitops() (
       _ok "branch $stage on origin"
     else
       _warn "branch $stage missing on origin"
+    fi
+  }
+
+  # A workflow only runs once it is on the pushed base branch: report where a file stands.
+  function _check_live() {
+    local file="$1" base
+    base=$(_default_base_branch)
+    [ -f "$file" ] || return 0
+    if [ -n "$(git status --porcelain -- "$file" 2>/dev/null)" ]; then
+      _warn "$file has uncommitted changes: not live"
+    elif ! git cat-file -e "origin/$base:$file" 2>/dev/null; then
+      _warn "$file is not on origin/$base: not live until it is pushed or merged"
+    elif ! git diff --quiet "origin/$base" -- "$file"; then
+      _warn "$file differs from origin/$base: the pushed version is the live one"
+    else
+      _ok "$file is live on origin/$base"
+    fi
+  }
+
+  # Local tests, and whether GitHub Actions runs them on PRs and before the deploy.
+  function _status_tests() {
+    local count workflow=".github/workflows/deploy-$stage.yml"
+    count=$(find tests -name '*Test.php' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${count:-0}" = "0" ]; then
+      echo "  · no local tests"
+      return 0
+    fi
+    if [ ! -f .github/workflows/tests.yml ]; then
+      _warn "$count local test files, not run in GitHub Actions (labelvier gitops tests)"
+      return 0
+    fi
+    _ok "$count local test files, run in GitHub Actions"
+    _check_live .github/workflows/tests.yml
+    if grep -q "^  *pull_request:" .github/workflows/tests.yml; then
+      _ok "tests run on every PR that is opened or updated"
+    else
+      _warn "tests do not run on PRs"
+    fi
+    if grep -qs "workflows/tests.yml" "$workflow"; then
+      _ok "a failing test blocks the $stage deploy"
+    else
+      _warn "the $stage deploy does not wait for the tests"
     fi
   }
 
