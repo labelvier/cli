@@ -31,10 +31,10 @@ setup() {
 }
 teardown() { teardown_sandbox; }
 
-# Answers in prompt order: domain, deploy path, web root, base branch, composer require,
+# Answers in prompt order: domain, base branch, composer require,
 # authorize key, public_html choice, create github secrets, create staging branch.
 wizard_answers() {
-  printf '%s\n' "example.com" "" "" "" "y" "y" "${1:-1}" "y" "n"
+  printf '%s\n' "example.com" "" "y" "y" "${1:-1}" "y" "n"
 }
 
 @test "gitops --help and subcommand help print the documentation" {
@@ -124,7 +124,7 @@ wizard_answers() {
 }
 
 @test "gitops setup deletes public_html when the domain is typed" {
-  run_cli gitops <<< $'example.com\n\n\n\ny\ny\n2\nexample.com\ny\nn\n'
+  run_cli gitops <<< $'example.com\n\ny\ny\n2\nexample.com\ny\nn\n'
   [ "$status" -eq 0 ]
   assert_stub_called "rm -rf ~/www/example.com/public_html"
 }
@@ -136,7 +136,7 @@ wizard_answers() {
     *"[ -L "*) echo link ;;
     *readlink*) echo /home/u1-abc/www/example.com/app/current/public ;;
   esac'
-  run_cli gitops <<< $'example.com\n\n\n\ny\ny\ny\nn\n'
+  run_cli gitops <<< $'example.com\n\ny\ny\ny\nn\n'
   [ "$status" -eq 0 ]
   assert_output_contains "already a symlink"
   refute_stub_called "mv "
@@ -196,14 +196,14 @@ php_too_old() {
 
 @test "gitops setup warns when the default server PHP is too old and offers siteground" {
   php_too_old
-  run_cli gitops <<< $'example.com\n\n\ny\n8.3\nn\n'
+  run_cli gitops <<< $'example.com\ny\n8.3\nn\n'
   assert_output_contains "Server PHP is 8.1, the project needs >= 8.3"
   assert_stub_called "^siteground-stub site:php example.com --php 8.3"
 }
 
 @test "gitops setup leaves PHP alone when the update is declined" {
   php_too_old
-  run_cli gitops <<< $'example.com\n\n\nn\n\nn\n'
+  run_cli gitops <<< $'example.com\nn\n\nn\n'
   assert_output_contains "Fix it in Site Tools"
   refute_stub_called "site:php"
 }

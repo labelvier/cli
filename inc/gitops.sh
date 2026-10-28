@@ -153,15 +153,6 @@ gitops() (
     command ssh -o BatchMode=yes -o ConnectTimeout=10 -p "$port" "${_ssh_extra[@]}" "$user@$host" "$@"
   }
 
-  # Make a server path home-relative unless it is absolute or starts with ~.
-  function _home_path() {
-    local path="${1%/}"
-    case "$path" in
-      /* | "~"*) echo "$path" ;;
-      *) echo "~/$path" ;;
-    esac
-  }
-
   function _key_path() {
     echo "$state_dir/$(echo "${repo:-project}" | tr '/' '_')-$stage"
   }
@@ -283,8 +274,10 @@ gitops() (
   }
 
   function _pick_paths() {
-    deploy_path=$(_home_path "$(_ask "Deploy path on the server (releases/, shared/ and current end up here)" "www/$domain")")
-    public_path=$(_home_path "$(_ask "Web root symlink (SiteGround public_html)" "www/$domain/public_html")")
+    # SiteGround fixes the layout: www/<domain>/public_html is the web root, so releases live next to it.
+    deploy_path="~/www/$domain"
+    public_path="$deploy_path/public_html"
+    _ok "Deploy path $deploy_path, web root $public_path"
   }
 
   # The server's default `php` is what Deployer uses. Warn when it is older than the project needs
