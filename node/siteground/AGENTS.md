@@ -159,7 +159,7 @@ Writes return `task_id`; when the HTTP status is `202`, poll `GET /task/{id}` un
 |---|---|---|
 | Meta / limits | `GET /endpoint` | `data.features.username` = SSH user (e.g. `u114-…`), PHP limits, quotas |
 | Domains | `GET /domain-all` | `id`, `name`, `main`, `cert_id`, `sg_pointed`, `config.ssh_host`, `settings` |
-| Parked domains | `POST https://st.siteground.com/v1/sites/{siteId}/domain-alias` `{"domain":"y.nl","alias_to":"x.nl"}` with the **client** token; `DELETE` same path `{"domain"}` (not used) | not on the server API; aliases then show in `GET /domain-all` as `domain_type: "alias"` with `alias_to`, so Let's Encrypt / force HTTPS work per alias id. Not yet verified live |
+| Parked domains | `POST https://st.siteground.com/v1/sites/{siteId}/domain-alias` `{"domain":"y.nl","alias_to":"x.nl"}` with the **client** token; `DELETE` same path `{"domain"}` (not used) | not on the server API; aliases then show in `GET /domain-all` as `domain_type: "alias"` with `alias_to`, so Let's Encrypt / force HTTPS work per alias id. Send the JSON body **without** `content-type` like the SPA does: with `application/json` it returns a 500. Verified live 2026-10-28 (dinz.nl/dinzweb.nl on zilliz.nl), ~10 s |
 | Force HTTPS | `PUT /domain-all/{id}` `{"settings":{"https_enforce":1,"https_rewrite_links":0}}` | needs a certificate |
 | SSL list | `GET /ssl` | `not_after`, `issuer`, `info.cert.le` |
 | Let's Encrypt | `POST /ssl-le` `{"domain_id":1}` | covers domain + www. UI field `generate` is rejected ("Unsupported input field"), wildcard unknown |
