@@ -13,7 +13,7 @@ gitops() (
   local stage="staging"
 
   # Answers collected by the wizard, shared by its steps.
-  local repo="" repo_url="" ssh_alias="" host="" user="" port="" domain=""
+  local repo="" repo_url="" host="" user="" port="" domain=""
   local deploy_path="" public_path="" php_version="" base_branch="" key_file=""
 
   # Runs the command. Unlike the other commands, a bare `labelvier gitops`
@@ -31,8 +31,14 @@ gitops() (
   # @description Wizard: set up GitOps for a Laravel project on SiteGround (deploy key, server, public_html symlink, GitHub secrets, first deploy). Runs when no subcommand is given.
   function setup() {
     echo -e "${__bold}Label Vier GitOps setup${__reset}"
-    echo "Every merged PR on the base branch gets merged into '$stage' and deployed with Deployer."
-    echo "Nothing on the server or in GitHub changes without your yes. The app .env stays on the server and is never sent to GitHub."
+    echo "Push to ${__bold}develop${__reset} and GitHub puts it on ${__bold}staging${__reset} for you: no more deploying by hand."
+    echo
+    echo "What this wizard does:"
+    echo "  · GitHub deploys to staging every time something changes on develop or staging."
+    echo "  · Passwords and keys are set once, in the right places, so they stay safe:"
+    echo "      - the deploy key goes into GitHub as an encrypted secret,"
+    echo "      - the app .env stays on the server and never touches GitHub."
+    echo "  · Nothing on your server or in GitHub changes without your yes."
 
     _step 1 "Project"
     _preflight || return 1
@@ -142,9 +148,9 @@ gitops() (
 
   # ---------------------------------------------------------------- remote helpers
 
-  # Run a command on the server through the chosen SSH alias or, once known, the deploy key.
+  # Run a command on the server with your own key or, once it exists, the deploy key.
   function _remote() {
-    command ssh -o BatchMode=yes -o ConnectTimeout=10 "${_ssh_extra[@]}" "$ssh_alias" "$@"
+    command ssh -o BatchMode=yes -o ConnectTimeout=10 -p "$port" "${_ssh_extra[@]}" "$user@$host" "$@"
   }
 
   # Make a server path home-relative unless it is absolute or starts with ~.
@@ -234,41 +240,49 @@ gitops() (
 
   # ---------------------------------------------------------------- step 2
 
+  # Ask for the staging domain, let SiteGround tell where it lives and prove your own SSH key gets in.
   function _pick_server() {
-    local hosts
-    hosts=$(awk '$1 == "Host" { for (i = 2; i <= NF; i++) if ($i !~ /[*?]/) print $i }' "$HOME/.ssh/config" 2>/dev/null)
-    if [ -n "$hosts" ]; then
-      echo "  SSH aliases in ~/.ssh/config:"
-      echo "$hosts" | sed 's/^/    · /'
-    else
-      echo "  No SSH aliases found. Add one with: labelvier ssh alias"
-    fi
-    ssh_alias=$(_ask "SSH alias of the SiteGround account" "")
-    if [ -z "$ssh_alias" ]; then
-      _fail "No alias given."
-      return 1
-    fi
-
-    local resolved
-    resolved=$(command ssh -G "$ssh_alias" 2>/dev/null)
-    host=$(echo "$resolved" | awk '$1 == "hostname" {print $2}')
-    user=$(echo "$resolved" | awk '$1 == "user" {print $2}')
-    port=$(echo "$resolved" | awk '$1 == "port" {print $2}')
-
-    _ssh_extra=()
-    if ! _remote true 2>/dev/null; then
-      _fail "Cannot log in as '$ssh_alias' ($user@$host:$port). Check the alias and your SSH key."
-      return 1
-    fi
-    _ok "Logged in as $user@$host:$port"
-  }
-
-  function _pick_paths() {
-    domain=$(_ask "Domain of the site" "")
+    domain=$(_ask "Domain of the staging site (as in SiteGround)" "")
     if [ -z "$domain" ]; then
       _fail "No domain given."
       return 1
     fi
+
+    local sg="${GITOPS_SITEGROUND:-siteground}" target
+    target=$($sg site:ssh "$domain" 2>/dev/null | sed -n 's/^ssh -p \([0-9]*\) \([^@ ]*\)@\([^ ]*\)$/\1 \2 \3/p' | head -n 1)
+    if [ -z "$target" ]; then
+      _fail "SiteGround does not know '$domain' (or you are not logged in). Check: labelvier siteground login, labelvier siteground accounts"
+      return 1
+    fi
+    port=$(echo "$target" | cut -d' ' -f1)
+    user=$(echo "$target" | cut -d' ' -f2)
+    host=$(echo "$target" | cut -d' ' -f3)
+    _ok "$domain found in SiteGround: $user@$host:$port"
+
+    _ssh_extra=()
+    if _remote true 2>/dev/null; then
+      _ok "Your own SSH key can log in"
+      return 0
+    fi
+
+    _warn "Your own SSH key cannot log in yet."
+    if ! _yes "Authorize your default public key on $domain with 'labelvier siteground site:ssh-key' now?"; then
+      _fail "Without a login the wizard cannot prepare the server."
+      return 1
+    fi
+    $sg site:ssh-key "$domain" || {
+      _fail "Authorizing the key failed."
+      return 1
+    }
+    if _remote true 2>/dev/null; then
+      _ok "Your own SSH key can log in"
+    else
+      _fail "Still cannot log in as $user@$host:$port. SiteGround can take a minute to apply a new key; try again."
+      return 1
+    fi
+  }
+
+  function _pick_paths() {
     deploy_path=$(_home_path "$(_ask "Deploy path on the server (releases/, shared/ and current end up here)" "www/$domain/app")")
     public_path=$(_home_path "$(_ask "Web root symlink (SiteGround public_html)" "www/$domain/public_html")")
   }
@@ -384,7 +398,7 @@ gitops() (
       local env_file
       env_file=$(_ask "Local env file to upload once (empty = I will do it myself)" "")
       if [ -n "$env_file" ] && [ -f "$env_file" ]; then
-        command scp -q -o BatchMode=yes "${_ssh_extra[@]}" "$env_file" "$ssh_alias:$deploy_path/shared/.env" && _ok "Uploaded $env_file to shared/.env"
+        command scp -q -o BatchMode=yes -P "$port" "${_ssh_extra[@]}" "$env_file" "$user@$host:$deploy_path/shared/.env" && _ok "Uploaded $env_file to shared/.env"
       else
         _warn "Create $deploy_path/shared/.env on the server before the first deploy."
       fi

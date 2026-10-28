@@ -7,7 +7,6 @@ load test_helper
 setup() {
   setup_sandbox
   mkdir -p "$HOME/.ssh"
-  printf 'Host prod\n  HostName c1.sgvps.net\n  User u1-abc\n  Port 18765\n' > "$HOME/.ssh/config"
   make_git_repo "$TEST_TMP/project" >/dev/null
   cd "$TEST_TMP/project"
   echo '{"require":{"laravel/framework":"^12.0"}}' > composer.json
@@ -15,12 +14,14 @@ setup() {
   stub gh 'case "$1 $2" in "auth status") exit 0 ;; "repo view") echo acme/shop ;; "secret list") printf "DEPLOY_STAGING_PORT\tUpdated\n" ;; *) exit 0 ;; esac'
   stub composer
   stub scp
+  # SiteGround knows example.com; the stub replaces the siteground function, which would win over a stub on PATH.
+  stub siteground-stub 'case "$1" in site:ssh) echo "ssh -p 18765 u1-abc@c1.sgvps.net" ;; *) exit 0 ;; esac'
+  export GITOPS_SITEGROUND=siteground-stub
   stub ssh-keygen 'f=""; while [ $# -gt 0 ]; do [ "$1" = "-f" ] && f="$2"; shift; done
     echo "PRIVATE-KEY-BODY" > "$f"; echo "ssh-ed25519 AAAATEST gitops" > "$f.pub"'
   # Server: logs in, default php is 8.4, does not know the key yet, has shared/.env and .htaccess,
   # carries over .env from the old layout and has public_html as a real directory.
   stub ssh 'case "$*" in
-    "-G prod") printf "hostname c1.sgvps.net\nuser u1-abc\nport 18765\n" ;;
     *"php -v"*) printf "PHP 8.4.2 (cli)\n" ;;
     *"grep -qF"*) exit 1 ;;
     *"[ -L "*) echo dir ;;
@@ -30,10 +31,10 @@ setup() {
 }
 teardown() { teardown_sandbox; }
 
-# Answers in prompt order: ssh alias, domain, deploy path, web root, base branch, composer require,
+# Answers in prompt order: domain, deploy path, web root, base branch, composer require,
 # authorize key, public_html choice, create github secrets, create staging branch.
 wizard_answers() {
-  printf '%s\n' "prod" "example.com" "" "" "" "y" "y" "${1:-1}" "y" "n"
+  printf '%s\n' "example.com" "" "" "" "y" "y" "${1:-1}" "y" "n"
 }
 
 @test "gitops --help and subcommand help print the documentation" {
@@ -92,7 +93,7 @@ wizard_answers() {
   [ -f "$TEST_TMP/state/acme_shop-staging" ]
   [ "$(file_mode "$TEST_TMP/state")" = "700" ]
   assert_stub_called "authorized_keys"
-  assert_stub_called "-i $TEST_TMP/state/acme_shop-staging -o IdentitiesOnly=yes prod true"
+  assert_stub_called "-p 18765 -i $TEST_TMP/state/acme_shop-staging -o IdentitiesOnly=yes u1-abc@c1.sgvps.net true"
   # Server layout: shared/ prepared, old .env carried over, existing public_html moved aside, never deleted.
   assert_stub_called "mkdir -p ~/www/example.com/app/shared/public"
   assert_stub_called "mv ~/www/example.com/public_html ~/www/example.com/public_html.bak-"
@@ -123,31 +124,56 @@ wizard_answers() {
 }
 
 @test "gitops setup deletes public_html when the domain is typed" {
-  run_cli gitops <<< $'prod\nexample.com\n\n\n\ny\ny\n2\nexample.com\ny\nn\n'
+  run_cli gitops <<< $'example.com\n\n\n\ny\ny\n2\nexample.com\ny\nn\n'
   [ "$status" -eq 0 ]
   assert_stub_called "rm -rf ~/www/example.com/public_html"
 }
 
 @test "gitops setup leaves a symlinked public_html alone" {
   stub ssh 'case "$*" in
-    "-G prod") printf "hostname c1.sgvps.net\nuser u1-abc\nport 18765\n" ;;
     *"php -v"*) printf "PHP 8.4.2 (cli)\n" ;;
     *"grep -qF"*) exit 1 ;;
     *"[ -L "*) echo link ;;
     *readlink*) echo /home/u1-abc/www/example.com/app/current/public ;;
   esac'
-  run_cli gitops <<< $'prod\nexample.com\n\n\n\ny\ny\ny\nn\n'
+  run_cli gitops <<< $'example.com\n\n\n\ny\ny\ny\nn\n'
   [ "$status" -eq 0 ]
   assert_output_contains "already a symlink"
   refute_stub_called "mv "
 }
 
-@test "gitops setup stops when the server login fails" {
-  stub ssh 'case "$*" in "-G prod") echo "hostname h" ;; *) exit 255 ;; esac'
-  run_cli gitops <<< $'prod\n'
+@test "gitops setup stops when SiteGround does not know the domain" {
+  stub siteground-stub 'exit 1'
+  run_cli gitops <<< $'nope.example\n'
   [ "$status" -eq 1 ]
-  assert_output_contains "Cannot log in as 'prod'"
+  assert_output_contains "SiteGround does not know 'nope.example'"
+  refute_stub_called "^ssh"
   refute_stub_called "^gh secret set"
+}
+
+@test "gitops setup uses the SiteGround host and checks your own key" {
+  run_cli gitops <<< "$(wizard_answers 1)"
+  assert_output_contains "example.com found in SiteGround: u1-abc@c1.sgvps.net:18765"
+  assert_output_contains "Your own SSH key can log in"
+  assert_stub_called "^siteground-stub site:ssh example.com"
+  refute_stub_called "site:ssh-key"
+}
+
+@test "gitops setup offers to authorize your key when the login fails" {
+  stub ssh 'exit 255'
+  run_cli gitops <<< $'example.com\ny\n'
+  [ "$status" -eq 1 ]
+  assert_output_contains "Your own SSH key cannot log in yet"
+  assert_stub_called "^siteground-stub site:ssh-key example.com"
+  assert_output_contains "Still cannot log in as u1-abc@c1.sgvps.net:18765"
+  refute_stub_called "^gh secret set"
+}
+
+@test "gitops setup stops when authorizing your key is declined" {
+  stub ssh 'exit 255'
+  run_cli gitops <<< $'example.com\nn\n'
+  [ "$status" -eq 1 ]
+  refute_stub_called "site:ssh-key"
 }
 
 @test "gitops status lists what is missing" {
@@ -161,10 +187,7 @@ wizard_answers() {
 # Project that needs PHP 8.3 on a server whose default php is 8.1.
 php_too_old() {
   echo '{"require":{"php":"^8.3","laravel/framework":"^12.0"}}' > composer.json
-  stub siteground-stub
-  export GITOPS_SITEGROUND=siteground-stub
   stub ssh 'case "$*" in
-    "-G prod") printf "hostname c1.sgvps.net\nuser u1-abc\nport 18765\n" ;;
     *"php -v"*) cat "$TEST_TMP/server-php" ;;
     *"grep -qF"*) exit 1 ;;
   esac'
@@ -173,16 +196,16 @@ php_too_old() {
 
 @test "gitops setup warns when the default server PHP is too old and offers siteground" {
   php_too_old
-  run_cli gitops <<< $'prod\nexample.com\n\n\ny\n8.3\nn\n'
+  run_cli gitops <<< $'example.com\n\n\ny\n8.3\nn\n'
   assert_output_contains "Server PHP is 8.1, the project needs >= 8.3"
   assert_stub_called "^siteground-stub site:php example.com --php 8.3"
 }
 
 @test "gitops setup leaves PHP alone when the update is declined" {
   php_too_old
-  run_cli gitops <<< $'prod\nexample.com\n\n\nn\n\nn\n'
+  run_cli gitops <<< $'example.com\n\n\nn\n\nn\n'
   assert_output_contains "Fix it in Site Tools"
-  refute_stub_called "^siteground-stub"
+  refute_stub_called "site:php"
 }
 
 @test "gitops setup is quiet about PHP when the default version is new enough" {
