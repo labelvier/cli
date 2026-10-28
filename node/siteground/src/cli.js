@@ -34,6 +34,7 @@ import {
 	enableMemcached,
 	disableMemcached,
 	setupSsl,
+	addDomainAlias,
 	addSshKey,
 	sshCommand,
 	sshDetails,
@@ -82,7 +83,12 @@ Site Tools (existing site)
   site:info <domain>                         Domains, SSL, PHP, Memcached, SSH, storage, databases
   site:memcached <domain> [--off]            Enable (or disable) Memcached
   site:php <domain> [--php <8.3|managed>]    Show or set the PHP version
-  site:ssl <domain> [--no-https]             Let's Encrypt when DNS points to the server, force HTTPS
+  site:ssl <domain> [--alias <domain>] [--no-https]
+                                             Let's Encrypt when DNS points to the server, force HTTPS;
+                                             --alias for a parked domain instead of the main domain
+  site:alias <domain>                        List parked domains (aliases)
+  site:alias <domain> --add <alias> [--ssl] [--no-https]
+                                             Park a domain on the site; --ssl also installs Let's Encrypt
   site:ssh-key <domain> [--ssh-key <file>] [--ssh-alias <name>]
                                              Authorize a public key (default ~/.ssh/id_ed25519.pub)
                                              and add a Host alias to ~/.ssh/config (via labelvier ssh alias)
@@ -115,6 +121,7 @@ const { positionals, values } = parseArgs({
 		off: { type: 'boolean' },
 		demo: { type: 'boolean' }, // hidden: see src/demo.js
 		add: { type: 'string' },
+		alias: { type: 'string' },
 		at: { type: 'string' },
 		remove: { type: 'string' },
 		yes: { type: 'boolean', short: 'y' },
@@ -137,6 +144,16 @@ async function option(flag, question, defaultValue) {
 	if (values[flag] !== undefined) return values[flag];
 	if (!interactive) return defaultValue;
 	return confirm(question, { defaultValue, flag: `--${flag}` });
+}
+
+/** Let's Encrypt (+ force HTTPS unless --no-https) for one domain of a site; exit code 2 when skipped. */
+async function sslFor(st, account, domain, { strict = false } = {}) {
+	const r = await task(`Setting up SSL for ${domain}…`, async (s) => {
+		const res = await setupSsl(st, { domain, serverIp: account.server.ip, https: values.https !== false, strict }, s);
+		if (!res.ok) s.info(res.message);
+		return res;
+	}, { done: (res) => res.message });
+	if (!r.ok) process.exitCode = 2;
 }
 
 async function siteToolsFor(sg, domain) {
@@ -530,12 +547,22 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 
 	async 'site:ssl'(sg, [domain]) {
 		const { account, st } = await siteToolsFor(sg, domain);
-		const r = await task('Setting up SSL…', async (s) => {
-			const res = await setupSsl(st, { domain, serverIp: account.server.ip, https: values.https !== false }, s);
-			if (!res.ok) s.info(res.message);
-			return res;
-		}, { done: (res) => res.message });
-		if (!r.ok) process.exitCode = 2;
+		await sslFor(st, account, values.alias || domain, { strict: Boolean(values.alias) });
+	},
+
+	async 'site:alias'(sg, [domain]) {
+		const { site, account, st } = await siteToolsFor(sg, domain);
+		if (!values.add) {
+			const aliases = (await task('Getting domains…', () => st.domains())).filter((d) => d.domain_type === 'alias');
+			if (!aliases.length) return console.log('No parked domains.');
+			for (const d of aliases) console.log(`  ${d.name.padEnd(36)} SSL ${d.cert_id ? 'yes' : 'no'}  HTTPS forced ${d.settings?.https_enforce ? 'yes' : 'no'}`);
+			return;
+		}
+		const alias = values.add.toLowerCase();
+		const invalid = isDomain(alias);
+		if (invalid) throw new Error(`--add ${values.add}: ${invalid}`);
+		await task(`Parking ${alias}…`, () => addDomainAlias(sg, st, site, alias), { done: (m) => m });
+		if (values.ssl) await sslFor(st, account, alias, { strict: true });
 	},
 
 	async 'site:ssh-key'(sg, [domain]) {
