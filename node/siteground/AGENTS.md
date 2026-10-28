@@ -21,7 +21,7 @@ labelvier siteground create-site --domain x.labelvier.dev --account Hamerkop --a
   --memcached --ssl --https --no-ssh-key --yes       # fully non-interactive
 labelvier siteground site:info x.labelvier.dev
 labelvier siteground site:ssl x.labelvier.dev        # after DNS points to the server
-labelvier siteground site:alias x.nl --add y.nl --ssl  # park y.nl on x.nl + Let's Encrypt (later: site:ssl x.nl --alias y.nl)
+labelvier siteground site:alias x.nl --add y.nl --ssl  # park y.nl on x.nl + Let's Encrypt (later: site:ssl x.nl --alias y.nl; plain site:ssl x.nl asks for aliases without SSL, --aliases = yes)
 labelvier siteground site:memcached|site:ssh-key|site:ssh|site:db x.labelvier.dev
 labelvier siteground site:cron x.labelvier.dev [--add "<command>" --at "* * * * *" | --remove <id>]
 labelvier siteground account:stats Albatros [--days 31 --top 15 --sort cpu|exec]   # which site eats CPU / executions

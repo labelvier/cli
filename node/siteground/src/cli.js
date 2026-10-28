@@ -83,9 +83,10 @@ Site Tools (existing site)
   site:info <domain>                         Domains, SSL, PHP, Memcached, SSH, storage, databases
   site:memcached <domain> [--off]            Enable (or disable) Memcached
   site:php <domain> [--php <8.3|managed>]    Show or set the PHP version
-  site:ssl <domain> [--alias <domain>] [--no-https]
+  site:ssl <domain> [--alias <domain>] [--[no-]aliases] [--no-https]
                                              Let's Encrypt when DNS points to the server, force HTTPS;
-                                             --alias for a parked domain instead of the main domain
+                                             then asks for parked domains without SSL (--aliases: yes);
+                                             --alias for one parked domain instead of the main domain
   site:alias <domain>                        List parked domains (aliases)
   site:alias <domain> --add <alias> [--ssl] [--no-https]
                                              Park a domain on the site; --ssl also installs Let's Encrypt
@@ -122,6 +123,7 @@ const { positionals, values } = parseArgs({
 		demo: { type: 'boolean' }, // hidden: see src/demo.js
 		add: { type: 'string' },
 		alias: { type: 'string' },
+		aliases: { type: 'boolean' },
 		at: { type: 'string' },
 		remove: { type: 'string' },
 		yes: { type: 'boolean', short: 'y' },
@@ -547,7 +549,18 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 
 	async 'site:ssl'(sg, [domain]) {
 		const { account, st } = await siteToolsFor(sg, domain);
-		await sslFor(st, account, values.alias || domain, { strict: Boolean(values.alias) });
+		if (values.alias) return sslFor(st, account, values.alias, { strict: true });
+		await sslFor(st, account, domain);
+		// Then the parked domains that have no certificate yet: --aliases / --no-aliases, otherwise asked.
+		const missing = (await st.domains()).filter((d) => d.domain_type === 'alias' && !d.cert_id);
+		if (!missing.length) return;
+		const names = missing.map((d) => d.name).join(', ');
+		const withAliases = values.aliases ?? (interactive && (await confirm(`Also install SSL on parked domain(s) ${names}?`)));
+		if (!withAliases) {
+			if (values.aliases === undefined) console.log(`Parked domains without SSL: ${names} (add --aliases to include them)`);
+			return;
+		}
+		for (const d of missing) await sslFor(st, account, d.name, { strict: true });
 	},
 
 	async 'site:alias'(sg, [domain]) {

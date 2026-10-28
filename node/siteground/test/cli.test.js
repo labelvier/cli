@@ -324,3 +324,41 @@ test('create-site --demo --dry-run: server details hidden, demo plan name shown'
 	assert.match(r.stderr, /✔ new\.labelvier\.dev points to the server\n/);
 	rmSync(sandbox, { recursive: true, force: true });
 });
+
+// --- parked domains ----------------------------------------------------------------------
+
+test('site:ssl: main domain first, then parked domains without SSL only with --aliases', async () => {
+	const plain = await run(['site:ssl', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(plain.code, 0, plain.stderr);
+	assert.match(plain.stdout, /Parked domains without SSL: park\.labelvier\.dev \(add --aliases to include them\)/);
+	assert.ok(!requested().includes('POST /ssl-le'));
+
+	const all = await run(['site:ssl', 'analytics.labelvier.dev', '--aliases'], { env: loggedIn() });
+	assert.equal(all.code, 0, all.stderr);
+	const sslPosts = requests().filter((r) => r.url.endsWith('/ssl-le'));
+	assert.deepEqual(sslPosts.map((r) => r.body), [{ domain_id: 2 }]);
+	assert.ok(requested().includes('PUT /domain-all/2'));
+
+	const unknown = await run(['site:ssl', 'analytics.labelvier.dev', '--alias', 'nope.labelvier.dev'], { env: loggedIn() });
+	assert.equal(unknown.code, 2);
+	assert.match(unknown.stdout + unknown.stderr, /nope\.labelvier\.dev is not a domain of this site/);
+});
+
+test('site:alias: lists parked domains, --add parks a new one (existing one is left alone), --ssl secures it', async () => {
+	const list = await run(['site:alias', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(list.code, 0, list.stderr);
+	assert.match(list.stdout, /park\.labelvier\.dev\s+SSL no/);
+
+	const existing = await run(['site:alias', 'analytics.labelvier.dev', '--add', 'park.labelvier.dev'], { env: loggedIn() });
+	assert.equal(existing.code, 0, existing.stderr);
+	assert.ok(!requests().some((r) => r.url.includes('st.siteground.com')));
+
+	const add = await run(['site:alias', 'analytics.labelvier.dev', '--add', 'Extra.labelvier.dev', '--ssl'], { env: loggedIn() });
+	assert.equal(add.code, 0, add.stderr);
+	const post = requests().find((r) => r.url.includes('st.siteground.com'));
+	assert.deepEqual(post.body, { domain: 'extra.labelvier.dev', alias_to: 'analytics.labelvier.dev' });
+	assert.deepEqual(requests().filter((r) => r.url.endsWith('/ssl-le')).map((r) => r.body), [{ domain_id: 3 }]);
+
+	const bad = await run(['site:alias', 'analytics.labelvier.dev', '--add', 'not a domain'], { env: loggedIn() });
+	assert.equal(bad.code, 1);
+});
