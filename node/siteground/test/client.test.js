@@ -110,6 +110,7 @@ test('addDomainAlias(): POSTs domain + alias_to to st.siteground.com with the cl
 	assert.equal(calls[0].url, 'https://st.siteground.com/v1/sites/S1/domain-alias');
 	assert.equal(calls[0].method, 'POST');
 	assert.equal(calls[0].headers.authorization, `Bearer ${sg.session.token}`);
+	assert.equal(calls[0].headers['content-type'], undefined);
 	assert.deepEqual(calls[0].body, { domain: 'alias.nl', alias_to: 'main.nl' });
 });
 

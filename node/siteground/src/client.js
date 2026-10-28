@@ -56,7 +56,8 @@ export class SiteGroundClient {
 			headers: {
 				accept: 'application/json',
 				authorization: `Bearer ${await this.token()}`,
-				...(body ? { 'content-type': 'application/json' } : {}),
+				// st.siteground.com: like Site Tools, a JSON body without content-type (fetch sends text/plain).
+				...(body && base === API ? { 'content-type': 'application/json' } : {}),
 			},
 			body: body ? JSON.stringify(body) : undefined,
 		});
