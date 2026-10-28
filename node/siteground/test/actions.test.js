@@ -21,6 +21,7 @@ import {
 	enableMemcached,
 	disableMemcached,
 	setupSsl,
+	addDomainAlias,
 	addSshKey,
 	sshDetails,
 	sshCommand,
@@ -364,6 +365,31 @@ test('enableMemcached() / disableMemcached() messages and calls', async () => {
 	const st = fakeSt({ memcached: { id: 4 }, del: {} });
 	assert.equal(await disableMemcached(st), 'Memcached disabled');
 	assert.deepEqual(st.calls.at(-1), ['del', '/uservice/4']);
+});
+
+test('setupSsl(): strict does not fall back to the main domain', async () => {
+	const st = fakeSt({ domains: [{ id: 1, name: 'main.nl' }], mainDomain: { id: 1, name: 'main.nl' }, installLetsEncrypt: {}, enforceHttps: {} });
+	const r = await setupSsl(st, { domain: 'alias.nl', serverIp: SERVER_IP, strict: true });
+	assert.deepEqual(r, { ok: false, message: 'alias.nl is not a domain of this site' });
+	assert.equal(st.mainDomain.mock.callCount(), 0);
+	assert.equal(st.installLetsEncrypt.mock.callCount(), 0);
+});
+
+test('addDomainAlias(): parks the domain and waits until Site Tools lists it', async () => {
+	let listed = [{ name: 'main.nl' }];
+	const sg = { addDomainAlias: mock.fn(async () => { listed = [...listed, { name: 'alias.nl' }]; }) };
+	const st = fakeSt({ domains: () => listed });
+	const site = { id: 'S1', domain: 'main.nl' };
+	assert.equal(await addDomainAlias(sg, st, site, 'Alias.NL', { intervalMs: 0 }), 'alias.nl parked on main.nl');
+	assert.deepEqual(sg.addDomainAlias.mock.calls[0].arguments, ['S1', 'alias.nl', 'main.nl']);
+
+	// Already there: no write.
+	assert.equal(await addDomainAlias(sg, st, site, 'alias.nl', { intervalMs: 0 }), 'alias.nl is already a domain of main.nl');
+	assert.equal(sg.addDomainAlias.mock.callCount(), 1);
+
+	// Never shows up: error after the attempts.
+	const slow = { addDomainAlias: mock.fn(async () => {}) };
+	await assert.rejects(addDomainAlias(slow, fakeSt({ domains: [] }), site, 'late.nl', { intervalMs: 0, attempts: 2 }), /does not list it yet/);
 });
 
 test('setupSsl(): skipped while DNS does not point to the server', async (t) => {

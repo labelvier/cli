@@ -2,6 +2,8 @@ import { loadSession, saveSession, secondsLeft } from './session.js';
 import { SiteToolsClient } from './sitetools.js';
 
 const API = 'https://uapi.siteground.com/v1';
+// Site Tools sends a few writes (parked domains) here with the same client token instead of to the server.
+const ST_API = 'https://st.siteground.com/v1';
 
 export class ApiError extends Error {
 	constructor(status, body, url) {
@@ -48,19 +50,20 @@ export class SiteGroundClient {
 		return this.session.token;
 	}
 
-	async request(method, path, body, { retry = true } = {}) {
-		const res = await fetch(`${API}${path}`, {
+	async request(method, path, body, { retry = true, base = API } = {}) {
+		const res = await fetch(`${base}${path}`, {
 			method,
 			headers: {
 				accept: 'application/json',
 				authorization: `Bearer ${await this.token()}`,
-				...(body ? { 'content-type': 'application/json' } : {}),
+				// st.siteground.com: like Site Tools, a JSON body without content-type (fetch sends text/plain).
+				...(body && base === API ? { 'content-type': 'application/json' } : {}),
 			},
 			body: body ? JSON.stringify(body) : undefined,
 		});
 		if (res.status === 401 && retry) {
 			await this.refresh();
-			return this.request(method, path, body, { retry: false });
+			return this.request(method, path, body, { retry: false, base });
 		}
 		const json = await res.json().catch(() => null);
 		if (!res.ok || (json && json.status && json.status >= 400)) throw new ApiError(res.status, json, path);
@@ -156,6 +159,14 @@ export class SiteGroundClient {
 			order: { step1, step2, step3: { extras: {} } },
 		});
 		return data.id;
+	}
+
+	/**
+	 * Park `domain` on a site as an alias of `aliasTo` (the site's main domain). Same call the
+	 * Site Tools "Parked Domains" form makes; it goes to st.siteground.com, not to the server.
+	 */
+	addDomainAlias(siteId, domain, aliasTo) {
+		return this.request('POST', `/sites/${siteId}/domain-alias`, { domain, alias_to: aliasTo }, { base: ST_API });
 	}
 
 	siteTools(siteId) {

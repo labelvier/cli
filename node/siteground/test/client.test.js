@@ -99,6 +99,21 @@ test('request(): POST sends a JSON body with content-type', async (t) => {
 	assert.deepEqual(calls[0].body, { a: 1 });
 });
 
+test('addDomainAlias(): POSTs domain + alias_to to st.siteground.com with the client token', async (t) => {
+	const calls = [];
+	t.mock.method(globalThis, 'fetch', async (url, init = {}) => {
+		calls.push({ url, method: init.method, headers: init.headers, body: JSON.parse(init.body) });
+		return jsonResponse({ status: 200, message: 'OK', data: { id: 7 } });
+	});
+	const sg = new SiteGroundClient(freshSession());
+	assert.deepEqual(await sg.addDomainAlias('S1', 'alias.nl', 'main.nl'), { id: 7 });
+	assert.equal(calls[0].url, 'https://st.siteground.com/v1/sites/S1/domain-alias');
+	assert.equal(calls[0].method, 'POST');
+	assert.equal(calls[0].headers.authorization, `Bearer ${sg.session.token}`);
+	assert.equal(calls[0].headers['content-type'], undefined);
+	assert.deepEqual(calls[0].body, { domain: 'alias.nl', alias_to: 'main.nl' });
+});
+
 test('request(): non-2xx becomes an ApiError with status, path and message', async (t) => {
 	mockApi(t, { 'GET /nope': () => jsonResponse({ status: 404, message: 'Not found' }, 404) });
 	await assert.rejects(new SiteGroundClient(freshSession()).get('/nope'), (err) => {

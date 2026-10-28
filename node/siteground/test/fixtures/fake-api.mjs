@@ -35,7 +35,17 @@ const uapi = {
 	'GET /auth/sites/SmczellITUpKZz09/token': { site_token: jwt({ api_url: API_URL, cts: now, vsec: 3600 }) },
 	'POST /auth/refresh-client-token': { client_token: jwt({ exp: now + 3600, tokenType: 'access' }) },
 };
+// analytics.labelvier.dev: main domain with a certificate plus one parked domain without; parking adds to the list.
+const domains = [
+	{ id: 1, name: 'analytics.labelvier.dev', main: 1, domain_type: 'main_domain', cert_id: 5, settings: { https_enforce: 0, https_rewrite_links: 0 } },
+	{ id: 2, name: 'park.labelvier.dev', main: 0, domain_type: 'alias', alias_to: 'analytics.labelvier.dev', cert_id: null, settings: { https_enforce: 0 } },
+];
 const siteTools = {
+	'GET /domain-all': domains,
+	'POST /ssl-le': {},
+	'PUT /domain-all/1': {},
+	'PUT /domain-all/2': {},
+	'PUT /domain-all/3': {},
 	'GET /php-version': [{ id: 82, version: 'PHP 8.2.29', mod_php: true }, { id: 83, version: 'PHP 8.3.35', default: true, recommended: true, mod_php: true }],
 };
 
@@ -48,12 +58,17 @@ globalThis.fetch = async (url, init = {}) => {
 		table = siteTools;
 		key = `${method} ${url.replace(`https://${API_URL}/api-sgcp/v00`, '')}`;
 	}
+	if (url === 'https://st.siteground.com/v1/sites/SmczellITUpKZz09/domain-alias' && method === 'POST') {
+		const { domain, alias_to } = JSON.parse(init.body);
+		domains.push({ id: domains.length + 1, name: domain, main: 0, domain_type: 'alias', alias_to, cert_id: null, settings: { https_enforce: 0 } });
+		return new Response(JSON.stringify({ status: 200, message: 'OK', data: {} }), { status: 200, headers: { 'content-type': 'application/json' } });
+	}
 	if (!(key in table)) throw new Error(`fake-api: no canned answer for ${key}`);
 	return new Response(JSON.stringify({ status: 200, message: 'OK', data: table[key] }), { status: 200, headers: { 'content-type': 'application/json' } });
 };
 
-// DNS: new.labelvier.dev points to the Hamerkop server, nothing else resolves.
-const records = { 'new.labelvier.dev': SERVER_IP };
+// DNS: these point to the Hamerkop server, nothing else resolves.
+const records = { 'new.labelvier.dev': SERVER_IP, 'analytics.labelvier.dev': SERVER_IP, 'park.labelvier.dev': SERVER_IP, 'extra.labelvier.dev': SERVER_IP };
 const server = dgram.createSocket('udp4');
 server.on('message', (msg, rinfo) => {
 	let off = 12;
