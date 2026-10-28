@@ -91,6 +91,7 @@ by GitHub Actions. Run it from the project:
 
 ```sh
 labelvier gitops setup     # wizard: project files, server, deploy key, public_html symlink, GitHub secrets, first deploy
+labelvier gitops tests     # run the local tests in GitHub Actions too: on every PR and before each deploy
 labelvier gitops status    # what is in place and what is missing
 ```
 

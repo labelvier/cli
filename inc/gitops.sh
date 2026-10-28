@@ -44,6 +44,7 @@ gitops() (
 
     _step 3 "Project files"
     _scaffold_files || return 1
+    _tests || return 1
 
     _step 4 "Deploy key"
     _deploy_key || return 1
@@ -60,6 +61,14 @@ gitops() (
 
     _step 8 "Activate GitOps"
     _publish
+  }
+
+  # @function tests
+  # @description Check for local tests and offer to run them in GitHub Actions on every PR and before each staging deploy.
+  function tests() {
+    _preflight || return 1
+    base_branch="${base_branch:-$(_default_base_branch)}"
+    _tests
   }
 
   # @function status
@@ -198,6 +207,83 @@ gitops() (
     else
       _warn "Add deployer/deployer yourself: the workflow needs vendor/bin/dep"
     fi
+  }
+
+  # Local tests: offer to run them locally, then in GitHub Actions on PRs and before each deploy.
+  function _tests() {
+    local count runner cmd workflow=".github/workflows/deploy-$stage.yml"
+    count=$(find tests -name '*Test.php' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${count:-0}" = "0" ]; then
+      _warn "No tests found in tests/. Nothing to run in CI; add some, then: labelvier gitops tests"
+      return 0
+    fi
+    runner="PHPUnit"
+    grep -q '"pestphp/pest"' composer.json && runner="Pest"
+    cmd="php artisan test"
+    grep -q '"test"[[:space:]]*:' composer.json && cmd="composer test"
+    _ok "$count test files ($runner), run with: $cmd"
+
+    if [ -f .github/workflows/tests.yml ] && grep -qs "workflows/tests.yml" "$workflow"; then
+      _ok "Tests already run in GitHub Actions (PRs and before each deploy)"
+      return 0
+    fi
+
+    if _yes "Run them locally now to check they pass?"; then
+      if ! $cmd; then
+        _warn "The tests fail locally. In CI they would block every staging deploy."
+        _yes "Continue anyway?" n || return 1
+      fi
+    fi
+
+    if ! _yes "Run these tests in GitHub Actions too (every PR into ${base_branch:-$(_default_base_branch)}; a failing test blocks the $stage deploy)?"; then
+      _warn "Skipped. Add them later with: labelvier gitops tests"
+      return 0
+    fi
+    if ! grep -qs 'DB_CONNECTION' phpunit.xml phpunit.xml.dist; then
+      _warn "phpunit.xml sets no DB_CONNECTION: CI has no database, so set sqlite there if the tests need one."
+    fi
+
+    php_version="${php_version:-$(_ask "PHP version for CI" "$(_required_php || true)")}"
+    php_version="${php_version:-8.4}"
+    mkdir -p .github/workflows
+    _render_tests "$cmd"
+    _gate_deploy "$workflow"
+  }
+
+  # Write the tests workflow; the Node steps are only kept when package.json has a build script.
+  function _render_tests() {
+    local to=".github/workflows/tests.yml" node_filter="/#NODE#/d"
+    if [ -f "$to" ]; then
+      _ok "$to already exists, left alone"
+      return
+    fi
+    grep -qs '"build"[[:space:]]*:' package.json && node_filter="s/#NODE#//"
+    sed -e "$node_filter" \
+      -e "s#__PHP_VERSION__#$php_version#g" \
+      -e "s#__BASE_BRANCH__#${base_branch:-$(_default_base_branch)}#g" \
+      -e "s#__TEST_CMD__#$1#g" \
+      "$templates_dir/tests.yml.tpl" >"$to"
+    _ok "Wrote $to"
+  }
+
+  # Make the deploy job wait for the tests job (calls tests.yml as a reusable workflow).
+  function _gate_deploy() {
+    local workflow="$1" tmp
+    if [ ! -f "$workflow" ]; then
+      _warn "$workflow not found: the tests run on PRs, but nothing blocks a deploy yet."
+      return 0
+    fi
+    if grep -q "workflows/tests.yml" "$workflow"; then
+      _ok "$workflow already waits for the tests"
+      return 0
+    fi
+    tmp=$(mktemp)
+    awk '
+      /^jobs:/ { print; print "  tests:"; print "    uses: ./.github/workflows/tests.yml"; print ""; next }
+      /^  deploy:/ { print; print "    needs: tests"; next }
+      { print }
+    ' "$workflow" >"$tmp" && mv "$tmp" "$workflow"
+    _ok "$workflow: deploy now needs the tests job"
   }
 
   function _default_base_branch() {
@@ -497,7 +583,7 @@ gitops() (
     current=$(git rev-parse --abbrev-ref HEAD)
     local f
     files=""
-    for f in deploy.php ".github/workflows/deploy-$stage.yml" composer.json composer.lock; do
+    for f in deploy.php ".github/workflows/deploy-$stage.yml" .github/workflows/tests.yml composer.json composer.lock; do
       [ -e "$f" ] && files="$files $f"
     done
     changed=$(git status --porcelain -- $files 2>/dev/null)

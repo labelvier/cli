@@ -257,3 +257,80 @@ publish_setup() {
   assert_output_contains "Not pushed"
   [ "$(git rev-parse develop)" != "$(git --git-dir="$TEST_TMP/origin.git" rev-parse develop)" ]
 }
+
+# A project with tests; `php` is stubbed so a local run never executes anything.
+make_tests() {
+  mkdir -p tests/Feature
+  echo '<?php' > tests/Feature/ExampleTest.php
+  echo '<phpunit><php><env name="DB_CONNECTION" value="sqlite"/></php></phpunit>' > phpunit.xml
+  stub php
+}
+
+@test "gitops tests says so when there are no tests" {
+  run_cli gitops tests
+  [ "$status" -eq 0 ]
+  assert_output_contains "No tests found"
+  [ ! -f .github/workflows/tests.yml ]
+}
+
+@test "gitops tests writes the tests workflow when you want them in GitHub Actions" {
+  make_tests
+  run_cli gitops tests <<< $'n\ny\n8.4\n'
+  [ "$status" -eq 0 ]
+  assert_output_contains "1 test files (PHPUnit), run with: php artisan test"
+  grep -q "branches: \[develop\]" .github/workflows/tests.yml
+  grep -q "php-version: '8.4'" .github/workflows/tests.yml
+  grep -q "run: php artisan test" .github/workflows/tests.yml
+  grep -q "workflow_call" .github/workflows/tests.yml
+  ! grep -q "setup-node" .github/workflows/tests.yml
+  ! grep -rqE "#NODE#|__[A-Z_]+__" .github/workflows/tests.yml
+}
+
+@test "gitops tests uses the composer test script and builds assets when package.json has a build script" {
+  make_tests
+  echo '{"require":{"laravel/framework":"^12.0"},"scripts":{"test":"phpunit"}}' > composer.json
+  echo '{"scripts":{"build":"vite build"}}' > package.json
+  run_cli gitops tests <<< $'n\ny\n8.4\n'
+  grep -q "run: composer test" .github/workflows/tests.yml
+  grep -q "node-version: 24" .github/workflows/tests.yml
+  grep -q "npm run build" .github/workflows/tests.yml
+}
+
+@test "gitops tests makes the deploy job wait for the tests" {
+  make_tests
+  mkdir -p .github/workflows
+  printf 'name: Deploy\non:\n  push:\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n' > .github/workflows/deploy-staging.yml
+  run_cli gitops tests <<< $'n\ny\n8.4\n'
+  grep -q "uses: ./.github/workflows/tests.yml" .github/workflows/deploy-staging.yml
+  grep -q "needs: tests" .github/workflows/deploy-staging.yml
+  # Running it again changes nothing.
+  cp .github/workflows/deploy-staging.yml "$TEST_TMP/before.yml"
+  run_cli gitops tests
+  assert_output_contains "Tests already run in GitHub Actions"
+  cmp .github/workflows/deploy-staging.yml "$TEST_TMP/before.yml"
+}
+
+@test "gitops tests leaves the workflows alone when declined" {
+  make_tests
+  run_cli gitops tests <<< $'n\nn\n'
+  [ "$status" -eq 0 ]
+  [ ! -f .github/workflows/tests.yml ]
+  assert_output_contains "Add them later with: labelvier gitops tests"
+}
+
+@test "gitops tests stops when the local tests fail and you do not continue" {
+  make_tests
+  stub php 'exit 1'
+  run_cli gitops tests <<< $'y\nn\n'
+  [ "$status" -eq 1 ]
+  assert_output_contains "The tests fail locally"
+  [ ! -f .github/workflows/tests.yml ]
+}
+
+@test "gitops setup walks through the tests step" {
+  make_tests
+  run_cli gitops setup <<< "$(printf '%s\n' example.com "" y n y y 1 y n n)"
+  [ "$status" -eq 0 ]
+  [ -f .github/workflows/tests.yml ]
+  grep -q "needs: tests" .github/workflows/deploy-staging.yml
+}
