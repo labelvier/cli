@@ -7,7 +7,7 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 - `labelvier` — entry point (real file). `l4` and `wp-takeoff` are symlinks to it — one source of truth, dispatched on by `$(basename "$0")`. Sources every `inc/*.sh`, then `main "$@"` runs `$1` as a function.
 - `inc/*.sh` — one command collection per file. Filename == function name (`inc/release.sh` → `release()`).
 - `inc/core.sh` — install/update/alias/generate machinery.
-- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`, `_require_brew`, `_confirm`, `_load_nvm`, `_require_nvm`, `_require_node`, `_require_npm`).
+- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`, `_require_brew`, `_confirm`, `_confirm_remembered`, `_load_nvm`, `_require_nvm`, `_require_node`, `_require_npm`).
 - `templates/example.sh.tpl` — scaffold template (`labelvier core generate`).
 - `templates/` — files deployed to servers (cron runner, etc.) plus the scaffold template above.
 - `node/<tool>/` — Node CLIs that bash can't reasonably do (e.g. `node/siteground`, browser login via Playwright). Each has its own `package.json`/lockfile and `AGENTS.md`; the `inc/<tool>.sh` wrapper checks node, runs `npm ci` when the lockfile changed, and forwards all args. `node_modules` is gitignored; secrets go to `~/.config/labelvier/<tool>`, never into the checkout.
@@ -24,6 +24,7 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 - Subcommand help comes from `# @function <name>` + `# @description <text>` comment pairs (single line each). Keep `@description` one terse sentence — name what it does, flags in short form (`--force`, not a parenthetical essay). Don't list requirements/usage examples/sub-details there; put those in the command's own `--help`-style output if it needs more, not in this comment.
 - `<cmd> <sub> --help` prints that one `@description` line and does **not** run the subcommand — this is load-bearing, don't let a subcommand consume `--help` as a regular flag.
 - A typo'd subcommand (non-empty, not flag-like, no matching function) prints `✗ Unknown command: <name>` before falling back to the docs, and returns/exits non-zero — distinct from the bare-call case (no error, docs only). `_dispatch`, the top-level `labelvier` entry script, and `ai.sh`'s nested `claude` all do this; mirror it in any other hand-rolled dispatcher.
+- Optional prompts (nice-to-have installs, tokens, "run setup now") go through `_confirm_remembered <key> <question> [only-no]`, not `_confirm`: a stored answer in `~/.config/labelvier/choices` is reused so an update never asks the same thing twice (`core choices --reset` clears it). Use `only-no` when a yes shows in the machine's state (installed, token set). Required tools keep plain `_confirm`. Never store secrets there.
 - Color vars `$__red $__blue $__green $__bold $__reset` are set in `labelvier` and inherited — use them, don't redefine.
 
 ## Adding a command

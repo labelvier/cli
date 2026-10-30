@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Optional questions are asked once. A no to the Font Awesome CLI (`fa`), a token (`TIMESHEET_API_TOKEN`, `LV_DASHBOARD_API_KEY`, also an empty paste), the dashboard skill, the daily auto-update, "Check and install the AI setup" and "Run setup now" after an update is remembered in `~/.config/labelvier/choices` (no secrets in it); a yes to the last two is remembered too, so an update runs through without the same questions. No terminal means nothing is stored. Required tools (brew, jq, rtk, toon, claude) are asked as before.
+- `ai check` shows what you declined as `- ... (skipped by your choice)` instead of a ✗, so `ai update` stops proposing the same fix.
+
 ### Added
+- `core choices` shows the remembered answers; `core choices --reset [key]` forgets them all or one, so the CLI asks again.
 - `LARAVEL.md` global Claude config: the default Label Vier Laravel stack (latest Laravel, Livewire + Flux UI free, MariaDB, Sail, Pest, Playwright, Deployer) and its conventions, distilled from the existing Laravel projects. New projects and dependencies always start on the latest stable versions. Deploys go through GitOps, set up with `labelvier gitops setup`.
 - `BACKEND.md`: a short router that is always loaded and tells Claude to read `LARAVEL.md` only for Laravel work, so other sessions don't spend tokens on it. `ai claude install` installs both and wires `BACKEND.md` into `~/.claude/CLAUDE.md`. The managed snippet moves to version 2, so `ai check` flags existing installs as outdated until the next install.
 
