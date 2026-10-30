@@ -281,6 +281,8 @@ core() (
       echo "Automatic updates use launchd and are only supported on macOS."
       return 1
     fi
+    # Turned on on purpose: forget an earlier "no", so it is not stale.
+    _choice_reset auto_update
     local cli_dir
     cli_dir=$(cd "$current_dir/.." && pwd)
     # launchd starts with a bare PATH, without nvm (toon), ~/.local/bin

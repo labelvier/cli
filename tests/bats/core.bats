@@ -581,8 +581,11 @@ stub_notifier() {
   stub uname 'echo Darwin'
   stub launchctl
   stub_notifier authorized
+  mkdir -p "$HOME/.config/labelvier"
+  echo "auto_update=no" > "$HOME/.config/labelvier/choices"
   run core update --enable-auto
   [ "$status" -eq 0 ]
+  ! grep -q '^auto_update=' "$HOME/.config/labelvier/choices"
   local plist="$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist"
   [ -f "$plist" ]
   grep -q "<string>$CLI_COPY/labelvier</string>" "$plist"

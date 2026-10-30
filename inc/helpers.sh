@@ -172,15 +172,25 @@ function _require_brew() {
 # Asks a [Y/n] question on the terminal, also when stdin is a pipe or a
 # here-string. Returns 0 on yes (or Enter), 1 on "n", and 2 when there is no
 # terminal to ask on (launchd, cron, CI), so nothing is installed unasked.
+# With a second argument "default-no" the question is [y/N]: only y/Y is a yes,
+# Enter is a no (for things that run an external installer).
 # The /dev/tty check runs first, in a subshell: `read -p` writes its prompt
 # to stderr, so `read ... < /dev/tty 2>/dev/null` would hide the question.
 function _confirm() {
+  local hint="[Y/n]"
+  [ "$2" = "default-no" ] && hint="[y/N]"
   if ! (: < /dev/tty) 2>/dev/null; then
-    echo "$1 [Y/n] (no terminal to ask on, skipped)"
+    echo "$1 $hint (no terminal to ask on, skipped)"
     return 2
   fi
   local answer
-  read -p "$1 [Y/n] " answer < /dev/tty
+  read -p "$1 $hint " answer < /dev/tty
+  if [ "$2" = "default-no" ]; then
+    case "$answer" in
+      [yY]*) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
   case "$answer" in
     [nN]*) return 1 ;;
   esac
@@ -224,13 +234,15 @@ function _choice_reset() {
   mv "$file.tmp" "$file"
 }
 
-# _confirm with a memory: <key> <question> [only-no]. A stored answer is used
+# _confirm with a memory: <key> <question> [only-no] [default-no]. A stored answer is used
 # without asking (and said so, with the way to undo it). Otherwise it asks via
 # _confirm and stores a yes (0) or no (1); no terminal (2) is never stored.
 # With only-no a yes is not stored: for questions whose yes shows in the state
 # of the machine (installed, token set), so a yes never installs unasked later.
+# With default-no Enter counts as no (passed on to _confirm).
 function _confirm_remembered() {
-  local key="$1" question="$2" mode="$3" saved
+  local key="$1" question="$2" mode="$3" default="$4" saved
+  if [ "$mode" = "default-no" ]; then default="default-no"; mode=""; fi
   saved=$(_choice_get "$key")
   case "$saved" in
     no)
@@ -245,7 +257,7 @@ function _confirm_remembered() {
       ;;
   esac
 
-  _confirm "$question"
+  _confirm "$question" "$default"
   local status=$?
   case $status in
     0) [ "$mode" = "only-no" ] || _choice_set "$key" yes ;;

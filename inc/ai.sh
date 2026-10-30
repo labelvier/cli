@@ -147,7 +147,7 @@ ai() (
 
     echo -e "${__red}fa is not installed.${__reset} It fetches Font Awesome icons and kits from the terminal."
     # A no is remembered, so an update does not offer fa again.
-    _confirm_remembered fa "Install it now with the official Font Awesome installer?" only-no
+    _confirm_remembered fa "Install it now with the official Font Awesome installer?" only-no default-no
     case $? in
       0) curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh | bash ;;
       *) echo "Skipped fa."; return 0 ;;

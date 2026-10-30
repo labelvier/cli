@@ -822,6 +822,14 @@ _choice_in_file() {
   refute_stub_called '^brew install'
 }
 
+@test "ai claude install asks the fa question with default no and skips curl on Enter" {
+  stub_toolchain
+  run_ai_with '_confirm() { echo "$1 args:$2"; [ "$2" = "default-no" ] && return 1; return 0; }' claude install < /dev/null
+  assert_output_contains "Install it now with the official Font Awesome installer? args:default-no"
+  assert_output_contains "Skipped fa."
+  refute_stub_called 'fontawesome.com/fa-cli/install.sh'
+}
+
 @test "ai claude install offers the Font Awesome CLI and runs its installer on 'y'" {
   stub_toolchain
   run_ai_with '_confirm() { echo "$1 -> y"; return 0; }' claude install < /dev/null

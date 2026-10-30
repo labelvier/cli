@@ -240,6 +240,23 @@ LOAD_NVM_FROM_NVM_DIR='_load_nvm() { type nvm >/dev/null 2>&1 && return 0; [ -s 
   assert_output_contains "rc=0"
 }
 
+@test "_confirm default-no treats an empty answer as no" {
+  run_in_cli_tty "" '_confirm "Go?" default-no; echo "rc=$?"'
+  assert_output_contains "Go? [y/N]"
+  assert_output_contains "rc=1"
+}
+
+@test "_confirm default-no returns 0 on y" {
+  run_in_cli_tty y '_confirm "Go?" default-no; echo "rc=$?"'
+  assert_output_contains "rc=0"
+}
+
+@test "_confirm_remembered default-no stores a no on Enter" {
+  run_in_cli_tty "" '_confirm_remembered fa "Go?" only-no default-no; echo "rc=$?"'
+  assert_output_contains "rc=1"
+  [ "$(sed -n 's/^fa=//p' "$HOME/.config/labelvier/choices")" = "no" ]
+}
+
 @test "_confirm returns 2 and says so when there is no terminal" {
   run_in_cli_notty '_confirm "Go?"; echo "rc=$?"'
   assert_output_contains "Go? [Y/n] (no terminal to ask on, skipped)"
