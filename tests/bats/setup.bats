@@ -90,6 +90,24 @@ refute_installs() {
   refute_installs
 }
 
+@test "bare setup does not ask about the AI setup again after a remembered answer" {
+  stub uname 'echo Linux'
+  stub_all_tools
+  mkdir -p "$HOME/.config/labelvier"
+  printf 'setup_ai=no\n' > "$HOME/.config/labelvier/choices"
+  run_cli_notty setup
+  [ "$status" -eq 0 ]
+  assert_output_contains "Check and install the AI setup (Claude Code config, skills, Basecamp, rtk) now? [remembered: no]"
+  assert_output_contains "Ok, run it later with: labelvier ai update"
+}
+
+@test "bare setup without a terminal remembers nothing" {
+  stub uname 'echo Linux'
+  stub_all_tools
+  run_cli_notty setup
+  [ ! -e "$HOME/.config/labelvier/choices" ]
+}
+
 @test "setup --help prints the docs" {
   run_cli_notty setup --help
   assert_output_contains "Available functions:"

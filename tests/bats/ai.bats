@@ -525,6 +525,7 @@ EOF
 
 @test "ai claude install installs the dashboard skill on 'y' and asks for its key" {
   stub_toolchain
+  stub fa
   run_ai_with '_confirm() { echo "$1 -> y"; return 0; }' claude install < /dev/null
   [ "$status" -eq 0 ]
   assert_output_contains "Install the optional Label Vier Dashboard skill (websites, plugins, logs, contacts)? -> y"
@@ -608,6 +609,134 @@ EOF
   assert_output_contains "Skipped. Add TIMESHEET_API_TOKEN=<token> to $ENV_FILE later."
   assert_output_contains "Skipped the dashboard skill."
   [ ! -e "$ENV_FILE" ]
+  # Both skips are remembered.
+  [ "$(_choice_in_file token_TIMESHEET_API_TOKEN)" = "no" ]
+  [ "$(_choice_in_file dashboard_skill)" = "no" ]
+}
+
+# The remembered answer in the sandbox's choices file ("" when there is none).
+_choice_in_file() {
+  sed -n "s/^$1=//p" "$HOME/.config/labelvier/choices" 2>/dev/null | tail -n 1
+}
+
+@test "ai claude install does not ask again for what was declined before" {
+  stub_toolchain
+  run_ai_with '_confirm() { echo "$1 -> n"; return 1; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Install it now with the official Font Awesome installer? -> n"
+  [ "$(_choice_in_file fa)" = "no" ]
+  [ "$(_choice_in_file dashboard_skill)" = "no" ]
+  [ "$(_choice_in_file token_TIMESHEET_API_TOKEN)" = "no" ]
+
+  run_ai_with '_confirm() { echo "ASKED: $1"; return 0; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  refute_output_contains "ASKED: Install it now with the official Font Awesome installer?"
+  refute_output_contains "ASKED: Install the optional Label Vier Dashboard skill"
+  refute_output_contains "ASKED: Set TIMESHEET_API_TOKEN now?"
+  assert_output_contains "Install it now with the official Font Awesome installer? [remembered: no]"
+  assert_output_contains "(websites, plugins, logs, contacts)? [remembered: no]"
+  assert_output_contains "Set TIMESHEET_API_TOKEN now? [remembered: no]"
+  refute_stub_called '^curl'
+  [ ! -e "$DASH_SKILL" ]
+  [ ! -e "$ENV_FILE" ]
+}
+
+@test "ai claude install forgets a remembered no after core choices --reset" {
+  stub_toolchain
+  run_ai_with '_confirm() { return 1; }' claude install < /dev/null
+  [ "$(_choice_in_file fa)" = "no" ]
+  run "$CLI" core choices --reset
+  [ "$status" -eq 0 ]
+  run_ai_with '_confirm() { echo "ASKED: $1"; return 1; }' claude install < /dev/null
+  assert_output_contains "ASKED: Install it now with the official Font Awesome installer?"
+  assert_output_contains "ASKED: Set TIMESHEET_API_TOKEN now?"
+}
+
+@test "ai claude install without a terminal remembers nothing" {
+  stub_toolchain
+  run_ai claude install < /dev/null
+  [ "$status" -eq 0 ]
+  [ ! -e "$HOME/.config/labelvier/choices" ]
+}
+
+@test "ai claude install remembers an empty token paste" {
+  type -P expect >/dev/null 2>&1 || skip "expect is not installed (needed for a pty)"
+  stub_toolchain
+  stub fa
+  run expect -c "
+    set timeout 30
+    spawn \"$CLI\" ai claude install
+    expect \"Set TIMESHEET_API_TOKEN now?\"
+    send \"y\r\"
+    expect \"Paste your token here\"
+    send \"\r\"
+    expect \"Install the optional Label Vier Dashboard skill\"
+    send \"y\r\"
+    expect \"Set LV_DASHBOARD_API_KEY now?\"
+    send \"n\r\"
+    expect eof
+  "
+  [ "$status" -eq 0 ]
+  [ "$(_choice_in_file token_TIMESHEET_API_TOKEN)" = "no" ]
+  [ "$(_choice_in_file token_LV_DASHBOARD_API_KEY)" = "no" ]
+  # Installing the skill is state, not a stored yes.
+  [ -z "$(_choice_in_file dashboard_skill)" ]
+  [ -f "$DASH_SKILL" ]
+  [ ! -e "$ENV_FILE" ]
+}
+
+@test "ai check shows what was declined without a cross, and ai update proposes no fix for it" {
+  make_everything_installed
+  : > "$ENV_FILE"
+  mkdir -p "$HOME/.config/labelvier"
+  printf 'fa=no\ntoken_TIMESHEET_API_TOKEN=no\n' > "$HOME/.config/labelvier/choices"
+
+  run_ai check < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "- fa (Font Awesome CLI) (optional, skipped by your choice"
+  assert_output_contains "- TIMESHEET_API_TOKEN (not set, skipped by your choice"
+  refute_output_contains "✗"
+
+  run_ai_with '_confirm() { echo "ASKED: $1"; return 0; }' update < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Everything is up to date."
+  refute_output_contains "Suggested fixes"
+  refute_output_contains "ASKED:"
+}
+
+@test "ai check shows a declined dashboard key and skill without a cross" {
+  make_everything_installed
+  mkdir -p "$(dirname "$DASH_SKILL")" "$HOME/.config/labelvier"
+  printf 'dashboard_skill=no\ntoken_LV_DASHBOARD_API_KEY=no\n' > "$HOME/.config/labelvier/choices"
+
+  run_ai check < /dev/null
+  assert_output_contains "dashboard skill, optional, skipped by your choice"
+  refute_output_contains "✗"
+
+  cp "$TPL_DIR/skills/label-vier-dashboard-api/SKILL.md.tpl" "$DASH_SKILL"
+  run_ai check < /dev/null
+  assert_output_contains "- LV_DASHBOARD_API_KEY (not set, skipped by your choice"
+  refute_output_contains "✗"
+}
+
+@test "ai check still reports a missing token when it was not declined" {
+  make_everything_installed
+  : > "$ENV_FILE"
+  run_ai check < /dev/null
+  assert_output_contains "✗ TIMESHEET_API_TOKEN (not set in $ENV_FILE, run: labelvier ai claude install)"
+}
+
+@test "ai update does not offer the daily auto-update again after a no" {
+  make_everything_installed
+  rm -f "$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist"
+  [ "$(uname)" = "Darwin" ] || skip "the auto-update offer is macOS only"
+  run_ai_with '_confirm() { echo "$1 -> no"; return 1; }' update < /dev/null
+  [ "$(_choice_in_file auto_update)" = "no" ]
+
+  run_ai_with '_confirm() { echo "ASKED: $1"; return 0; }' update < /dev/null
+  refute_output_contains "ASKED:"
+  assert_output_contains "Want the CLI to update itself automatically once a day? [remembered: no]"
+  refute_stub_called '^launchctl'
 }
 
 @test "ai claude install quotes an unquoted token already in .env" {
@@ -695,7 +824,7 @@ EOF
 
 @test "ai claude install offers the Font Awesome CLI and runs its installer on 'y'" {
   stub_toolchain
-  run_ai claude install <<< "y"
+  run_ai_with '_confirm() { echo "$1 -> y"; return 0; }' claude install < /dev/null
   [ "$status" -eq 1 ]
   assert_output_contains "fa is not installed."
   assert_stub_called '^curl .*https://fontawesome.com/fa-cli/install.sh$'

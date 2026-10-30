@@ -365,6 +365,99 @@ stub_notifier() {
   run core _run_update_checker <<< "y"
   [ "$status" -eq 10 ]
   assert_output_contains "fake setup"
+  # The yes is remembered for the next update.
+  grep -qx 'setup_after_update=yes' "$HOME/.config/labelvier/choices"
+}
+
+@test "_run_update_checker reuses a remembered answer about running setup" {
+  make_cli_git
+  push_upstream "v2"
+  load_cli_copy
+  touch -t 202001010000 "$CLI_COPY/.last_git_check"
+  unset LABELVIER_AUTO_UPDATE
+  mkdir -p "$HOME/.config/labelvier"
+  printf 'setup_after_update=yes\n' > "$HOME/.config/labelvier/choices"
+  # CONFIRM=no would refuse if it were asked.
+  export CONFIRM=no
+  run core _run_update_checker <<< "y"
+  [ "$status" -eq 10 ]
+  assert_output_contains "Run 'labelvier setup' now to install what this update needs? [remembered: yes]"
+  assert_output_contains "fake setup"
+
+  printf 'setup_after_update=no\n' > "$HOME/.config/labelvier/choices"
+  git -C "$CLI_COPY" reset -q --hard HEAD~1
+  touch -t 202001010000 "$CLI_COPY/.last_git_check"
+  export CONFIRM=yes
+  run core _run_update_checker <<< "y"
+  [ "$status" -eq 10 ]
+  assert_output_contains "[remembered: no]"
+  assert_output_contains "Run it later with: labelvier setup"
+  refute_output_contains "fake setup"
+}
+
+# --- choices ---------------------------------------------------------------
+
+@test "choices says so when nothing is remembered" {
+  run_cli core choices
+  [ "$status" -eq 0 ]
+  assert_output_contains "No remembered answers."
+}
+
+@test "choices lists the remembered answers" {
+  mkdir -p "$HOME/.config/labelvier"
+  printf 'fa=no\nsetup_ai=yes\n' > "$HOME/.config/labelvier/choices"
+  run_cli core choices
+  [ "$status" -eq 0 ]
+  assert_output_contains "Remembered answers ($HOME/.config/labelvier/choices):"
+  assert_output_contains "  fa: no"
+  assert_output_contains "  setup_ai: yes"
+}
+
+@test "choices --reset forgets everything" {
+  mkdir -p "$HOME/.config/labelvier"
+  printf 'fa=no\nsetup_ai=yes\n' > "$HOME/.config/labelvier/choices"
+  run_cli core choices --reset
+  [ "$status" -eq 0 ]
+  assert_output_contains "Forgot all remembered answers"
+  [ ! -e "$HOME/.config/labelvier/choices" ]
+  run_cli core choices
+  assert_output_contains "No remembered answers."
+}
+
+@test "choices --reset <key> forgets only that answer" {
+  mkdir -p "$HOME/.config/labelvier"
+  printf 'fa=no\nsetup_ai=yes\n' > "$HOME/.config/labelvier/choices"
+  run_cli core choices --reset fa
+  [ "$status" -eq 0 ]
+  assert_output_contains "Forgot the answer for fa"
+  run_cli core choices
+  refute_output_contains "fa: no"
+  assert_output_contains "setup_ai: yes"
+}
+
+@test "choices --reset on a single last key leaves an empty list" {
+  mkdir -p "$HOME/.config/labelvier"
+  printf 'fa=no\n' > "$HOME/.config/labelvier/choices"
+  run_cli core choices --reset fa
+  [ "$status" -eq 0 ]
+  run_cli core choices
+  assert_output_contains "No remembered answers."
+}
+
+@test "choices --help prints only the description" {
+  run_cli core choices --help
+  [ "$status" -eq 0 ]
+  assert_output_contains "choices - Show the remembered answers"
+  refute_output_contains "Remembered answers ("
+  refute_output_contains "No remembered answers."
+}
+
+@test "update --disable-auto remembers that the daily update is not wanted" {
+  load_cli
+  stub launchctl
+  run core update --disable-auto
+  [ "$status" -eq 0 ]
+  grep -qx 'auto_update=no' "$HOME/.config/labelvier/choices"
 }
 
 @test "the entry script stops after a self-update" {

@@ -325,6 +325,8 @@ PLIST
   }
 
   function _disable_auto_update() {
+    # Turned off on purpose: do not offer it again from ai update.
+    _choice_set auto_update no
     if [ -f "$auto_plist" ]; then
       launchctl unload "$auto_plist" 2>/dev/null
       rm -f "$auto_plist"
@@ -458,7 +460,7 @@ PLIST
           # runs the old functions, so setup runs in a fresh CLI process.
           cd "$OLDPWD"
           echo
-          if _confirm "Run 'labelvier setup' now to install what this update needs?"; then
+          if _confirm_remembered setup_after_update "Run 'labelvier setup' now to install what this update needs?"; then
             "$current_dir/../labelvier" setup
           else
             echo "Run it later with: labelvier setup"
@@ -471,6 +473,32 @@ PLIST
         fi
       fi
     fi
+  }
+
+  # @function choices
+  # @description Show the remembered answers to optional questions, or forget them with --reset [key]
+  function choices() {
+    local file
+    file=$(_choices_file)
+
+    if [ "$1" = "--reset" ]; then
+      if [ -n "$2" ]; then
+        _choice_reset "$2"
+        echo "Forgot the answer for $2, the CLI asks again when it needs it."
+      else
+        _choice_reset
+        echo "Forgot all remembered answers, the CLI asks again when it needs them."
+      fi
+      return 0
+    fi
+
+    if [ ! -s "$file" ]; then
+      echo "No remembered answers."
+      return 0
+    fi
+    echo "Remembered answers ($file):"
+    sed 's/^/  /; s/=/: /' "$file"
+    echo "Forget them with: labelvier core choices --reset [key]"
   }
 
   # @function install

@@ -186,6 +186,74 @@ function _confirm() {
   esac
 }
 
+# Remembered answers to optional questions (fa, API tokens, optional skills, the
+# update flow), so an update does not ask the same thing again and again. One
+# key=value line per question in ~/.config/labelvier/choices; never secrets.
+# LABELVIER_CHOICES_FILE overrides the location (tests).
+function _choices_file() {
+  echo "${LABELVIER_CHOICES_FILE:-$HOME/.config/labelvier/choices}"
+}
+
+# Prints the stored answer (yes/no) for key $1, nothing when there is none.
+function _choice_get() {
+  local file
+  file=$(_choices_file)
+  [ -f "$file" ] || return 0
+  sed -n "s/^$1=//p" "$file" | tail -n 1
+}
+
+# Stores answer $2 (yes/no) for key $1, replacing an earlier one.
+function _choice_set() {
+  local file
+  file=$(_choices_file)
+  mkdir -p "$(dirname "$file")"
+  { [ -f "$file" ] && grep -v "^$1=" "$file"; echo "$1=$2"; } > "$file.tmp"
+  mv "$file.tmp" "$file"
+}
+
+# Forgets the answer for key $1, or all answers without a key.
+function _choice_reset() {
+  local file
+  file=$(_choices_file)
+  [ -f "$file" ] || return 0
+  if [ -z "$1" ]; then
+    rm -f "$file"
+    return 0
+  fi
+  { grep -v "^$1=" "$file"; true; } > "$file.tmp"
+  mv "$file.tmp" "$file"
+}
+
+# _confirm with a memory: <key> <question> [only-no]. A stored answer is used
+# without asking (and said so, with the way to undo it). Otherwise it asks via
+# _confirm and stores a yes (0) or no (1); no terminal (2) is never stored.
+# With only-no a yes is not stored: for questions whose yes shows in the state
+# of the machine (installed, token set), so a yes never installs unasked later.
+function _confirm_remembered() {
+  local key="$1" question="$2" mode="$3" saved
+  saved=$(_choice_get "$key")
+  case "$saved" in
+    no)
+      echo "$question [remembered: no] (ask again with: labelvier core choices --reset $key)"
+      return 1
+      ;;
+    yes)
+      if [ "$mode" != "only-no" ]; then
+        echo "$question [remembered: yes] (ask again with: labelvier core choices --reset $key)"
+        return 0
+      fi
+      ;;
+  esac
+
+  _confirm "$question"
+  local status=$?
+  case $status in
+    0) [ "$mode" = "only-no" ] || _choice_set "$key" yes ;;
+    1) _choice_set "$key" no ;;
+  esac
+  return $status
+}
+
 # nvm is a shell function, not a binary, so look for its script and source it
 # into this shell (that also puts nvm's default Node on PATH). Homebrew's nvm
 # lives outside NVM_DIR and is only loaded by the source line in the shell

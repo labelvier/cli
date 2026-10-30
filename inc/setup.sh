@@ -35,7 +35,7 @@ setup() (
 
     echo
     echo -e "${__bold}AI${__reset}"
-    if _confirm "Check and install the AI setup (Claude Code config, skills, Basecamp, rtk) now?"; then
+    if _confirm_remembered setup_ai "Check and install the AI setup (Claude Code config, skills, Basecamp, rtk) now?"; then
       ai update
     else
       echo "  Ok, run it later with: labelvier ai update"

@@ -507,3 +507,82 @@ LOAD_NVM_FROM_NVM_DIR='_load_nvm() { type nvm >/dev/null 2>&1 && return 0; [ -s 
   assert_output_contains "rc=1"
   refute_stub_called '^curl'
 }
+
+# ------------------------------------------------ remembered choices
+
+@test "_choice_set stores an answer, replaces it and keeps the others" {
+  export LABELVIER_CHOICES_FILE="$TEST_TMP/choices"
+  _choice_set fa no
+  _choice_set auto_update yes
+  _choice_set fa yes
+  [ "$(_choice_get fa)" = "yes" ]
+  [ "$(_choice_get auto_update)" = "yes" ]
+  [ "$(grep -c '^fa=' "$LABELVIER_CHOICES_FILE")" -eq 1 ]
+}
+
+@test "_choice_get prints nothing without a stored answer or file" {
+  export LABELVIER_CHOICES_FILE="$TEST_TMP/nope/choices"
+  [ -z "$(_choice_get fa)" ]
+}
+
+@test "the choices file defaults to ~/.config/labelvier/choices" {
+  unset LABELVIER_CHOICES_FILE
+  _choice_set fa no
+  [ -f "$HOME/.config/labelvier/choices" ]
+  grep -qx 'fa=no' "$HOME/.config/labelvier/choices"
+}
+
+@test "_choice_reset forgets one key or all of them" {
+  export LABELVIER_CHOICES_FILE="$TEST_TMP/choices"
+  _choice_set fa no
+  _choice_set setup_ai yes
+  _choice_reset fa
+  [ -z "$(_choice_get fa)" ]
+  [ "$(_choice_get setup_ai)" = "yes" ]
+  _choice_reset
+  [ ! -e "$LABELVIER_CHOICES_FILE" ]
+}
+
+@test "_confirm_remembered asks, then stores a no and does not ask again" {
+  export LABELVIER_CHOICES_FILE="$TEST_TMP/choices"
+  run_in_cli_tty n '_confirm_remembered fa "Install fa?"; echo "rc=$?"'
+  assert_output_contains "Install fa? [Y/n]"
+  assert_output_contains "rc=1"
+  [ "$(_choice_get fa)" = "no" ]
+
+  run_in_cli_notty '_confirm_remembered fa "Install fa?"; echo "rc=$?"'
+  assert_output_contains "Install fa? [remembered: no] (ask again with: labelvier core choices --reset fa)"
+  assert_output_contains "rc=1"
+  refute_output_contains "no terminal to ask on"
+}
+
+@test "_confirm_remembered stores a yes and reuses it" {
+  export LABELVIER_CHOICES_FILE="$TEST_TMP/choices"
+  run_in_cli_tty y '_confirm_remembered setup_ai "Run setup?"; echo "rc=$?"'
+  assert_output_contains "rc=0"
+  [ "$(_choice_get setup_ai)" = "yes" ]
+
+  run_in_cli_notty '_confirm_remembered setup_ai "Run setup?"; echo "rc=$?"'
+  assert_output_contains "Run setup? [remembered: yes]"
+  assert_output_contains "rc=0"
+}
+
+@test "_confirm_remembered with only-no does not store a yes" {
+  export LABELVIER_CHOICES_FILE="$TEST_TMP/choices"
+  run_in_cli_tty y '_confirm_remembered fa "Install fa?" only-no; echo "rc=$?"'
+  assert_output_contains "rc=0"
+  [ -z "$(_choice_get fa)" ]
+
+  # An old yes in the file does not skip the question either.
+  _choice_set fa yes
+  run_in_cli_notty '_confirm_remembered fa "Install fa?" only-no; echo "rc=$?"'
+  assert_output_contains "no terminal to ask on"
+  assert_output_contains "rc=2"
+}
+
+@test "_confirm_remembered stores nothing without a terminal" {
+  export LABELVIER_CHOICES_FILE="$TEST_TMP/choices"
+  run_in_cli_notty '_confirm_remembered fa "Install fa?"; echo "rc=$?"'
+  assert_output_contains "rc=2"
+  [ ! -e "$LABELVIER_CHOICES_FILE" ]
+}

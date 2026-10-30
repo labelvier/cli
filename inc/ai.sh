@@ -146,10 +146,10 @@ ai() (
     fi
 
     echo -e "${__red}fa is not installed.${__reset} It fetches Font Awesome icons and kits from the terminal."
-    local answer
-    read -p "Install it now with the official Font Awesome installer? [y/N] " answer
-    case "$answer" in
-      [yY]*) curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh | bash ;;
+    # A no is remembered, so an update does not offer fa again.
+    _confirm_remembered fa "Install it now with the official Font Awesome installer?" only-no
+    case $? in
+      0) curl --proto '=https' --tlsv1.2 -fsSL https://fontawesome.com/fa-cli/install.sh | bash ;;
       *) echo "Skipped fa."; return 0 ;;
     esac
 
@@ -342,7 +342,9 @@ ai() (
     echo -e "The $what needs a ${__bold}$var${__reset}."
     echo -e "$hint"
 
-    _confirm "Set $var now?"
+    # A no (or an empty paste) is remembered, so the question does not return
+    # on every update.
+    _confirm_remembered "token_$var" "Set $var now?" only-no
     case $? in
       1) echo -e "Skipped. Add ${__bold}$var=<token>${__reset} to $env_file later."; return 0 ;;
       2) echo -e "Then add it to $env_file as ${__bold}$var=<token>${__reset}."; return 0 ;;
@@ -352,6 +354,7 @@ ai() (
     read -r -s -p "Paste your token here (leave empty to skip): " token < /dev/tty
     echo
     if [ -z "$token" ]; then
+      _choice_set "token_$var" no
       echo -e "Skipped. Add ${__bold}$var=<token>${__reset} to $env_file later."
       return 0
     fi
@@ -432,7 +435,7 @@ ai() (
 
     local file_status
     file_status=$(_file_status "$target" "$dashboard_skill_tpl")
-    if [ "$file_status" = "missing" ] && ! _confirm "Install the optional Label Vier Dashboard skill (websites, plugins, logs, contacts)?"; then
+    if [ "$file_status" = "missing" ] && ! _confirm_remembered dashboard_skill "Install the optional Label Vier Dashboard skill (websites, plugins, logs, contacts)?" only-no; then
       echo "Skipped the dashboard skill. Run this install again to add it later."
       return 0
     fi
@@ -983,8 +986,12 @@ ai() (
     if type -P fa >/dev/null 2>&1; then
       echo -e "${__green}✓${__reset} fa (Font Awesome CLI)"
     else
-      # Optional (install asks [y/N]), so no ✗: that would make the daily auto-update nag about it.
-      echo -e "- fa (Font Awesome CLI) (optional, not installed; labelvier ai claude install offers it)"
+      # Optional, so no ✗: that would make the daily auto-update nag about it.
+      if [ "$(_choice_get fa)" = "no" ]; then
+        echo -e "- fa (Font Awesome CLI) (optional, skipped by your choice; labelvier core choices --reset fa asks again)"
+      else
+        echo -e "- fa (Font Awesome CLI) (optional, not installed; labelvier ai claude install offers it)"
+      fi
     fi
 
     if type -P toon >/dev/null 2>&1; then
@@ -1072,6 +1079,9 @@ ai() (
 
     if [ -f "$claude_dir/.env" ] && grep -q '^TIMESHEET_API_TOKEN=.' "$claude_dir/.env"; then
       echo -e "${__green}✓${__reset} TIMESHEET_API_TOKEN set"
+    elif [ "$(_choice_get token_TIMESHEET_API_TOKEN)" = "no" ]; then
+      # Skipped on purpose: no ✗, so ai update does not propose the same fix again.
+      echo -e "- TIMESHEET_API_TOKEN (not set, skipped by your choice; add it to $claude_dir/.env or labelvier core choices --reset token_TIMESHEET_API_TOKEN asks again)"
     else
       echo -e "${__red}✗${__reset} TIMESHEET_API_TOKEN ${__red}(not set in $claude_dir/.env, run: labelvier ai claude install)${__reset}"
     fi
@@ -1080,7 +1090,11 @@ ai() (
     dashboard_status=$(_file_status "$dashboard_skill_dir/SKILL.md" "$dashboard_skill_tpl")
     if [ "$dashboard_status" = "missing" ]; then
       # Optional: not installed is fine, so no ✗ and no "run:" hint for update.
-      echo -e "- $dashboard_skill_dir (dashboard skill, optional, not installed)"
+      if [ "$(_choice_get dashboard_skill)" = "no" ]; then
+        echo -e "- $dashboard_skill_dir (dashboard skill, optional, skipped by your choice; labelvier core choices --reset dashboard_skill asks again)"
+      else
+        echo -e "- $dashboard_skill_dir (dashboard skill, optional, not installed)"
+      fi
     elif [ "$dashboard_status" = "outdated" ]; then
       echo -e "${__red}✗${__reset} $dashboard_skill_dir (dashboard skill) ${__red}(outdated: installed $(_file_version "$dashboard_skill_dir/SKILL.md"), available $(_file_version "$dashboard_skill_tpl"); run: labelvier ai claude install)${__reset}"
     else
@@ -1090,6 +1104,8 @@ ai() (
     if [ "$dashboard_status" != "missing" ]; then
       if [ -f "$claude_dir/.env" ] && grep -q '^LV_DASHBOARD_API_KEY=.' "$claude_dir/.env"; then
         echo -e "${__green}✓${__reset} LV_DASHBOARD_API_KEY set"
+      elif [ "$(_choice_get token_LV_DASHBOARD_API_KEY)" = "no" ]; then
+        echo -e "- LV_DASHBOARD_API_KEY (not set, skipped by your choice; add it to $claude_dir/.env or labelvier core choices --reset token_LV_DASHBOARD_API_KEY asks again)"
       else
         echo -e "${__red}✗${__reset} LV_DASHBOARD_API_KEY ${__red}(not set in $claude_dir/.env, run: labelvier ai claude install)${__reset}"
       fi
@@ -1161,7 +1177,7 @@ ai() (
     [ "$(uname)" = "Darwin" ] || return 0
     [ -f "$HOME/Library/LaunchAgents/nl.labelvier.cli-update.plist" ] && return 0
     echo
-    _confirm "Want the CLI to update itself automatically once a day?"
+    _confirm_remembered auto_update "Want the CLI to update itself automatically once a day?" only-no
     case $? in
       0) "$current_dir/../labelvier" core update --enable-auto ;;
       1) echo "  Ok, turn it on later with: labelvier core update --enable-auto" ;;
