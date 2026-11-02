@@ -1,7 +1,7 @@
 import { jsonResponse, jwt, now } from './helpers.js'; // first: sets HOME/SG_STATE_DIR, guards fetch
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { SiteToolsClient, SiteToolsError } from '../src/sitetools.js';
+import { SiteToolsClient, SiteToolsError, TaskTimeoutError } from '../src/sitetools.js';
 
 const API_URL = 'c1103939.sgvps.net';
 const BASE = `https://${API_URL}/api-sgcp/v00`;
@@ -236,6 +236,23 @@ test('Cron: create/update/delete payloads, day-of-week 7 is sent as 0', async (t
 	await st.deleteCronJob(4);
 	assert.equal(calls[2].method, 'DELETE');
 	assert.equal(calls[2].body, undefined);
+});
+
+test('Backups: backups() lists GET /backup, createBackup() posts instant_label', async (t) => {
+	const list = [{ id: 1, ts_start: 1767225600, instant_backup: 1, instant_label: 'x' }];
+	const { st, calls } = client(t, { 'GET /backup': list, 'POST /backup': {} });
+	assert.deepEqual(await st.backups(), list);
+	await st.createBackup({ name: 'voor-release' });
+	assert.deepEqual(calls.map((c) => [c.method, c.endpoint, c.body]), [['GET', '/backup', undefined], ['POST', '/backup', { instant_label: 'voor-release' }]]);
+});
+
+test('Backups: createBackup() keeps polling past the default attempts and throws TaskTimeoutError when it runs out', async (t) => {
+	const { st, calls } = client(t, {
+		'POST /backup': () => jsonResponse({ status: 202, task_id: 'T9' }, 202),
+		'GET /task/T9': { options: { completed: 0 } },
+	});
+	await assert.rejects(st.createBackup({ name: 'x', wait: { attempts: 3, intervalMs: 1 } }), (err) => err instanceof TaskTimeoutError && err.taskId === 'T9');
+	assert.equal(calls.filter((c) => c.endpoint === '/task/T9').length, 3);
 });
 
 test('get() unwraps data; the list helpers hit their resources', async (t) => {

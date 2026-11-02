@@ -18,6 +18,7 @@ function jwtExpiry(token, what) {
 }
 import { ask, confirm, select, closePrompt, interactive } from './prompt.js';
 import { task } from './spinner.js';
+import { TaskTimeoutError } from './sitetools.js';
 import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
 import {
 	accountsOverview,
@@ -92,6 +93,9 @@ Site Tools (existing site)
   site:cron <domain> --add "<command>" [--at "<min hour day mon dow>"]
                                              Add a cron job (default every minute; @hourly/@daily/… also work)
   site:cron <domain> --remove <id>           Delete a cron job (asks first in a terminal unless --yes)
+  site:backup <domain>                       List backups (system and manual)
+  site:backup <domain> --create [--name "<label>"]
+                                             Create an on-demand backup and wait until it is done
 `;
 
 const { positionals, values } = parseArgs({
@@ -117,6 +121,8 @@ const { positionals, values } = parseArgs({
 		add: { type: 'string' },
 		at: { type: 'string' },
 		remove: { type: 'string' },
+		create: { type: 'boolean' },
+		name: { type: 'string' },
 		yes: { type: 'boolean', short: 'y' },
 		'dry-run': { type: 'boolean' },
 		json: { type: 'boolean' },
@@ -181,6 +187,12 @@ const intOption = (flag, fallback) => {
 	if (!Number.isInteger(n) || n < 1) throw new Error(`--${flag} needs a positive whole number`);
 	return n;
 };
+/** Local time as YYYY-MM-DD<sep>HHMM (sep ' ' adds a colon: "YYYY-MM-DD HH:MM"). */
+function localStamp(d, sep = '-') {
+	const p = (n) => String(n).padStart(2, '0');
+	const day = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+	return sep === ' ' ? `${day} ${p(d.getHours())}:${p(d.getMinutes())}` : `${day}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
 const METRIC_LABELS = { cpu: 'CPU seconds', exec: 'Program executions' };
 
 function printRanking(rows, key, top) {
@@ -586,11 +598,43 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		if (values.json) return console.log(JSON.stringify(jobs, null, 2));
 		for (const j of jobs) console.log(`#${String(j.id).padEnd(8)} ${cronSchedule(j).padEnd(20)} ${j.cmd}`);
 	},
+
+	async 'site:backup'(sg, [domain]) {
+		if (values.name !== undefined && !values.create) throw new Error('--name only works together with --create');
+		if (values.name !== undefined && !values.name.trim()) throw new Error('--name needs a label');
+		const { st } = await siteToolsFor(sg, domain);
+
+		if (values.create) {
+			const name = values.name?.trim() || `cli-${localStamp(new Date())}`;
+			// Test knobs for the polling; the real defaults wait up to 30 minutes.
+			const wait = { attempts: Number(process.env.SG_TASK_ATTEMPTS) || 600, intervalMs: Number(process.env.SG_TASK_INTERVAL_MS) || 3000 };
+			try {
+				await task(`Creating backup "${name}"…`, () => st.createBackup({ name, wait }), { done: `Backup "${name}" created` });
+			} catch (err) {
+				if (!(err instanceof TaskTimeoutError)) throw err;
+				throw new Error(`Backup "${name}" is still running (task ${err.taskId}). It was not stopped: check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
+			}
+		}
+
+		const backups = await task('Getting backups…', () => st.backups(), { done: (b) => `${b.length} backup(s)` });
+		if (values.json) return console.log(JSON.stringify(backups, null, 2));
+		for (const b of [...backups].sort((x, y) => y.ts_start - x.ts_start)) {
+			console.log(`#${String(b.id).padEnd(8)} ${localStamp(new Date(b.ts_start * 1000), ' ')}  ${(b.instant_backup === 1 ? 'manual' : 'system').padEnd(7)} ${b.instant_label ?? ''}`.trimEnd());
+		}
+	},
 };
 
 if (values.demo || process.env.SG_DEMO === '1') enableDemo();
 
 const [cmd, ...args] = positionals;
+// Commands with their own one-line help: `<command> --help` prints just that line.
+const COMMAND_HELP = {
+	'site:backup': 'List a site\'s backups, or with --create [--name "<label>"] make a manual backup and wait until it is done',
+};
+if (cmd && commands[cmd] && values.help && COMMAND_HELP[cmd]) {
+	console.log(COMMAND_HELP[cmd]);
+	process.exit(0);
+}
 if (!cmd || !commands[cmd] || values.help) {
 	if (cmd && !commands[cmd] && !values.help) console.error(`\x1b[31m✗\x1b[0m Unknown command: ${cmd}`);
 	console.log(HELP);

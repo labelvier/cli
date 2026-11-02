@@ -258,7 +258,83 @@ test('site:info without a domain, site:stats --days validation, account:stats wi
 	assert.equal(cron.stderr, 'Error: Use either --add or --remove, not both\n');
 	const at = await run(['site:cron', 'yoni.care', '--add', 'x', '--at', 'nope'], { env: loggedIn() });
 	assert.match(at.stderr, /^Error: Invalid schedule "nope"/);
+	const backupName = await run(['site:backup', 'analytics.labelvier.dev', '--name', 'x'], { env: loggedIn() });
+	assert.equal(backupName.stderr, 'Error: --name only works together with --create\n');
+	const backupEmpty = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', ' '], { env: loggedIn() });
+	assert.equal(backupEmpty.stderr, 'Error: --name needs a label\n');
 	assert.deepEqual(requests(), [], 'all of these fail before the first request');
+});
+
+test('site:backup: without a domain, unknown domain', async () => {
+	const none = await run(['site:backup'], { env: loggedIn() });
+	assert.equal(none.code, 1);
+	assert.equal(none.stderr, 'Error: Domain is required, e.g. labelvier siteground site:info example.com\n');
+	const unknown = await run(['site:backup', 'nope.example'], { env: loggedIn() });
+	assert.equal(unknown.code, 1);
+	assert.match(unknown.stderr, /Error: /);
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup --help prints one description line and runs nothing', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--help'], { env: loggedIn() });
+	assert.equal(r.code, 0);
+	assert.equal(r.stdout.trimEnd().split('\n').length, 1);
+	assert.match(r.stdout, /--create/);
+	assert.deepEqual(requests(), []);
+});
+
+test('site:backup: lists backups, newest first', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.equal(r.stdout, ['#12       2026-01-02 00:00  manual  voor-release', '#11       2026-01-01 00:00  system'].join('\n') + '\n');
+	assert.deepEqual(requested().filter((x) => x.includes('/backup')), ['GET /backup']);
+});
+
+test('site:backup --create --name: posts the label, waits for the task, then lists', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'voor-release'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.match(r.stderr, /Creating backup "voor-release"…/);
+	assert.match(r.stderr, /✔ Backup "voor-release" created/);
+	const post = requests().find((q) => q.method === 'POST' && q.url.endsWith('/backup'));
+	assert.deepEqual(post.body, { instant_label: 'voor-release' });
+	assert.deepEqual(requested().filter((x) => x.includes('/backup') || x.includes('/task/')), ['POST /backup', 'GET /task/BK1', 'GET /backup']);
+});
+
+test('site:backup --create without --name uses a generated label', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	const post = requests().find((q) => q.method === 'POST' && q.url.endsWith('/backup'));
+	assert.match(post.body.instant_label, /^cli-\d{4}-\d{2}-\d{2}-\d{4}$/);
+});
+
+test('site:backup --create: a failed task is reported and the list is not shown', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'fail'], { env: loggedIn() });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: 17 task BKFAIL/);
+	assert.equal(r.stdout, '');
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup --create: a task that keeps running is reported as still running, not as failed', async () => {
+	const env = { ...loggedIn(), SG_TASK_ATTEMPTS: '2', SG_TASK_INTERVAL_MS: '1' };
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'slow'], { env });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "slow" is still running \(task BKSLOW\)/);
+	assert.match(r.stderr, /do not run --create again/);
+	assert.equal(requested().filter((x) => x === 'POST /backup').length, 1);
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup lists times in local time', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), TZ: 'Europe/Amsterdam' } });
+	assert.equal(r.code, 0, r.stderr);
+	assert.match(r.stdout, /#12 +2026-01-02 01:00 +manual +voor-release/);
+});
+
+test('site:backup --json prints the raw list', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--json'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.equal(JSON.parse(r.stdout)[1].instant_label, 'voor-release');
 });
 
 test('create-site --dry-run: walks every read step with the given options and creates nothing', async () => {
