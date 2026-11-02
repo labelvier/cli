@@ -34,6 +34,9 @@ import {
 	parseCronSchedule,
 	cronSchedule,
 	addCronJob,
+	domainFromUrl,
+	loginApps,
+	adminLoginUrl,
 } from '../src/actions.js';
 
 const CREDENTIALS_DIR = path.join(STATE_DIR, '.credentials');
@@ -479,4 +482,33 @@ test('addCronJob(): creates a job, or reports the existing one with the same com
 	const st3 = fakeSt({ cronJobs: [], createCronJob: undefined });
 	assert.equal((await addCronJob(st3, { cmd: 'x', schedule: '* * * * *' })).message, 'Cron job added: * * * * * x');
 	await assert.rejects(addCronJob(st3, { cmd: 'x', schedule: 'bad' }), /Invalid schedule/);
+});
+
+// --- Admin login -----------------------------------------------------------------------------------
+
+test('domainFromUrl(): domain from a domain or a URL, without www', () => {
+	assert.equal(domainFromUrl('x.nl'), 'x.nl');
+	assert.equal(domainFromUrl(' https://WWW.X.nl/wp-admin/?a=1 '), 'x.nl');
+	assert.equal(domainFromUrl('http://shop.x.nl:8080'), 'shop.x.nl');
+	assert.equal(domainFromUrl('www.x.nl/wp-login.php'), 'x.nl');
+});
+
+test('loginApps(): only apps with a known login, the install on the domain itself first', async () => {
+	const st = fakeSt({
+		wordpressApps: [
+			{ id: 1, app: 'joomla', app_url: 'https://x.nl/' },
+			{ id: 2, app: 'wordpress', app_url: 'https://staging1.x.nl/', is_staging: 1 },
+			{ id: 3, app: 'wordpress', app_url: 'https://x.nl/blog/', path: '/blog' },
+			{ id: 4, app: 'woocommerce', app_url: 'https://www.x.nl/', path: '/' },
+			{ id: 5, app: 'wordpress', app_url: 'not a url' },
+		],
+	});
+	assert.deepEqual((await loginApps(st, 'x.nl')).map((a) => a.id), [4, 3, 5, 2]);
+	assert.deepEqual(await loginApps(fakeSt({ wordpressApps: null }), 'x.nl'), []);
+});
+
+test('adminLoginUrl(): WordPress and WooCommerce use the Site Tools auto-login link', async () => {
+	const st = fakeSt({ wpAutoLoginUrl: 'http://x.nl/wp_auto_login_abc.php' });
+	assert.equal(await adminLoginUrl(st, { id: 4, app: 'woocommerce' }), 'http://x.nl/wp_auto_login_abc.php');
+	assert.deepEqual(st.calls.at(-1), ['wpAutoLoginUrl', 4]);
 });

@@ -309,6 +309,63 @@ export async function setPhpVersion(st, versionId) {
 	return `PHP set to ${phpLabel(versions, versionId)}`;
 }
 
+// --- Admin login --------------------------------------------------------------
+
+/** Domain of a site from a domain or a URL on it: "https://www.x.nl/wp-admin" -> "x.nl". */
+export function domainFromUrl(input) {
+	const value = String(input).trim();
+	let host = value;
+	try {
+		host = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`).hostname;
+	} catch {
+		// not a URL: use it as it is, findSite reports it
+	}
+	return host.toLowerCase().replace(/^www\./, '');
+}
+
+/**
+ * Apps `site:login` can log in to, keyed on the `app` field of Site Tools' GET /wordpress.
+ * loginUrl returns a one-time link that logs in to the admin panel. Add other apps (e.g. Laravel)
+ * here with their own way to get such a link.
+ */
+export const LOGIN_APPS = {
+	wordpress: { label: 'WordPress', loginUrl: (st, app) => st.wpAutoLoginUrl(app.id) },
+	woocommerce: { label: 'WooCommerce', loginUrl: (st, app) => st.wpAutoLoginUrl(app.id) },
+};
+
+/**
+ * Installs on a site with a known admin login. The install on the domain itself comes first,
+ * staging copies and installs in a subfolder after it.
+ */
+export async function loginApps(st, domain) {
+	const apps = ((await st.wordpressApps()) || []).filter((a) => LOGIN_APPS[a.app]);
+	const host = (a) => {
+		try {
+			return new URL(a.app_url).hostname.replace(/^www\./, '');
+		} catch {
+			return '';
+		}
+	};
+	const rank = (a) => (host(a) === domain.replace(/^www\./, '') ? 0 : 2) + (a.is_staging || (a.path && a.path !== '/') ? 1 : 0);
+	return apps.map((a, i) => ({ a, i })).sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i).map(({ a }) => a);
+}
+
+/** One-time admin login link for an install from loginApps(). */
+export function adminLoginUrl(st, app) {
+	return LOGIN_APPS[app.app].loginUrl(st, app);
+}
+
+/** Open a URL in the default browser. Returns false when no opener is available. */
+export async function openInBrowser(url) {
+	const [cmd, args] = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
+	try {
+		await execFileAsync(cmd, args);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 // --- Cron ---------------------------------------------------------------------
 
 const CRON_FIELDS = ['min', 'hour', 'day', 'mon', 'dow'];
