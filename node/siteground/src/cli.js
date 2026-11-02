@@ -627,6 +627,14 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 if (values.demo || process.env.SG_DEMO === '1') enableDemo();
 
 const [cmd, ...args] = positionals;
+// Commands with their own one-line help: `<command> --help` prints just that line.
+const COMMAND_HELP = {
+	'site:backup': 'List a site\'s backups, or with --create [--name "<label>"] make a manual backup and wait until it is done',
+};
+if (cmd && commands[cmd] && values.help && COMMAND_HELP[cmd]) {
+	console.log(COMMAND_HELP[cmd]);
+	process.exit(0);
+}
 if (!cmd || !commands[cmd] || values.help) {
 	if (cmd && !commands[cmd] && !values.help) console.error(`\x1b[31m✗\x1b[0m Unknown command: ${cmd}`);
 	console.log(HELP);

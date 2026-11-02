@@ -275,10 +275,11 @@ test('site:backup: without a domain, unknown domain', async () => {
 	assert.ok(!requested().includes('GET /backup'));
 });
 
-test('site:backup --help prints the help and runs nothing', async () => {
+test('site:backup --help prints one description line and runs nothing', async () => {
 	const r = await run(['site:backup', 'analytics.labelvier.dev', '--help'], { env: loggedIn() });
 	assert.equal(r.code, 0);
-	assert.match(r.stdout, /site:backup <domain> --create \[--name "<label>"\]/);
+	assert.equal(r.stdout.trimEnd().split('\n').length, 1);
+	assert.match(r.stdout, /--create/);
 	assert.deepEqual(requests(), []);
 });
 
