@@ -36,6 +36,12 @@ const uapi = {
 	'POST /auth/refresh-client-token': { client_token: jwt({ exp: now + 3600, tokenType: 'access' }) },
 };
 const siteTools = {
+	'GET /backup': [
+		{ id: 11, ts_start: 1767225600, instant_backup: 0, instant_label: '' },
+		{ id: 12, ts_start: 1767312000, instant_backup: 1, instant_label: 'voor-release' },
+	],
+	'GET /task/BK1': { options: { completed: 1 }, response: { err_code: '0' } },
+	'GET /task/BKFAIL': { options: { completed: 1 }, response: { err_code: 17, err_message: 'No free backup slots' } },
 	'GET /php-version': [{ id: 82, version: 'PHP 8.2.29', mod_php: true }, { id: 83, version: 'PHP 8.3.35', default: true, recommended: true, mod_php: true }],
 };
 
@@ -47,6 +53,11 @@ globalThis.fetch = async (url, init = {}) => {
 	if (url.startsWith(`https://${API_URL}/api-sgcp/v00`)) {
 		table = siteTools;
 		key = `${method} ${url.replace(`https://${API_URL}/api-sgcp/v00`, '')}`;
+	}
+	// On-demand backup: a 202 with a task id (label "fail" makes the task fail), like the real API.
+	if (key === 'POST /backup') {
+		const taskId = JSON.parse(init.body).instant_label === 'fail' ? 'BKFAIL' : 'BK1';
+		return new Response(JSON.stringify({ status: 202, task_id: taskId }), { status: 202, headers: { 'content-type': 'application/json' } });
 	}
 	if (!(key in table)) throw new Error(`fake-api: no canned answer for ${key}`);
 	return new Response(JSON.stringify({ status: 200, message: 'OK', data: table[key] }), { status: 200, headers: { 'content-type': 'application/json' } });

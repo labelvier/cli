@@ -230,6 +230,21 @@ export class SiteToolsClient {
 	deleteCronJob(id) {
 		return this.del(`/cron/${id}`);
 	}
+
+	// --- Backups -----------------------------------------------------------
+
+	/**
+	 * Backups: [{ id, ts_start (unix seconds), instant_backup (1 = manual, 0 = system), instant_label }].
+	 * Derived from the Site Tools bundle; not verified live.
+	 */
+	backups() {
+		return this.get('/backup');
+	}
+
+	/** On-demand backup. The UI form has one required field, `instant_label`; the number of manual backups is capped by the plan. */
+	createBackup({ name }) {
+		return this.post('/backup', { instant_label: name });
+	}
 }
 
 function cronFields({ min, hour, day, mon, dow }) {

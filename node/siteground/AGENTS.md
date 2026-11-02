@@ -23,6 +23,7 @@ labelvier siteground site:info x.labelvier.dev
 labelvier siteground site:ssl x.labelvier.dev        # after DNS points to the server
 labelvier siteground site:memcached|site:ssh-key|site:ssh|site:db x.labelvier.dev
 labelvier siteground site:cron x.labelvier.dev [--add "<command>" --at "* * * * *" | --remove <id>]
+labelvier siteground site:backup x.labelvier.dev [--create [--name "<label>"]]   # list backups / make an on-demand one
 labelvier siteground account:stats Albatros [--days 31 --top 15 --sort cpu|exec]   # which site eats CPU / executions
 labelvier siteground account:autoscale Albatros      # autoscale settings + resources added by autoscaling
 labelvier siteground site:stats yoni.care [--days 31]  # CPU seconds + executions per day for one site
@@ -166,10 +167,11 @@ Writes return `task_id`; when the HTTP status is `202`, poll `GET /task/{id}` un
 | SSH key generate | `POST /ssh-key` `{"comment","password"}` | SiteGround generates the pair (not used) |
 | MySQL | `POST /db-mysql_db` `{"label"}`; `POST /db-mysql_user` `{"label","password"}`; `POST /db-mysql_grant` `{"db_id","dbuser_id","grants":{"all":1}}` | names are generated (`db…`, `u…`) |
 | Cron | `GET /cron`; `POST /cron` `{"cmd","min","hour","day","mon","dow"}`; `PUT /cron/{id}` (same body); `DELETE /cron/{id}` | crontab fields as strings; the UI sends dow `7` as `0`. Only route to cron on SiteGround: SSH has no `crontab`. Notification email: `GET/POST /cron-notify` (not used). GET + payload taken from the bundle; POST/DELETE not yet verified live |
+| Backups | `GET /backup` → `[{id, ts_start (unix s), instant_backup (1 manual / 0 system), instant_label}]`; `POST /backup` `{"instant_label"}` (required in the UI form; capped by `features.max_user_backups` in `GET /endpoint`); `DELETE /backup/{id}` (manual only, not used) | Taken from the Site Tools bundle, **not verified live**. Hourly tracks: `GET /backup?track=<id>` (`/backup-track`, premium) and restore via `/backup-restore*`: not used. `site:backup --create` without `--name` uses `cli-YYYY-MM-DD-HHMM` |
 | PHP versions | `GET /php-version` | `[{id: 83, version: "PHP 8.3.35", default?, recommended?, mod_php}]` |
 | PHP version (main domain) | `PUT /uservice/{apacheId}` `{"settings":{"php_version":83}}`; `{"settings":{}}` = managed | apache uservice from `GET /uservice`. Other domains: `PUT /domain/{id}` `{"php_version":83}` (0 = managed), not used |
 
-Other resources in the bundle: backup, dns-*, email*, ftp, location-* (redirects, protect, IP block),
+Other resources in the bundle: backup-restore*, dns-*, email*, ftp, location-* (redirects, protect, IP block),
 php-variable/extension, wordpress (incl. staging), webstats, errorlogs/accesslogs.
 
 ## Research method (for next time)

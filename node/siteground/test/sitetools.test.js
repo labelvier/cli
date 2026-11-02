@@ -238,6 +238,14 @@ test('Cron: create/update/delete payloads, day-of-week 7 is sent as 0', async (t
 	assert.equal(calls[2].body, undefined);
 });
 
+test('Backups: backups() lists GET /backup, createBackup() posts instant_label', async (t) => {
+	const list = [{ id: 1, ts_start: 1767225600, instant_backup: 1, instant_label: 'x' }];
+	const { st, calls } = client(t, { 'GET /backup': list, 'POST /backup': {} });
+	assert.deepEqual(await st.backups(), list);
+	await st.createBackup({ name: 'voor-release' });
+	assert.deepEqual(calls.map((c) => [c.method, c.endpoint, c.body]), [['GET', '/backup', undefined], ['POST', '/backup', { instant_label: 'voor-release' }]]);
+});
+
 test('get() unwraps data; the list helpers hit their resources', async (t) => {
 	const routes = Object.fromEntries(['/ssl', '/ssh', '/db-mysql_db', '/db-mysql_user', '/db-mysql_grant', '/cron', '/php-version'].map((e) => [`GET ${e}`, [e]]));
 	const { st, calls } = client(t, routes);

@@ -92,6 +92,9 @@ Site Tools (existing site)
   site:cron <domain> --add "<command>" [--at "<min hour day mon dow>"]
                                              Add a cron job (default every minute; @hourly/@daily/… also work)
   site:cron <domain> --remove <id>           Delete a cron job (asks first in a terminal unless --yes)
+  site:backup <domain>                       List backups (system and manual)
+  site:backup <domain> --create [--name "<label>"]
+                                             Create an on-demand backup and wait until it is done
 `;
 
 const { positionals, values } = parseArgs({
@@ -117,6 +120,8 @@ const { positionals, values } = parseArgs({
 		add: { type: 'string' },
 		at: { type: 'string' },
 		remove: { type: 'string' },
+		create: { type: 'boolean' },
+		name: { type: 'string' },
 		yes: { type: 'boolean', short: 'y' },
 		'dry-run': { type: 'boolean' },
 		json: { type: 'boolean' },
@@ -585,6 +590,24 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		const jobs = await task('Getting cron jobs…', () => st.cronJobs(), { done: (j) => `${j.length} cron job(s)` });
 		if (values.json) return console.log(JSON.stringify(jobs, null, 2));
 		for (const j of jobs) console.log(`#${String(j.id).padEnd(8)} ${cronSchedule(j).padEnd(20)} ${j.cmd}`);
+	},
+
+	async 'site:backup'(sg, [domain]) {
+		if (values.name !== undefined && !values.create) throw new Error('--name only works together with --create');
+		if (values.name !== undefined && !values.name.trim()) throw new Error('--name needs a label');
+		const { st } = await siteToolsFor(sg, domain);
+
+		if (values.create) {
+			const name = values.name?.trim() || `cli-${new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '')}`;
+			await task(`Creating backup "${name}"…`, () => st.createBackup({ name }), { done: `Backup "${name}" created` });
+		}
+
+		const backups = await task('Getting backups…', () => st.backups(), { done: (b) => `${b.length} backup(s)` });
+		if (values.json) return console.log(JSON.stringify(backups, null, 2));
+		for (const b of [...backups].sort((x, y) => y.ts_start - x.ts_start)) {
+			const when = new Date(b.ts_start * 1000).toISOString().slice(0, 16).replace('T', ' ');
+			console.log(`#${String(b.id).padEnd(8)} ${when}  ${(b.instant_backup === 1 ? 'manual' : 'system').padEnd(7)} ${b.instant_label ?? ''}`.trimEnd());
+		}
 	},
 };
 

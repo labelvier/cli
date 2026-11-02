@@ -27,7 +27,9 @@
 - [ ] Check the refresh-token lifetime after a login with "Stay logged in" (`npm run sg -- session:status`).
 - [x] Cron jobs: `site:cron` lists, adds (`--add`, `--at`) and deletes (`--remove`). Listing verified on
       `analytics.labelvier.dev`; adding and deleting not yet verified live.
-- [ ] More Site Tools options when needed: staging, backups, redirects, email.
+- [x] Backups: `site:backup` lists and creates on-demand backups (`--create [--name]`). Endpoints from the bundle,
+      tested against the fake API only; not yet verified live (needs an approval per command).
+- [ ] More Site Tools options when needed: staging, redirects, email.
 - [ ] `delete-site` (endpoints known: `GET /sites/{id}/delete`, `DELETE /sites/{id}`), only with explicit confirm.
 - [ ] Tests for the payload builders (no network).
 
