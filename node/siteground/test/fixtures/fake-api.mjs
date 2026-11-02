@@ -41,6 +41,7 @@ const siteTools = {
 		{ id: 12, ts_start: 1767312000, instant_backup: 1, instant_label: 'voor-release' },
 	],
 	'GET /task/BK1': { options: { completed: 1 }, response: { err_code: '0' } },
+	'GET /task/BKSLOW': { options: { completed: 0 } },
 	'GET /task/BKFAIL': { options: { completed: 1 }, response: { err_code: 17, err_message: 'No free backup slots' } },
 	'GET /php-version': [{ id: 82, version: 'PHP 8.2.29', mod_php: true }, { id: 83, version: 'PHP 8.3.35', default: true, recommended: true, mod_php: true }],
 };
@@ -54,9 +55,10 @@ globalThis.fetch = async (url, init = {}) => {
 		table = siteTools;
 		key = `${method} ${url.replace(`https://${API_URL}/api-sgcp/v00`, '')}`;
 	}
-	// On-demand backup: a 202 with a task id (label "fail" makes the task fail), like the real API.
+	// On-demand backup: a 202 with a task id (label "fail" makes the task fail, "slow" never finishes), like the real API.
 	if (key === 'POST /backup') {
-		const taskId = JSON.parse(init.body).instant_label === 'fail' ? 'BKFAIL' : 'BK1';
+		const label = JSON.parse(init.body).instant_label;
+		const taskId = label === 'fail' ? 'BKFAIL' : label === 'slow' ? 'BKSLOW' : 'BK1';
 		return new Response(JSON.stringify({ status: 202, task_id: taskId }), { status: 202, headers: { 'content-type': 'application/json' } });
 	}
 	if (!(key in table)) throw new Error(`fake-api: no canned answer for ${key}`);

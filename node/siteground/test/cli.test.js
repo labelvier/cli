@@ -314,6 +314,22 @@ test('site:backup --create: a failed task is reported and the list is not shown'
 	assert.ok(!requested().includes('GET /backup'));
 });
 
+test('site:backup --create: a task that keeps running is reported as still running, not as failed', async () => {
+	const env = { ...loggedIn(), SG_TASK_ATTEMPTS: '2', SG_TASK_INTERVAL_MS: '1' };
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'slow'], { env });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "slow" is still running \(task BKSLOW\)/);
+	assert.match(r.stderr, /do not run --create again/);
+	assert.equal(requested().filter((x) => x === 'POST /backup').length, 1);
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup lists times in local time', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), TZ: 'Europe/Amsterdam' } });
+	assert.equal(r.code, 0, r.stderr);
+	assert.match(r.stdout, /#12 +2026-01-02 01:00 +manual +voor-release/);
+});
+
 test('site:backup --json prints the raw list', async () => {
 	const r = await run(['site:backup', 'analytics.labelvier.dev', '--json'], { env: loggedIn() });
 	assert.equal(r.code, 0, r.stderr);

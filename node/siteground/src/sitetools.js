@@ -9,6 +9,14 @@ export class SiteToolsError extends Error {
 	}
 }
 
+/** A task was still running when we stopped waiting. It may well finish on its own. */
+export class TaskTimeoutError extends Error {
+	constructor(taskId) {
+		super(`Task ${taskId} did not finish in time`);
+		this.taskId = taskId;
+	}
+}
+
 /**
  * Client for the per-site "Site Tools" API: https://<server>.sgvps.net/api-sgcp/v00/<endpoint>
  * Same API tools.siteground.com uses. Auth with a site token from uapi
@@ -41,7 +49,7 @@ export class SiteToolsClient {
 		}
 	}
 
-	async request(method, endpoint, { body, params = {} } = {}, retry = true) {
+	async request(method, endpoint, { body, params = {}, wait } = {}, retry = true) {
 		await this.auth();
 		const qs = new URLSearchParams(params).toString();
 		const url = `https://${this.apiUrl}/api-sgcp/v00${endpoint}${qs ? `?${qs}` : ''}`;
@@ -56,10 +64,10 @@ export class SiteToolsClient {
 		});
 		if (res.status === 401 && retry) {
 			this.siteToken = null;
-			return this.request(method, endpoint, { body, params }, false);
+			return this.request(method, endpoint, { body, params, wait }, false);
 		}
 		const json = await res.json().catch(() => null);
-		if (res.status === 202 || json?.status === 202) return this.waitForTask(json?.task_id ?? json?.data?.task_id, json);
+		if (res.status === 202 || json?.status === 202) return this.waitForTask(json?.task_id ?? json?.data?.task_id, json, wait);
 		if (!res.ok || json?.status >= 400) throw new SiteToolsError(json?.status || res.status, json, `${method} ${endpoint}`);
 		return json;
 	}
@@ -75,15 +83,15 @@ export class SiteToolsClient {
 			}
 			return task;
 		}
-		throw new Error(`Task ${taskId} did not finish in time`);
+		throw new TaskTimeoutError(taskId);
 	}
 
 	get(endpoint, params) {
 		return this.request('GET', endpoint, { params }).then((r) => r.data);
 	}
 
-	post(endpoint, body) {
-		return this.request('POST', endpoint, { body });
+	post(endpoint, body, { wait } = {}) {
+		return this.request('POST', endpoint, { body, wait });
 	}
 
 	put(endpoint, body) {
@@ -242,8 +250,9 @@ export class SiteToolsClient {
 	}
 
 	/** On-demand backup. The UI form has one required field, `instant_label`; the number of manual backups is capped by the plan. */
-	createBackup({ name }) {
-		return this.post('/backup', { instant_label: name });
+	createBackup({ name, wait = { attempts: 600 } }) {
+		// A full backup of a big site takes longer than the default 5 minutes; wait up to 30 minutes.
+		return this.post('/backup', { instant_label: name }, { wait });
 	}
 }
 
