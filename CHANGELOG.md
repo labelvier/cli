@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-04
+
 ### Added
+- `siteground site:login <domain|url>` opens the WordPress admin panel in the browser with a one-time login link (`--print` prints the link instead). SiteGround always logs in as the first administrator and has no option to choose; `site:login` therefore patches the login script on the site through the File Manager API, so the first administrator with an `@labelvier.nl` address is used when there is one. `--admin-domain <domain>` changes the domain, `--admin-domain any` keeps SiteGround's choice. When the script cannot be read or changed, it warns and uses the unchanged link.
+- `siteground site:info` shows the storage a site uses, with its share of the plan limit.
 - `LARAVEL.md` global Claude config: the default Label Vier Laravel stack (latest Laravel, Livewire + Flux UI free, MariaDB, Sail, Pest, Playwright, Deployer) and its conventions, distilled from the existing Laravel projects. New projects and dependencies always start on the latest stable versions. Deploys go through GitOps, set up with `labelvier gitops setup`.
 - `BACKEND.md`: a short router that is always loaded and tells Claude to read `LARAVEL.md` only for Laravel work, so other sessions don't spend tokens on it. `ai claude install` installs both and wires `BACKEND.md` into `~/.claude/CLAUDE.md`. The managed snippet moves to version 2, so `ai check` flags existing installs as outdated until the next install.
+
+### Changed
+- `core update` shows a friendlier, clickable update notification.
+- CI runs on Node 24 and only on pull requests and pushes to `develop` and `master`. Playwright is updated to 1.64.1.
+
+### Fixed
+- A SiteGround session that is expired or rejected (for example `sessionexpired` on the token refresh), or missing, starts the browser login in a terminal and carries on, instead of failing with an error. Piped runs and sessions from `SG_REFRESH_TOKEN` still fail with a hint. Chromium for the login is installed on demand.
+- `siteground site:php` switches sites on standard PHP to Ultrafast PHP before setting the version.
 
 ## [1.2.1] - 2026-10-23
 
