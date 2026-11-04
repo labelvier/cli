@@ -70,12 +70,70 @@ test('refresh(): throws "Refresh token expired" without a request when the refre
 	assert.equal(calls.length, 0);
 });
 
+test('refresh(): with relogin, an expired refresh token starts the login and continues with the new session', async (t) => {
+	const { calls } = mockApi(t, { 'POST /auth/refresh-client-token': { client_token: tokenExpiringIn(3600) } });
+	const fresh = freshSession();
+	const reasons = [];
+	const relogin = async (reason) => {
+		reasons.push(reason);
+		mkdirSync(STATE_DIR, { recursive: true });
+		writeFileSync(SESSION_FILE, JSON.stringify(fresh));
+	};
+	const sg = new SiteGroundClient({ token: null, refreshToken: tokenExpiringIn(-1) }, { relogin });
+	await sg.refresh();
+	assert.equal(reasons.length, 1);
+	assert.match(reasons[0], /Session expired/);
+	assert.deepEqual(sg.session.refreshToken, fresh.refreshToken);
+	assert.equal(calls.length, 0, 'no refresh request with a dead refresh token');
+});
+
+test('refresh(): with relogin, a 400 "sessionexpired" from SiteGround starts the login', async (t) => {
+	mockApi(t, { 'POST /auth/refresh-client-token': () => jsonResponse({ status: 400, message: { intl_id: 'translate.auth.form.authenticate.sessionexpired' } }, 400) });
+	const fresh = freshSession();
+	let reason;
+	const relogin = async (r) => {
+		reason = r;
+		mkdirSync(STATE_DIR, { recursive: true });
+		writeFileSync(SESSION_FILE, JSON.stringify(fresh));
+	};
+	const sg = new SiteGroundClient(freshSession({ token: null }), { relogin });
+	await sg.refresh();
+	assert.match(reason, /sessionexpired/);
+	assert.equal(sg.session.token, fresh.token);
+});
+
+test('refresh(): without relogin (or with an env session) a rejected refresh token stays an error with a login hint', async (t) => {
+	mockApi(t, { 'POST /auth/refresh-client-token': () => jsonResponse({ status: 400, message: 'sessionexpired' }, 400) });
+	await assert.rejects(new SiteGroundClient(freshSession({ token: null })).refresh(), /sessionexpired\. Run "labelvier siteground login" again\./);
+	await assert.rejects(
+		new SiteGroundClient(freshSession({ token: null, fromEnv: true }), { relogin: async () => assert.fail('must not log in') }).refresh(),
+		/Run "labelvier siteground login" again/,
+	);
+});
+
+test('refresh(): a 500 is not a login problem and does not start the login', async (t) => {
+	mockApi(t, { 'POST /auth/refresh-client-token': () => jsonResponse({ status: 500, message: 'boom' }, 500) });
+	const sg = new SiteGroundClient(freshSession({ token: null }), { relogin: async () => assert.fail('must not log in') });
+	await assert.rejects(sg.refresh(), (err) => err instanceof ApiError && err.status === 500);
+});
+
+test('fromSavedSession({ relogin }): logs in first when there is no session yet', async () => {
+	const fresh = freshSession();
+	const sg = await SiteGroundClient.fromSavedSession({
+		relogin: async () => {
+			mkdirSync(STATE_DIR, { recursive: true });
+			writeFileSync(SESSION_FILE, JSON.stringify(fresh));
+		},
+	});
+	assert.deepEqual(sg.session, fresh);
+});
+
 test('refresh(): an answer without client_token is an ApiError', async (t) => {
-	mockApi(t, { 'POST /auth/refresh-client-token': () => jsonResponse({ status: 401, message: 'expired' }, 401) });
+	mockApi(t, { 'POST /auth/refresh-client-token': () => jsonResponse({ status: 503, message: 'unavailable' }, 503) });
 	await assert.rejects(new SiteGroundClient(freshSession({ token: null })).refresh(), (err) => {
 		assert.ok(err instanceof ApiError);
-		assert.equal(err.status, 401);
-		assert.equal(err.message, '401 /auth/refresh-client-token: expired');
+		assert.equal(err.status, 503);
+		assert.equal(err.message, '503 /auth/refresh-client-token: unavailable');
 		return true;
 	});
 });

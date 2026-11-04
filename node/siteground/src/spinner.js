@@ -7,6 +7,19 @@ const color = (code, s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : s);
  * Terminal spinner on stderr. Without a TTY (CI, pipes) it prints plain lines instead,
  * so logs stay readable.
  */
+let active = null;
+
+/** Run fn (e.g. a browser login that prints its own lines) with the running spinner cleared, then redraw it. */
+export async function suspendSpinner(fn) {
+	const s = active;
+	s?.pause();
+	try {
+		return await fn();
+	} finally {
+		s?.resume();
+	}
+}
+
 export function spinner(text) {
 	let frame = 0;
 	let current = text;
@@ -19,21 +32,32 @@ export function spinner(text) {
 		finished = true;
 		if (timer) clearInterval(timer);
 		timer = null;
+		if (active === api) active = null;
 		if (tty) out.write('\r\x1b[2K');
 		out.write(`${symbol} ${message ?? current}\n`);
 	};
 
-	if (tty) {
+	const start = () => {
 		render();
 		timer = setInterval(() => {
 			frame = (frame + 1) % FRAMES.length;
 			render();
 		}, 80);
-	} else {
-		out.write(`… ${text}\n`);
-	}
+	};
 
-	return {
+	if (tty) start();
+	else out.write(`… ${text}\n`);
+
+	const api = {
+		pause() {
+			if (finished || !timer) return;
+			clearInterval(timer);
+			timer = null;
+			out.write('\r\x1b[2K');
+		},
+		resume() {
+			if (!finished && tty && !timer) start();
+		},
 		set text(value) {
 			current = value;
 			if (tty) render();
@@ -48,6 +72,8 @@ export function spinner(text) {
 		fail: (message) => stop(color(31, '✖'), message),
 		info: (message) => stop(color(33, 'ℹ'), message),
 	};
+	active = api;
+	return api;
 }
 
 /**

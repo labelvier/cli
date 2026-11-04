@@ -309,6 +309,97 @@ export async function setPhpVersion(st, versionId) {
 	return `PHP set to ${phpLabel(versions, versionId)}`;
 }
 
+// --- Admin login --------------------------------------------------------------
+
+/** Domain of a site from a domain or a URL on it: "https://www.x.nl/wp-admin" -> "x.nl". */
+export function domainFromUrl(input) {
+	const value = String(input).trim();
+	let host = value;
+	try {
+		host = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`).hostname;
+	} catch {
+		// not a URL: use it as it is, findSite reports it
+	}
+	return host.toLowerCase().replace(/^www\./, '');
+}
+
+/**
+ * Apps `site:login` can log in to, keyed on the `app` field of Site Tools' GET /wordpress.
+ * loginUrl returns a one-time link that logs in to the admin panel. Add other apps (e.g. Laravel)
+ * here with their own way to get such a link.
+ */
+export const LOGIN_APPS = {
+	wordpress: { label: 'WordPress', loginUrl: (st, app) => st.wpAutoLoginUrl(app.id) },
+	woocommerce: { label: 'WooCommerce', loginUrl: (st, app) => st.wpAutoLoginUrl(app.id) },
+};
+
+/**
+ * Installs on a site with a known admin login. The install on the domain itself comes first,
+ * staging copies and installs in a subfolder after it.
+ */
+export async function loginApps(st, domain) {
+	const apps = ((await st.wordpressApps()) || []).filter((a) => LOGIN_APPS[a.app]);
+	const host = (a) => {
+		try {
+			return new URL(a.app_url).hostname.replace(/^www\./, '');
+		} catch {
+			return '';
+		}
+	};
+	const rank = (a) => (host(a) === domain.replace(/^www\./, '') ? 0 : 2) + (a.is_staging || (a.path && a.path !== '/') ? 1 : 0);
+	return apps.map((a, i) => ({ a, i })).sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i).map(({ a }) => a);
+}
+
+/** Administrators with this email domain are preferred by site:login (--admin-domain overrides, "any" turns it off). */
+export const PREFERRED_ADMIN_DOMAIN = 'labelvier.nl';
+
+const FIRST_ADMIN = /\$user_id\s*=\s*\$admins\[0\]->ID;/;
+
+/**
+ * SiteGround's wp_auto_login_<hash>.php logs in as the first administrator ($admins[0]); there is no
+ * API parameter to choose. This returns the script with that line followed by a pick of the first
+ * administrator whose email ends in @<domain>, or null when the script has a different shape.
+ */
+export function preferAdminDomain(php, domain) {
+	if (!/^[a-z\d]([a-z\d.-]*[a-z\d])?$/i.test(domain)) throw new Error(`Invalid admin domain "${domain}"`);
+	if (!FIRST_ADMIN.test(php)) return null;
+	const suffix = `@${domain.toLowerCase()}`;
+	return php.replace(FIRST_ADMIN, (line) =>
+		`${line}\n\t\t// l4: prefer the first administrator with a ${suffix} address\n\t\tforeach ($admins as $l4_admin) { if (substr(strtolower($l4_admin->user_email), -${suffix.length}) === '${suffix}') { $user_id = $l4_admin->ID; break; } }`);
+}
+
+/**
+ * One-time admin login link for an install from loginApps(). With an adminDomain (not "any") the
+ * link script on the site is patched, through the File Manager API, to log in as the first
+ * administrator on that email domain, when there is one. Anything that fails there is reported
+ * through onWarn and the link stays the one SiteGround made.
+ */
+export async function adminLoginUrl(st, app, { adminDomain = PREFERRED_ADMIN_DOMAIN, onWarn = () => {} } = {}) {
+	const url = await LOGIN_APPS[app.app].loginUrl(st, app);
+	if (!adminDomain || adminDomain === 'any') return url;
+	const file = `/${app.domain_name}/${app.docroot}${new URL(url).pathname}`;
+	try {
+		const php = await st.readFile(file);
+		const patched = preferAdminDomain(php, adminDomain);
+		if (!patched) return onWarn(`the login script of ${app.app_url} has an unknown shape`), url;
+		await st.writeFile(file, patched);
+	} catch (err) {
+		onWarn(String(err.message).replace(/wp_auto_login_\w+/g, 'wp_auto_login_<hidden>')); // the file name is the secret
+	}
+	return url;
+}
+
+/** Open a URL in the default browser. Returns false when no opener is available. */
+export async function openInBrowser(url) {
+	const [cmd, args] = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
+	try {
+		await execFileAsync(cmd, args);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 // --- Cron ---------------------------------------------------------------------
 
 const CRON_FIELDS = ['min', 'hour', 'day', 'mon', 'dow'];

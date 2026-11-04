@@ -34,6 +34,10 @@ import {
 	parseCronSchedule,
 	cronSchedule,
 	addCronJob,
+	domainFromUrl,
+	loginApps,
+	adminLoginUrl,
+	preferAdminDomain,
 } from '../src/actions.js';
 
 const CREDENTIALS_DIR = path.join(STATE_DIR, '.credentials');
@@ -479,4 +483,67 @@ test('addCronJob(): creates a job, or reports the existing one with the same com
 	const st3 = fakeSt({ cronJobs: [], createCronJob: undefined });
 	assert.equal((await addCronJob(st3, { cmd: 'x', schedule: '* * * * *' })).message, 'Cron job added: * * * * * x');
 	await assert.rejects(addCronJob(st3, { cmd: 'x', schedule: 'bad' }), /Invalid schedule/);
+});
+
+// --- Admin login -----------------------------------------------------------------------------------
+
+test('domainFromUrl(): domain from a domain or a URL, without www', () => {
+	assert.equal(domainFromUrl('x.nl'), 'x.nl');
+	assert.equal(domainFromUrl(' https://WWW.X.nl/wp-admin/?a=1 '), 'x.nl');
+	assert.equal(domainFromUrl('http://shop.x.nl:8080'), 'shop.x.nl');
+	assert.equal(domainFromUrl('www.x.nl/wp-login.php'), 'x.nl');
+});
+
+test('loginApps(): only apps with a known login, the install on the domain itself first', async () => {
+	const st = fakeSt({
+		wordpressApps: [
+			{ id: 1, app: 'joomla', app_url: 'https://x.nl/' },
+			{ id: 2, app: 'wordpress', app_url: 'https://staging1.x.nl/', is_staging: 1 },
+			{ id: 3, app: 'wordpress', app_url: 'https://x.nl/blog/', path: '/blog' },
+			{ id: 4, app: 'woocommerce', app_url: 'https://www.x.nl/', path: '/' },
+			{ id: 5, app: 'wordpress', app_url: 'not a url' },
+		],
+	});
+	assert.deepEqual((await loginApps(st, 'x.nl')).map((a) => a.id), [4, 3, 5, 2]);
+	assert.deepEqual(await loginApps(fakeSt({ wordpressApps: null }), 'x.nl'), []);
+});
+
+const SG_SCRIPT = "<?php\nfunction auto_login() {\n\t\t$admins = get_users(array('role'=>'administrator'));\n\t\t$user_id = $admins[0]->ID;\n\t\t$user = get_user_by( 'ID', $user_id );\n}\n";
+const APP = { id: 4, app: 'woocommerce', domain_name: 'x.nl', docroot: 'public_html', app_url: 'https://x.nl/' };
+
+test('adminLoginUrl(): WordPress and WooCommerce use the Site Tools auto-login link', async () => {
+	const st = fakeSt({ wpAutoLoginUrl: 'http://x.nl/wp_auto_login_abc.php' });
+	assert.equal(await adminLoginUrl(st, { id: 4, app: 'woocommerce' }, { adminDomain: 'any' }), 'http://x.nl/wp_auto_login_abc.php');
+	assert.deepEqual(st.calls.at(-1), ['wpAutoLoginUrl', 4]);
+	assert.equal(st.readFile, undefined, 'adminDomain "any" does not touch the site');
+});
+
+test('preferAdminDomain(): picks the first admin on the email domain after SiteGround\'s default, null for an unknown script', () => {
+	const out = preferAdminDomain(SG_SCRIPT, 'LabelVier.nl');
+	assert.match(out, /\$user_id = \$admins\[0\]->ID;\n\t\t\/\/ l4: prefer the first administrator with a @labelvier\.nl address\n\t\tforeach \(\$admins as \$l4_admin\) \{ if \(substr\(strtolower\(\$l4_admin->user_email\), -13\) === '@labelvier\.nl'\) \{ \$user_id = \$l4_admin->ID; break; \} \}\n\t\t\$user = /);
+	assert.equal(preferAdminDomain('<?php // changed', 'labelvier.nl'), null);
+	assert.throws(() => preferAdminDomain(SG_SCRIPT, "x.nl'; system('id'); //"), /Invalid admin domain/);
+});
+
+test('adminLoginUrl(): patches the login script on the site and returns the unchanged link', async () => {
+	const st = fakeSt({ wpAutoLoginUrl: 'http://x.nl/wp_auto_login_abc.php', readFile: SG_SCRIPT, writeFile: undefined });
+	const warnings = [];
+	assert.equal(await adminLoginUrl(st, APP, { onWarn: (m) => warnings.push(m) }), 'http://x.nl/wp_auto_login_abc.php');
+	assert.deepEqual(st.calls[1], ['readFile', '/x.nl/public_html/wp_auto_login_abc.php']);
+	assert.equal(st.calls[2][0], 'writeFile');
+	assert.equal(st.calls[2][1], '/x.nl/public_html/wp_auto_login_abc.php');
+	assert.match(st.calls[2][2], /@labelvier\.nl/);
+	assert.deepEqual(warnings, []);
+});
+
+test('adminLoginUrl(): a failing read or an unknown script only warns, the link still comes back', async () => {
+	const unknown = fakeSt({ wpAutoLoginUrl: 'http://x.nl/wp_auto_login_abc.php', readFile: '<?php // new shape', writeFile: undefined });
+	const warnings = [];
+	assert.equal(await adminLoginUrl(unknown, APP, { onWarn: (m) => warnings.push(m) }), 'http://x.nl/wp_auto_login_abc.php');
+	assert.equal(unknown.calls.some((c) => c[0] === 'writeFile'), false);
+	assert.match(warnings[0], /unknown shape/);
+
+	const broken = fakeSt({ wpAutoLoginUrl: 'http://x.nl/wp_auto_login_abc.php', readFile: () => { throw new Error('404 GET /file'); } });
+	assert.equal(await adminLoginUrl(broken, APP, { adminDomain: 'example.org', onWarn: (m) => warnings.push(m) }), 'http://x.nl/wp_auto_login_abc.php');
+	assert.equal(warnings[1], '404 GET /file');
 });

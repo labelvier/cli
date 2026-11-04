@@ -19,17 +19,37 @@ export class ApiError extends Error {
  * Auth: short-lived access JWT (1h) as Bearer, renewed with a refresh JWT (24h, not rotated).
  */
 export class SiteGroundClient {
-	constructor(session) {
+	/** `relogin`: async (reason) => void that stores a fresh session (browser login); without it a dead session is an error. */
+	constructor(session, { relogin = null } = {}) {
 		this.session = session;
+		this.relogin = relogin;
 	}
 
-	static async fromSavedSession() {
-		return new SiteGroundClient(await loadSession());
+	static async fromSavedSession({ relogin = null } = {}) {
+		let session;
+		try {
+			session = await loadSession();
+		} catch (err) {
+			if (!relogin || !/No session found/.test(err.message)) throw err;
+			await relogin();
+			session = await loadSession();
+		}
+		return new SiteGroundClient(session, { relogin });
+	}
+
+	/** Log in again and carry on with the new session. Only possible when the caller gave a `relogin`. */
+	async reauthenticate(reason, hint) {
+		if (!this.relogin || this.session.fromEnv) throw new Error(hint);
+		await this.relogin(reason);
+		this.session = await loadSession();
 	}
 
 	async refresh() {
 		if (secondsLeft(this.session.refreshToken) <= 0) {
-			throw new Error('Refresh token expired (24h lifetime). Run "labelvier siteground login" again.');
+			return this.reauthenticate(
+				'Session expired (refresh token lifetime is 24h).',
+				'Refresh token expired (24h lifetime). Run "labelvier siteground login" again.',
+			);
 		}
 		const res = await fetch(`${API}/auth/refresh-client-token`, {
 			method: 'POST',
@@ -37,7 +57,14 @@ export class SiteGroundClient {
 			body: JSON.stringify({ refresh_token: this.session.refreshToken }),
 		});
 		const body = await res.json().catch(() => null);
-		if (!res.ok || !body?.data?.client_token) throw new ApiError(res.status, body, '/auth/refresh-client-token');
+		if (!res.ok || !body?.data?.client_token) {
+			const err = new ApiError(res.status, body, '/auth/refresh-client-token');
+			// 400/401: SiteGround no longer accepts the refresh token (e.g. "sessionexpired"). 5xx/network errors are not a login problem.
+			if (res.status === 400 || res.status === 401) {
+				return this.reauthenticate(`Session rejected by SiteGround (${err.message}).`, `${err.message}. Run "labelvier siteground login" again.`);
+			}
+			throw err;
+		}
 		this.session.token = body.data.client_token;
 		await saveSession(this.session);
 	}
