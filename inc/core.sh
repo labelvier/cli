@@ -267,10 +267,10 @@ core() (
     if [ "$tools_ok" -eq 0 ]; then
       # setup also walks through notifications and `ai update`, so it covers everything.
       _auto_log "setup tools found missing tools"
-      _notify "Label Vier CLI" "Something needs attention. Open the terminal and type: labelvier setup" "$(printf '%q' "$cli_dir/labelvier") setup"
+      _notify "Label Vier CLI" "The Label Vier CLI needs a quick update. Click here and we'll sort it out." "$(printf '%q' "$cli_dir/labelvier") setup"
     elif echo "$result" | grep -q '✗'; then
       _auto_log "ai check found problems"
-      _notify "Label Vier CLI" "Something needs attention. Open the terminal and type: labelvier ai update" "$(printf '%q' "$cli_dir/labelvier") ai update"
+      _notify "Label Vier CLI" "The Label Vier CLI needs a quick update. Click here and we'll sort it out." "$(printf '%q' "$cli_dir/labelvier") ai update"
     elif [ "$before" != "$after" ]; then
       _notify "Label Vier CLI" "Updated to version $(git describe --tags --abbrev=0 2>/dev/null || echo "$after"), all checks passed."
     fi

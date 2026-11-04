@@ -585,7 +585,7 @@ stub_notifier() {
   run core update --auto
   [ "$status" -eq 0 ]
   grep -q "ai check found problems" "$HOME/.labelvier-auto-update/update.log"
-  assert_stub_called '^terminal-notifier -title Label Vier CLI -message Something needs attention. Open the terminal and type: labelvier ai update -execute open '
+  assert_stub_called '^terminal-notifier -title Label Vier CLI -message The Label Vier CLI needs a quick update. Click here and we'\''ll sort it out. -execute open '
   local launcher="$HOME/.labelvier-auto-update/notification-action.command"
   [ -x "$launcher" ]
   grep -q "labelvier ai update$" "$launcher"
@@ -601,7 +601,7 @@ stub_notifier() {
   run core update --auto
   [ "$status" -eq 0 ]
   grep -q "setup tools found missing tools" "$HOME/.labelvier-auto-update/update.log"
-  assert_stub_called 'labelvier setup" with title "Label Vier CLI"'
+  assert_stub_called 'sort it out." with title "Label Vier CLI"'
 }
 
 @test "update --auto skips when another run holds the lock" {
