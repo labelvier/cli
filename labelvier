@@ -91,6 +91,13 @@ function _print_usage() {
 }
 
 function main() {
+  # `--version` / `-v`: print the version only. Before the update checker, so
+  # asking for the version never triggers a pull or a prompt.
+  if [ "${1:-}" = "--version" ] || [ "${1:-}" = "-v" ]; then
+    echo "Label Vier CLI $(core _get_package_version)"
+    exit 0
+  fi
+
   if [ "$main_function" = "wp-takeoff" ]; then
     echo -e "${__red}⚠${__reset}  'wp-takeoff' is deprecated, use ${__bold}labelvier${__reset} or ${__bold}l4${__reset} instead." >&2
   fi
