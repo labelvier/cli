@@ -24,3 +24,17 @@ teardown() { teardown_sandbox; }
   assert_output_contains "changelog - Reads the CHANGELOG.md in a pager"
   refute_output_contains "# Changelog"
 }
+
+@test "changelog output has no escape codes when piped" {
+  run_cli changelog
+  [ "$status" -eq 0 ]
+  ! printf '%s' "$output" | grep -q $'\033'
+  assert_output_contains "- "
+}
+
+@test "changelog colours headings, bullets and code when colour vars are set" {
+  run bash -c "__bold='\\033[1m' __reset='\\033[0m' __blue='\\033[0;34m' __green='\\033[0;32m' __red=''; source '$CLI_ROOT/inc/changelog.sh'; changelog"
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | grep -q $'\033\\[1m\033\\[0;32m## \\[Unreleased\\]'
+  printf '%s' "$output" | grep -q '•'
+}
