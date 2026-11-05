@@ -9,7 +9,7 @@ teardown() { teardown_sandbox; }
   run_cli changelog
   [ "$status" -eq 0 ]
   assert_output_contains "Available functions:"
-  assert_output_contains "latest - Prints the newest released version"
+  assert_output_contains "latest - Reads the newest released version"
 }
 
 @test "changelog latest prints the newest released entry, not Unreleased" {
@@ -49,6 +49,6 @@ teardown() { teardown_sandbox; }
 @test "changelog latest --help prints the description and does not run" {
   run_cli changelog latest --help
   [ "$status" -eq 0 ]
-  assert_output_contains "latest - Prints the newest released version"
+  assert_output_contains "latest - Reads the newest released version"
   refute_output_contains "## ["
 }

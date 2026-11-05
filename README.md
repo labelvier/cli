@@ -76,8 +76,9 @@ commands. Running any command without arguments lists all available
 subcommands for it — e.g. `labelvier core` lists everything under `core`.
 
 `l4 --version` (or `-v`) prints the installed version. `l4 changelog latest`
-shows what changed in the newest release, `l4 changelog show <version>` one
-specific release and `l4 changelog all` the whole changelog.
+opens what changed in the newest release in a pager (like `man`; `q` quits,
+`$PAGER` is honoured), `l4 changelog show <version>` one specific release and
+`l4 changelog all` the whole changelog. Piped output is plain text.
 
 ### Install the WordPress starter kit
 

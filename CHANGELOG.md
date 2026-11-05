@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `l4 --version` (and `-v`) prints the installed version.
-- `l4 changelog` with `latest`, `show <version>` and `all` to read the changelog from the terminal.
+- `l4 changelog` with `latest`, `show <version>` and `all` to read the changelog in a pager from the terminal.
 
 ## [1.3.1] - 2026-11-05
 

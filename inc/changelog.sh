@@ -21,8 +21,24 @@ changelog() (
     fi
   }
 
+  # Pipes stdin through a pager (like `man`) on a terminal; plain cat when
+  # piped/redirected or when no pager exists. Honours $PAGER, default less.
+  function _page() {
+    if [ ! -t 1 ]; then
+      cat
+      return
+    fi
+    if [ -n "${PAGER:-}" ]; then
+      $PAGER
+    elif command -v less > /dev/null 2>&1; then
+      less -FRX
+    else
+      cat
+    fi
+  }
+
   # @function latest
-  # @description Prints the newest released version from the CHANGELOG.md
+  # @description Reads the newest released version from the CHANGELOG.md in a pager
   function latest() {
     _require_changelog || return 1
     awk '
@@ -31,11 +47,11 @@ changelog() (
         if (tolower($0) !~ /^## \[unreleased\]/) found = 1
       }
       found { print }
-    ' "$changelog_file"
+    ' "$changelog_file" | _page
   }
 
   # @function show
-  # @description Prints the changelog entry of one version, e.g. show 1.3.0
+  # @description Reads the changelog entry of one version in a pager, e.g. show 1.3.0
   function show() {
     _require_changelog || return 1
     if [ -z "${1:-}" ]; then
@@ -57,14 +73,14 @@ changelog() (
       echo -e "${__red}✗${__reset} No changelog entry for version $1" >&2
       return 1
     fi
-    echo "$entry"
+    echo "$entry" | _page
   }
 
   # @function all
-  # @description Prints the whole CHANGELOG.md
+  # @description Reads the whole CHANGELOG.md in a pager
   function all() {
     _require_changelog || return 1
-    cat "$changelog_file"
+    _page < "$changelog_file"
   }
 
   main "$@"
