@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-05
+
+### Added
+
+- `l4 --version` (and `-v`) prints the installed version.
+- `l4 changelog` opens the changelog in a pager, like `man`, with colour and bold markdown.
+
 ## [1.3.1] - 2026-11-05
 
 ### Changed

@@ -38,7 +38,7 @@ package_version() {
   [ "$status" -eq 1 ]
   assert_output_contains "Usage: labelvier <command> [arguments]"
   refute_output_contains "Unknown command"
-  run_cli -v
+  run_cli -x
   [ "$status" -eq 1 ]
   assert_output_contains "Usage: labelvier <command> [arguments]"
   refute_output_contains "Unknown command"
@@ -203,4 +203,16 @@ package_version() {
   [ "$status" -eq 0 ]
   refute_stub_called '^git'
   [ ! -f "$TEST_TMP/cli/.last_git_check" ]
+}
+
+# ----------------------------------------------------------------- version
+
+@test "--version and -v print the package version and exit 0" {
+  local v; v="$(package_version)"
+  run_cli --version
+  [ "$status" -eq 0 ]
+  [ "$(plain_output)" = "Label Vier CLI $v" ]
+  run_cli -v
+  [ "$status" -eq 0 ]
+  [ "$(plain_output)" = "Label Vier CLI $v" ]
 }
