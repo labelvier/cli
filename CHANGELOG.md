@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-05
+
+### Changed
+
+- WORDPRESS.md template: prefer Action Scheduler over WP-Cron for cron jobs (template version 2).
+
+### Documentation
+
+- AGENTS.md: bump the `labelvier-ai-version` stamp whenever an AI config template changes.
+
 ## [1.3.0] - 2026-11-04
 
 ### Added

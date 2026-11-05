@@ -1,4 +1,4 @@
-<!-- labelvier-ai-version: 1 -->
+<!-- labelvier-ai-version: 2 -->
 # WordPress development
 
 ## Theme structure
@@ -65,3 +65,7 @@ When working on a Label Vier starter kit WordPress project, the site is running 
 For example, when running a `wp` cli command, run `npm run wp`. If you want to add assoc argument, add an extra -- to escape npm. I.e. `npm run wp -- --info`
 
 Check .env file for the correct ports and urls and other settings.
+
+## Cron jobs
+
+When a project needs a cron job (recurring or delayed background task), prefer Action Scheduler (`as_schedule_recurring_action()`, `as_schedule_single_action()`, `as_enqueue_async_action()`) over WP-Cron (`wp_schedule_event()` / `wp_schedule_single_event()`). Action Scheduler gives queueing, retries, logging and an admin overview. Only fall back to WP-Cron when Action Scheduler is not available and cannot be added as a dependency.

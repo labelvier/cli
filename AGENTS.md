@@ -33,6 +33,11 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 3. Underscore-prefix all helpers. Reuse `inc/helpers.sh` and `core _get_package_version`.
 4. Use the `wt-command-builder` agent (`.claude/agents/`) for this work — it can run `core generate` itself instead of hand-writing the boilerplate.
 
+## AI config templates
+
+- `templates/claude/**` holds the files `labelvier ai claude install` deploys to `~/.claude` (WORDPRESS.md, GLOBAL.md, skills, ...). Each carries a `<!-- labelvier-ai-version: <n> -->` stamp.
+- **Always bump that stamp when you change a template's content** — otherwise `labelvier ai claude check`/`install` sees no change and colleagues never receive the update.
+
 ## Environment constraints
 
 - macOS bash **3.2** + BSD userland: BSD `date` (`date -r <ts>`), BSD `sed -i ''`, `md5` (not `md5sum`). No `mapfile`/`readarray`.
