@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `l4 release finish` respects the project's tag prefix: a project that tags `v1.2.3` no longer gets a bare `1.2.3` tag. The prefix comes from `gitflow.prefix.versiontag` when set (an empty value means no prefix), otherwise from the most recently created version tag. A prefix already in the branch name (`release/v1.2.3`) is kept as is.
+
 ## [1.4.0] - 2026-11-05
 
 ### Added
