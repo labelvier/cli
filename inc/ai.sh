@@ -52,9 +52,11 @@ ai() (
   local vibe_inline="GLOBAL WORDPRESS ANGULAR BACKEND"
   # Vibe does not auto-activate skills, so caveman gets an always-on block in
   # AGENTS.md, fenced with caveman's own markers (as its opencode installer
-  # does). Kept apart from the labelvier block: it follows the caveman
-  # install, not the templates. Compared by content, no version stamp.
-  local vibe_caveman_tpl="$current_dir/../templates/vibe/caveman-activate.md.tpl"
+  # does). The block holds the full ruleset from the installed caveman
+  # SKILL.md (what Claude Code gets injected), not the short activation rule:
+  # without its clarity rules Vibe fakes broken grammar. Built from the
+  # installed skill, so it follows caveman updates; compared by content.
+  local vibe_caveman_skill="$vibe_dir/skills/caveman/SKILL.md"
   local vibe_caveman_start_re='^<!-- caveman-begin -->[[:space:]]*$'
   local vibe_caveman_end_re='^<!-- caveman-end -->[[:space:]]*$'
 
@@ -1050,7 +1052,7 @@ ai() (
   # (npx), the way caveman's own installer does it. -g puts them in
   # $VIBE_HOME/skills; run from $HOME so nothing lands in a project.
   function _vibe_caveman_installed() {
-    [ -f "$vibe_dir/skills/caveman/SKILL.md" ]
+    [ -f "$vibe_caveman_skill" ]
   }
 
   # The caveman block as it is in AGENTS.md now (empty when there is none).
@@ -1063,9 +1065,18 @@ ai() (
     ' "$vibe_agents_md"
   }
 
-  # True (0) if AGENTS.md holds the always-on block exactly as in the template.
+  # The always-on block AGENTS.md should hold: the caveman SKILL.md without
+  # its YAML frontmatter, between caveman's markers.
+  function _vibe_caveman_wanted() {
+    echo "<!-- caveman-begin -->"
+    awk 'NR == 1 && /^---[[:space:]]*$/ { fm=1; next } fm && /^---[[:space:]]*$/ { fm=0; next } !fm' "$vibe_caveman_skill" \
+      | sed -e '/./,$!d'
+    echo "<!-- caveman-end -->"
+  }
+
+  # True (0) if AGENTS.md holds the always-on block as built from SKILL.md.
   function _vibe_caveman_active() {
-    [ "$(_vibe_caveman_block)" = "$(cat "$vibe_caveman_tpl")" ]
+    [ -f "$vibe_caveman_skill" ] && [ "$(_vibe_caveman_block)" = "$(_vibe_caveman_wanted)" ]
   }
 
   # Writes (or refreshes) the always-on block at the end of AGENTS.md.
@@ -1074,7 +1085,10 @@ ai() (
       echo -e "${__green}✓${__reset} caveman always on in $vibe_agents_md"
       return 0
     fi
-    _put_vibe_block "$vibe_caveman_start_re" "$vibe_caveman_end_re" "$vibe_caveman_tpl"
+    local block_file="$vibe_agents_md.caveman"
+    _vibe_caveman_wanted > "$block_file"
+    _put_vibe_block "$vibe_caveman_start_re" "$vibe_caveman_end_re" "$block_file"
+    rm -f "$block_file"
     echo -e "${__green}Activated${__reset} caveman for every Vibe session in $vibe_agents_md"
   }
 

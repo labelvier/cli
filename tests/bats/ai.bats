@@ -935,7 +935,7 @@ stub_vibe_toolchain() {
   stub npx '
 vibe="${VIBE_HOME:-$HOME/.vibe}"
 case "$3" in
-  add) mkdir -p "$vibe/skills/caveman"; echo "---" > "$vibe/skills/caveman/SKILL.md" ;;
+  add) mkdir -p "$vibe/skills/caveman"; printf "%s\n" "---" "name: caveman" "---" "" "Respond terse like smart caveman." "Never ADD word to sound caveman." > "$vibe/skills/caveman/SKILL.md" ;;
   remove) rm -rf "$vibe/skills/caveman" ;;
 esac'
 }
@@ -1109,7 +1109,11 @@ EOT
   assert_output_contains "Installed caveman skills for Vibe"
   assert_output_contains "Activated caveman for every Vibe session"
   [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
-  grep -qF 'Respond terse like smart caveman' "$VIBE_DIR/AGENTS.md"
+  # The full SKILL.md ruleset, without its frontmatter.
+  grep -qxF 'Respond terse like smart caveman.' "$VIBE_DIR/AGENTS.md"
+  grep -qxF 'Never ADD word to sound caveman.' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c '^name: caveman$' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  [ "$(sed -n '/caveman-begin/{n;p;}' "$VIBE_DIR/AGENTS.md")" = "Respond terse like smart caveman." ]
 
   : > "$STUB_LOG"
   run_ai mistral install < /dev/null
@@ -1124,7 +1128,7 @@ EOT
 @test "ai mistral install refreshes an outdated caveman block and keeps personal content" {
   stub_vibe_toolchain
   mkdir -p "$VIBE_DIR/skills/caveman"
-  echo "---" > "$VIBE_DIR/skills/caveman/SKILL.md"
+  printf '%s\n' "---" "name: caveman" "---" "New caveman rule." > "$VIBE_DIR/skills/caveman/SKILL.md"
   cat > "$VIBE_DIR/AGENTS.md" <<'EOT'
 # mine
 <!-- caveman-begin -->
@@ -1139,7 +1143,14 @@ EOT
   grep -qxF '# mine' "$VIBE_DIR/AGENTS.md"
   grep -qxF 'keep me' "$VIBE_DIR/AGENTS.md"
   [ "$(grep -c 'old caveman rule' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  grep -qxF 'New caveman rule.' "$VIBE_DIR/AGENTS.md"
   [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+
+  # A caveman update changes SKILL.md: the next install follows it.
+  printf '%s\n' "---" "name: caveman" "---" "Newer caveman rule." > "$VIBE_DIR/skills/caveman/SKILL.md"
+  run_ai mistral install < /dev/null
+  grep -qxF 'Newer caveman rule.' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'New caveman rule.' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
 }
 
 @test "ai mistral install asks for ai claude install when the timesheet skill is missing" {
