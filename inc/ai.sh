@@ -38,6 +38,19 @@ ai() (
   local snippet_end="<!-- labelvier-ai:end -->"
   local snippet_refs="@labelvier/GLOBAL.md @labelvier/WORDPRESS.md @labelvier/ANGULAR.md @labelvier/BACKEND.md"
 
+  # Mistral Vibe reads one global instruction file, $VIBE_HOME/AGENTS.md
+  # (default ~/.vibe/AGENTS.md), and has no @import. So the same templates are
+  # inlined into a managed block in that file instead of referenced. The block
+  # version is vibe_layout_version plus the stamps of the inlined templates,
+  # so bumping a template stamp is enough to roll it out. Bump
+  # vibe_layout_version when the list or the block layout changes.
+  # LARAVEL.md stays a separate file, read on demand like with Claude Code.
+  local vibe_dir="${VIBE_HOME:-$HOME/.vibe}"
+  local vibe_agents_md="$vibe_dir/AGENTS.md"
+  local vibe_labelvier_dir="$vibe_dir/labelvier"
+  local vibe_layout_version="1"
+  local vibe_inline="GLOBAL WORDPRESS ANGULAR BACKEND"
+
   # Where the Basecamp CLI keeps its OAuth credentials and its cache.
   local basecamp_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/basecamp"
   local basecamp_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/basecamp"
@@ -604,19 +617,31 @@ ai() (
   # a .bak of the original.
   function _strip_snippet() {
     [ -f "$claude_md" ] || return 0
+    _strip_block "$claude_md"
     local tmp_file="$claude_md.tmp" ref
-    cp "$claude_md" "$claude_md.bak"
-    awk '
-      /^<!-- labelvier-ai:start version=.* -->[[:space:]]*$/ { if (inblock) printf "%s", buf; inblock=1; buf=$0 ORS; next }
-      inblock { buf=buf $0 ORS; if ($0 ~ /^<!-- labelvier-ai:end -->[[:space:]]*$/) { inblock=0; buf="" } ; next }
-      { print }
-      END { if (inblock) printf "%s", buf }
-    ' "$claude_md" > "$tmp_file"
+    cp "$claude_md" "$tmp_file"
     for ref in $snippet_refs; do
       grep -vxF "$ref" "$tmp_file" > "$tmp_file.2"
       mv "$tmp_file.2" "$tmp_file"
     done
     cat "$tmp_file" > "$claude_md"
+    rm -f "$tmp_file"
+  }
+
+  # Removes the labelvier-ai:start/end block from file $1 (see _strip_snippet
+  # for the rules). Keeps a .bak and writes through `cat >`.
+  function _strip_block() {
+    local file="$1"
+    [ -f "$file" ] || return 0
+    local tmp_file="$file.tmp"
+    cp "$file" "$file.bak"
+    awk '
+      /^<!-- labelvier-ai:start version=.* -->[[:space:]]*$/ { if (inblock) printf "%s", buf; inblock=1; buf=$0 ORS; next }
+      inblock { buf=buf $0 ORS; if ($0 ~ /^<!-- labelvier-ai:end -->[[:space:]]*$/) { inblock=0; buf="" } ; next }
+      { print }
+      END { if (inblock) printf "%s", buf }
+    ' "$file" > "$tmp_file"
+    cat "$tmp_file" > "$file"
     rm -f "$tmp_file"
   }
 
@@ -689,6 +714,36 @@ ai() (
     echo -e "Run ${__blue}labelvier ai check${__reset} for status."
   }
 
+  # Copies template $2 to target $1 when the target is missing or carries
+  # another version stamp (keeping a .bak of an outdated copy). $3 is the
+  # force flag from _flag_is_present (0 = --force given: always overwrite).
+  function _install_config_file() {
+    local target="$1" template="$2" force="$3"
+
+    if [ ! -f "$template" ]; then
+      echo -e "${__red}Template not found:${__reset} $template"
+      return 0
+    fi
+
+    local file_status
+    file_status=$(_file_status "$target" "$template")
+    if [ "$file_status" = "ok" ] && [ "$force" -ne 0 ]; then
+      echo -e "Up to date, skipped: $target (version $(_file_version "$target")) ${__blue}(--force to overwrite)${__reset}"
+      return 0
+    fi
+
+    if [ "$file_status" = "outdated" ]; then
+      cp "$target" "$target.bak"
+      local old_version
+      old_version=$(_file_version "$target")
+      echo -e "Updating $target: ${__bold}${old_version:-unversioned}${__reset} → $(_file_version "$template") (old copy: $target.bak)"
+    fi
+
+    cp "$template" "$target"
+    chmod 600 "$target"
+    echo -e "${__green}Installed${__reset} $target"
+  }
+
   # Creates missing config files from their tpl template and installs the
   # toon hook. Never overwrites an existing config file unless --force is
   # passed. CLAUDE.md itself is never templated/overwritten — it only gets
@@ -701,33 +756,9 @@ ai() (
 
     mkdir -p "$labelvier_dir"
 
-    local pair target template
+    local pair
     while IFS= read -r pair; do
-      target="${pair%%:*}"
-      template="${pair##*:}"
-
-      if [ ! -f "$template" ]; then
-        echo -e "${__red}Template not found:${__reset} $template"
-        continue
-      fi
-
-      local file_status
-      file_status=$(_file_status "$target" "$template")
-      if [ "$file_status" = "ok" ] && [ "$force" -ne 0 ]; then
-        echo -e "Up to date, skipped: $target (version $(_file_version "$target")) ${__blue}(--force to overwrite)${__reset}"
-        continue
-      fi
-
-      if [ "$file_status" = "outdated" ]; then
-        cp "$target" "$target.bak"
-        local old_version
-        old_version=$(_file_version "$target")
-        echo -e "Updating $target: ${__bold}${old_version:-unversioned}${__reset} → $(_file_version "$template") (old copy: $target.bak)"
-      fi
-
-      cp "$template" "$target"
-      chmod 600 "$target"
-      echo -e "${__green}Installed${__reset} $target"
+      _install_config_file "${pair%%:*}" "${pair##*:}" "$force"
     done < <(_claude_files)
 
     _append_missing_refs
@@ -806,6 +837,173 @@ ai() (
 
     echo
     echo -e "${__bold}Done.${__reset} Restart your Claude Code session to pick up the changes."
+  }
+
+  # ---------------------------------------------------------------------------
+  # @function mistral
+  # @description Inlines the GLOBAL.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config into Mistral Vibe's ~/.vibe/AGENTS.md (LARAVEL.md loads on demand). Subcommands: install, uninstall.
+  # ---------------------------------------------------------------------------
+  function mistral() {
+    case "$1" in
+      install|uninstall)
+        if [[ "$2" == "--help" ]]; then
+          _mistral_subcommand_description "$1"
+          return
+        fi
+        "_mistral_$1" "${@:2}"
+        ;;
+      ""|-*)
+        # No subcommand, or it looks like a flag (e.g. a bare `--help`).
+        _mistral_documentation
+        ;;
+      *)
+        # A subcommand name was typed but it doesn't exist.
+        echo -e "${__red}✗${__reset} Unknown command: ${__bold}$1${__reset}"
+        echo
+        _mistral_documentation
+        return 1
+        ;;
+    esac
+  }
+
+  # Second-level subcommand descriptions, hand-written for the same reason as
+  # the claude ones.
+  function _mistral_subcommand_description() {
+    case "$1" in
+      install) echo -e "${__bold}install${__reset} - Writes the labelvier block into $vibe_agents_md and installs LARAVEL.md. Flags: --force" ;;
+      uninstall) echo -e "${__bold}uninstall${__reset} - Removes the labelvier block and LARAVEL.md (asks for confirmation)" ;;
+      *) echo -e "${__bold}$1${__reset}" ;;
+    esac
+  }
+
+  function _mistral_documentation() {
+    echo -e "${__bold}labelvier ai mistral${__reset} — Mistral Vibe setup for Label Vier projects."
+    echo
+    echo -e "${__bold}Available functions:${__reset}"
+    echo -e "  $(_mistral_subcommand_description install)"
+    echo -e "  $(_mistral_subcommand_description uninstall)"
+    echo
+    echo -e "Run ${__blue}labelvier ai check${__reset} for status."
+  }
+
+  # True (0) if this machine uses Mistral Vibe: the binary or its config dir.
+  function _vibe_present() {
+    type -P vibe >/dev/null 2>&1 || [ -d "$vibe_dir" ]
+  }
+
+  # Version the managed block in AGENTS.md should carry, e.g. "1-1-3-1-1":
+  # the layout version, then the stamp of every inlined template.
+  function _vibe_block_version() {
+    local version="$vibe_layout_version" name
+    for name in $vibe_inline; do
+      version="$version-$(_file_version "$claude_tpl_dir/labelvier/$name.md.tpl")"
+    done
+    echo "$version"
+  }
+
+  # Version of the managed block in AGENTS.md. Empty when there is none.
+  function _vibe_installed_version() {
+    [ -f "$vibe_agents_md" ] || return 0
+    sed -n 's/^<!-- labelvier-ai:start version=\([0-9][0-9.-]*\) -->$/\1/p' "$vibe_agents_md" | head -n 1
+  }
+
+  # Prints the managed block: the inlined templates without their version
+  # stamps, with the LARAVEL.md path pointed at the Vibe copy.
+  function _vibe_block() {
+    local laravel_dir="$vibe_labelvier_dir"
+    case "$laravel_dir" in
+      "$HOME"/*) laravel_dir="~${laravel_dir#"$HOME"}" ;;
+    esac
+
+    echo "<!-- labelvier-ai:start version=$(_vibe_block_version) -->"
+    echo "<!-- Managed by 'labelvier ai mistral install': edits inside this block are overwritten. -->"
+    local name
+    for name in $vibe_inline; do
+      echo
+      sed -e '/labelvier-ai-version:/d' -e "s#~/\.claude/labelvier/#$laravel_dir/#g" "$claude_tpl_dir/labelvier/$name.md.tpl"
+    done
+    echo
+    echo "<!-- labelvier-ai:end -->"
+  }
+
+  # Removes the managed block from AGENTS.md plus the blank lines it leaves
+  # at the end, so repeated installs don't grow the file.
+  function _strip_vibe_block() {
+    _strip_block "$vibe_agents_md"
+    awk '{ line[NR] = $0 } END { n = NR; while (n > 0 && line[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print line[i] }' \
+      "$vibe_agents_md" > "$vibe_agents_md.tmp"
+    cat "$vibe_agents_md.tmp" > "$vibe_agents_md"
+    rm -f "$vibe_agents_md.tmp"
+  }
+
+  # AGENTS.md is the user's own file, like CLAUDE.md: created empty when
+  # missing; only the managed block in it is replaced. --force rewrites an
+  # up-to-date block and LARAVEL.md too.
+  function _mistral_install() {
+    local force=1
+    _flag_is_present force "$@" && force=0
+
+    if ! _vibe_present; then
+      echo -e "${__blue}Mistral Vibe was not found${__reset} ('vibe' is not on your PATH and $vibe_dir does not exist). Installing the config anyway."
+    fi
+
+    mkdir -p "$vibe_labelvier_dir"
+    _install_config_file "$vibe_labelvier_dir/LARAVEL.md" "$claude_tpl_dir/labelvier/LARAVEL.md.tpl" "$force"
+
+    if [ ! -f "$vibe_agents_md" ]; then
+      : > "$vibe_agents_md"
+      echo -e "${__green}Created${__reset} $vibe_agents_md (empty)"
+    fi
+
+    local installed wanted
+    installed=$(_vibe_installed_version)
+    wanted=$(_vibe_block_version)
+    if [ "$installed" = "$wanted" ] && [ "$force" -ne 0 ]; then
+      echo -e "${__green}✓${__reset} labelvier block in $vibe_agents_md is up to date (version $wanted)"
+      return 0
+    fi
+
+    _strip_vibe_block
+    # Keep one blank line between the user's own content and the block.
+    [ -s "$vibe_agents_md" ] && echo >> "$vibe_agents_md"
+    _vibe_block >> "$vibe_agents_md"
+
+    if [ -n "$installed" ]; then
+      echo -e "${__green}Updated${__reset} the labelvier block in $vibe_agents_md (version $installed → $wanted)"
+    else
+      echo -e "${__green}Added${__reset} the labelvier block (version $wanted) to $vibe_agents_md"
+    fi
+    echo
+    echo -e "${__bold}Done.${__reset} Restart your Vibe session to pick up the changes."
+  }
+
+  # Removes the managed block (never the AGENTS.md file itself) and LARAVEL.md.
+  function _mistral_uninstall() {
+    echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}labelvier ai mistral install${__reset} sets up:"
+    echo -e "  - the labelvier block in $vibe_agents_md (not the file itself)"
+    echo -e "  - $vibe_labelvier_dir/LARAVEL.md"
+
+    echo
+    local answer
+    read -p "Continue? [y/N] " answer
+    case "$answer" in
+      [yY]*) ;;
+      *) echo "Aborted."; exit 1 ;;
+    esac
+
+    if [ -n "$(_vibe_installed_version)" ]; then
+      _strip_vibe_block
+      echo -e "${__green}Removed${__reset} the labelvier block from $vibe_agents_md (backup: $vibe_agents_md.bak)"
+    fi
+
+    if [ -f "$vibe_labelvier_dir/LARAVEL.md" ]; then
+      rm -f "$vibe_labelvier_dir/LARAVEL.md"
+      echo -e "${__green}Removed${__reset} $vibe_labelvier_dir/LARAVEL.md"
+    fi
+    rmdir "$vibe_labelvier_dir" 2>/dev/null || true
+
+    echo
+    echo -e "${__bold}Done.${__reset} Restart your Vibe session to pick up the changes."
   }
 
   # ---------------------------------------------------------------------------
@@ -940,7 +1138,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, npm, fa, toon, rtk, the caveman plugin, the timesheet and dashboard skills and the Claude Code config.
+  # @description Checks basecamp, npm, fa, toon, rtk, the caveman plugin, the timesheet and dashboard skills, the Claude Code config and, when present, the Mistral Vibe config.
   # ---------------------------------------------------------------------------
   function check() {
     local output
@@ -1102,6 +1300,35 @@ ai() (
     else
       echo -e "${__red}✗${__reset} $hook_path (toon hook) ${__red}(missing, run: labelvier ai claude install)${__reset}"
     fi
+
+    _run_vibe_checks
+  }
+
+  # Mistral Vibe is optional: only checked when it is on this machine, so
+  # colleagues without it get no ✗ (and no nagging from the daily update).
+  function _run_vibe_checks() {
+    if ! _vibe_present; then
+      echo -e "- Mistral Vibe (optional, not installed)"
+      return 0
+    fi
+
+    local installed wanted
+    installed=$(_vibe_installed_version)
+    wanted=$(_vibe_block_version)
+    if [ -z "$installed" ]; then
+      echo -e "${__red}✗${__reset} labelvier block in $vibe_agents_md ${__red}(missing, run: labelvier ai mistral install)${__reset}"
+    elif [ "$installed" != "$wanted" ]; then
+      echo -e "${__red}✗${__reset} labelvier block in $vibe_agents_md ${__red}(outdated: installed $installed, available $wanted; run: labelvier ai mistral install)${__reset}"
+    else
+      echo -e "${__green}✓${__reset} labelvier block in $vibe_agents_md (version $installed)"
+    fi
+
+    local target="$vibe_labelvier_dir/LARAVEL.md" template="$claude_tpl_dir/labelvier/LARAVEL.md.tpl"
+    case "$(_file_status "$target" "$template")" in
+      ok) echo -e "${__green}✓${__reset} $target (version $(_file_version "$target"))" ;;
+      outdated) echo -e "${__red}✗${__reset} $target ${__red}(outdated: installed $(_file_version "$target"), available $(_file_version "$template"); run: labelvier ai mistral install)${__reset}" ;;
+      *) echo -e "${__red}✗${__reset} $target ${__red}(missing, run: labelvier ai mistral install)${__reset}" ;;
+    esac
   }
 
   # ---------------------------------------------------------------------------

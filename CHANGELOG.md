@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `labelvier ai mistral install|uninstall`: rolls the Label Vier GLOBAL/WORDPRESS/ANGULAR/BACKEND instructions out to Mistral Vibe as a managed block in `~/.vibe/AGENTS.md` (respects `VIBE_HOME`), with LARAVEL.md loaded on demand.
+- `labelvier ai check` reports the Mistral Vibe config when Vibe is installed.
+
 ## [1.4.1] - 2026-11-11
 
 ### Changed

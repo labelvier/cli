@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# inc/ai.sh: Claude Code setup (ai check / update / claude install|uninstall / basecamp).
+# inc/ai.sh: Claude Code setup (ai check / update / claude install|uninstall / mistral install|uninstall / basecamp).
 #
 # Two things shape these tests:
 # - The sandbox PATH is cut down to the stubs plus the system dirs, so the
@@ -19,6 +19,9 @@ setup() {
   type -P jq >/dev/null 2>&1 || skip "jq is not installed (ai.sh needs it for settings.json)"
 
   CLAUDE_DIR="$HOME/.claude"
+  # The developer's own VIBE_HOME must never leak into the sandbox.
+  unset VIBE_HOME
+  VIBE_DIR="$HOME/.vibe"
   ENV_FILE="$CLAUDE_DIR/.env"
   TPL_DIR="$CLI_ROOT/templates/claude"
   HOOK="$CLAUDE_DIR/hooks/basecamp-toon.sh"
@@ -911,4 +914,154 @@ EOF
   assert_output_contains "Want the CLI to update itself automatically once a day? -> no"
   assert_output_contains "turn it on later with: labelvier core update --enable-auto"
   refute_stub_called '^launchctl'
+}
+
+# --- ai mistral --------------------------------------------------------------
+
+# The block version ai.sh should write: layout 1, then the inlined template stamps.
+vibe_block_version() {
+  local version="1" name
+  for name in GLOBAL WORDPRESS ANGULAR BACKEND; do
+    version="$version-$(template_version "$TPL_DIR/labelvier/$name.md.tpl")"
+  done
+  echo "$version"
+}
+
+@test "ai mistral without a subcommand prints the nested help" {
+  run_ai mistral
+  [ "$status" -eq 0 ]
+  assert_output_contains "labelvier ai mistral"
+  assert_output_contains "install - Writes the labelvier block into $VIBE_DIR/AGENTS.md"
+  assert_output_contains "uninstall - Removes the labelvier block"
+}
+
+@test "ai mistral install --help prints the description and does not install" {
+  run_ai mistral install --help < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "install - Writes the labelvier block"
+  [ ! -e "$VIBE_DIR" ]
+}
+
+@test "ai mistral nope reports an unknown command and fails" {
+  run_ai mistral nope
+  [ "$status" -eq 1 ]
+  assert_output_contains "✗ Unknown command: nope"
+}
+
+@test "ai mistral install inlines the templates into AGENTS.md and installs LARAVEL.md" {
+  mkdir -p "$VIBE_DIR"
+  printf '# my own notes\n' > "$VIBE_DIR/AGENTS.md"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Added the labelvier block (version $(vibe_block_version)) to $VIBE_DIR/AGENTS.md"
+  refute_output_contains "Mistral Vibe was not found"
+
+  local agents="$VIBE_DIR/AGENTS.md"
+  [ "$(head -n 1 "$agents")" = "# my own notes" ]
+  grep -qxF "<!-- labelvier-ai:start version=$(vibe_block_version) -->" "$agents"
+  grep -qxF '<!-- labelvier-ai:end -->' "$agents"
+  grep -qxF '# Global instructions' "$agents"
+  grep -qxF '# WordPress development' "$agents"
+  grep -qxF '# Angular Development' "$agents"
+  grep -qxF '# Backend development' "$agents"
+  # Vibe has no @import: content is inlined, without stamps or refs.
+  [ "$(grep -c 'labelvier-ai-version' "$agents")" -eq 0 ]
+  [ "$(grep -c '^@labelvier/' "$agents")" -eq 0 ]
+  # BACKEND.md points at the Vibe copy of LARAVEL.md, not the Claude one.
+  grep -qF '`~/.vibe/labelvier/LARAVEL.md`' "$agents"
+  [ "$(grep -c '\.claude/' "$agents")" -eq 0 ]
+
+  cmp -s "$TPL_DIR/labelvier/LARAVEL.md.tpl" "$VIBE_DIR/labelvier/LARAVEL.md"
+  [ "$(file_mode "$VIBE_DIR/labelvier/LARAVEL.md")" = "600" ]
+}
+
+@test "ai mistral install is idempotent and does not grow AGENTS.md" {
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Mistral Vibe was not found"
+  assert_output_contains "Created $VIBE_DIR/AGENTS.md (empty)"
+  cp "$VIBE_DIR/AGENTS.md" "$TEST_TMP/first"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "✓ labelvier block in $VIBE_DIR/AGENTS.md is up to date"
+  assert_output_contains "Up to date, skipped: $VIBE_DIR/labelvier/LARAVEL.md"
+
+  run_ai mistral install --force < /dev/null
+  [ "$status" -eq 0 ]
+  cmp -s "$TEST_TMP/first" "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'labelvier-ai:start' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+}
+
+@test "ai mistral install replaces an outdated block and keeps personal content" {
+  mkdir -p "$VIBE_DIR"
+  cat > "$VIBE_DIR/AGENTS.md" <<'EOT'
+# mine
+<!-- labelvier-ai:start version=0-0 -->
+old content
+<!-- labelvier-ai:end -->
+keep this line too
+EOT
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Updated the labelvier block in $VIBE_DIR/AGENTS.md (version 0-0 → $(vibe_block_version))"
+  grep -qxF '# mine' "$VIBE_DIR/AGENTS.md"
+  grep -qxF 'keep this line too' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'old content' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  [ "$(grep -c 'labelvier-ai:start' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+  [ -f "$VIBE_DIR/AGENTS.md.bak" ]
+}
+
+@test "ai mistral install honours VIBE_HOME" {
+  export VIBE_HOME="$TEST_TMP/custom-vibe"
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  [ -f "$VIBE_HOME/AGENTS.md" ]
+  [ -f "$VIBE_HOME/labelvier/LARAVEL.md" ]
+  [ ! -e "$VIBE_DIR" ]
+}
+
+@test "ai mistral uninstall aborts without a yes" {
+  run_ai mistral install < /dev/null
+  run_ai mistral uninstall <<< "n"
+  [ "$status" -eq 1 ]
+  assert_output_contains "Aborted."
+  grep -q 'labelvier-ai:start' "$VIBE_DIR/AGENTS.md"
+}
+
+@test "ai mistral uninstall removes the block and LARAVEL.md, not AGENTS.md" {
+  mkdir -p "$VIBE_DIR"
+  printf '# my own notes\n' > "$VIBE_DIR/AGENTS.md"
+  run_ai mistral install < /dev/null
+
+  run_ai mistral uninstall <<< "y"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Removed the labelvier block from $VIBE_DIR/AGENTS.md"
+  [ "$(cat "$VIBE_DIR/AGENTS.md")" = "# my own notes" ]
+  [ ! -e "$VIBE_DIR/labelvier" ]
+}
+
+@test "ai check skips Mistral Vibe when it is not on this machine" {
+  run_ai check
+  assert_output_contains "- Mistral Vibe (optional, not installed)"
+  refute_output_contains "ai mistral install"
+}
+
+@test "ai check flags a missing or outdated Vibe block once Vibe is present" {
+  stub vibe
+  run_ai check
+  assert_output_contains "✗ labelvier block in $VIBE_DIR/AGENTS.md (missing, run: labelvier ai mistral install)"
+  assert_output_contains "✗ $VIBE_DIR/labelvier/LARAVEL.md (missing, run: labelvier ai mistral install)"
+
+  run_ai mistral install < /dev/null
+  run_ai check
+  assert_output_contains "✓ labelvier block in $VIBE_DIR/AGENTS.md (version $(vibe_block_version))"
+  assert_output_contains "✓ $VIBE_DIR/labelvier/LARAVEL.md (version"
+
+  sed "s/version=$(vibe_block_version)/version=0-0/" "$VIBE_DIR/AGENTS.md" > "$TEST_TMP/agents"
+  cp "$TEST_TMP/agents" "$VIBE_DIR/AGENTS.md"
+  run_ai check
+  assert_output_contains "(outdated: installed 0-0, available $(vibe_block_version); run: labelvier ai mistral install)"
 }
