@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-11
+
+### Changed
+
+- `WORDPRESS.md` (AI config, stamp 3) gets a Testing section: functional Playwright tests for interactive and critical changes, smoke and axe checks on touched templates, PHPUnit for business logic, no default screenshot tests. Subagents with a narrower scope list the tests they need instead of writing them.
+
 ## [1.4.0] - 2026-11-05
 
 ### Added
