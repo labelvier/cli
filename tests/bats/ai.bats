@@ -927,6 +927,25 @@ vibe_block_version() {
   echo "$version"
 }
 
+# rtk, npm and an npx whose `skills add` drops the caveman skill into
+# $VIBE_HOME/skills (as the real skills CLI does with -g -a mistral-vibe).
+stub_vibe_toolchain() {
+  stub rtk
+  stub npm
+  stub npx '
+vibe="${VIBE_HOME:-$HOME/.vibe}"
+case "$3" in
+  add) mkdir -p "$vibe/skills/caveman"; echo "---" > "$vibe/skills/caveman/SKILL.md" ;;
+  remove) rm -rf "$vibe/skills/caveman" ;;
+esac'
+}
+
+# A Claude Code timesheet skill for the Vibe link to point at.
+make_claude_skill() {
+  mkdir -p "$1"
+  echo "---" > "$1/SKILL.md"
+}
+
 @test "ai mistral without a subcommand prints the nested help" {
   run_ai mistral
   [ "$status" -eq 0 ]
@@ -949,6 +968,7 @@ vibe_block_version() {
 }
 
 @test "ai mistral install inlines the templates into AGENTS.md and installs LARAVEL.md" {
+  stub_vibe_toolchain
   mkdir -p "$VIBE_DIR"
   printf '# my own notes\n' > "$VIBE_DIR/AGENTS.md"
 
@@ -977,6 +997,7 @@ vibe_block_version() {
 }
 
 @test "ai mistral install is idempotent and does not grow AGENTS.md" {
+  stub_vibe_toolchain
   run_ai mistral install < /dev/null
   [ "$status" -eq 0 ]
   assert_output_contains "Mistral Vibe was not found"
@@ -995,6 +1016,7 @@ vibe_block_version() {
 }
 
 @test "ai mistral install replaces an outdated block and keeps personal content" {
+  stub_vibe_toolchain
   mkdir -p "$VIBE_DIR"
   cat > "$VIBE_DIR/AGENTS.md" <<'EOT'
 # mine
@@ -1015,6 +1037,7 @@ EOT
 }
 
 @test "ai mistral install honours VIBE_HOME" {
+  stub_vibe_toolchain
   export VIBE_HOME="$TEST_TMP/custom-vibe"
   run_ai mistral install < /dev/null
   [ "$status" -eq 0 ]
@@ -1024,6 +1047,7 @@ EOT
 }
 
 @test "ai mistral uninstall aborts without a yes" {
+  stub_vibe_toolchain
   run_ai mistral install < /dev/null
   run_ai mistral uninstall <<< "n"
   [ "$status" -eq 1 ]
@@ -1032,6 +1056,7 @@ EOT
 }
 
 @test "ai mistral uninstall removes the block and LARAVEL.md, not AGENTS.md" {
+  stub_vibe_toolchain
   mkdir -p "$VIBE_DIR"
   printf '# my own notes\n' > "$VIBE_DIR/AGENTS.md"
   run_ai mistral install < /dev/null
@@ -1051,6 +1076,7 @@ EOT
 
 @test "ai check flags a missing or outdated Vibe block once Vibe is present" {
   stub vibe
+  stub_vibe_toolchain
   run_ai check
   assert_output_contains "✗ labelvier block in $VIBE_DIR/AGENTS.md (missing, run: labelvier ai mistral install)"
   assert_output_contains "✗ $VIBE_DIR/labelvier/LARAVEL.md (missing, run: labelvier ai mistral install)"
@@ -1064,4 +1090,101 @@ EOT
   cp "$TEST_TMP/agents" "$VIBE_DIR/AGENTS.md"
   run_ai check
   assert_output_contains "(outdated: installed 0-0, available $(vibe_block_version); run: labelvier ai mistral install)"
+}
+
+@test "ai mistral install links the skills, wires rtk and installs caveman" {
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  make_claude_skill "$HOME/.agents/skills/basecamp"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$VIBE_DIR/skills/timesheet")" = "$CLAUDE_DIR/skills/timesheet" ]
+  [ "$(readlink "$VIBE_DIR/skills/basecamp")" = "$HOME/.agents/skills/basecamp" ]
+  # The dashboard skill is optional and not installed for Claude: no link, no complaint.
+  [ ! -e "$VIBE_DIR/skills/label-vier-dashboard-api" ]
+  refute_output_contains "Skipped the label-vier-dashboard-api skill"
+  assert_stub_called '^rtk init -g --agent vibe --auto-patch$'
+  assert_stub_called "^npx -y skills add JuliusBrussee/caveman --skill \\* -a mistral-vibe -g --yes$"
+  assert_output_contains "Installed caveman skills for Vibe"
+
+  : > "$STUB_LOG"
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "✓ timesheet skill already linked"
+  assert_output_contains "✓ caveman skills for Vibe already installed"
+  refute_stub_called '^npx'
+}
+
+@test "ai mistral install asks for ai claude install when the timesheet skill is missing" {
+  stub_vibe_toolchain
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Skipped the timesheet skill"
+  assert_output_contains "labelvier ai claude install first"
+  [ ! -e "$VIBE_DIR/skills/timesheet" ]
+}
+
+@test "ai mistral install never replaces a real skill directory" {
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  mkdir -p "$VIBE_DIR/skills/timesheet"
+  echo "mine" > "$VIBE_DIR/skills/timesheet/SKILL.md"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "already exists and is not a link"
+  [ ! -L "$VIBE_DIR/skills/timesheet" ]
+  grep -qx "mine" "$VIBE_DIR/skills/timesheet/SKILL.md"
+}
+
+@test "ai mistral install without rtk skips it and --skip-caveman skips caveman" {
+  stub_vibe_toolchain
+  unstub rtk
+  run_ai mistral install --skip-caveman < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Skipped rtk: it is not installed."
+  assert_output_contains "Skipped caveman (--skip-caveman)."
+  refute_stub_called '^npx'
+}
+
+@test "ai mistral uninstall removes the links, rtk's Vibe hook and only the caveman skills" {
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  run_ai mistral install < /dev/null
+  mkdir -p "$HOME/.agents"
+  cat > "$HOME/.agents/.skill-lock.json" <<'EOT'
+{"skills":{"caveman":{"source":"JuliusBrussee/caveman"},"cavecrew":{"source":"JuliusBrussee/caveman"},"other":{"source":"someone/else"}}}
+EOT
+  : > "$STUB_LOG"
+
+  run_ai mistral uninstall <<< "y"
+  [ "$status" -eq 0 ]
+  [ ! -e "$VIBE_DIR/skills/timesheet" ]
+  # The Claude Code copy the link pointed at stays.
+  [ -f "$CLAUDE_DIR/skills/timesheet/SKILL.md" ]
+  assert_stub_called '^npx -y skills remove caveman cavecrew -a mistral-vibe -g --yes$'
+  refute_stub_called 'other'
+  assert_stub_called '^rtk init -g --agent vibe --uninstall --auto-patch$'
+}
+
+@test "ai check is green for a complete Vibe setup" {
+  stub vibe
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  run_ai mistral install < /dev/null
+
+  run_ai check
+  assert_output_contains "✓ $VIBE_DIR/skills/timesheet (timesheet skill for Vibe)"
+  assert_output_contains "- $VIBE_DIR/skills/basecamp (basecamp skill for Vibe, optional, not installed)"
+  assert_output_contains "✓ rtk wired into Vibe"
+  assert_output_contains "✓ caveman skills for Vibe"
+  refute_output_contains "ai mistral install"
+}
+
+@test "ai check flags rtk that is not wired into Vibe" {
+  stub vibe
+  stub rtk 'case "$*" in *"--agent vibe --dry-run"*) echo "[dry-run] would patch Vibe hooks.toml" ;; esac'
+  run_ai check
+  assert_output_contains "✗ rtk not fully wired into Vibe (run: labelvier ai mistral install)"
 }

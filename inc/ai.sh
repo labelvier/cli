@@ -841,7 +841,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function mistral
-  # @description Inlines the GLOBAL.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config into Mistral Vibe's ~/.vibe/AGENTS.md (LARAVEL.md loads on demand). Subcommands: install, uninstall.
+  # @description Sets up Mistral Vibe: the GLOBAL/WORDPRESS/ANGULAR/BACKEND config in ~/.vibe/AGENTS.md, LARAVEL.md, the timesheet/dashboard/basecamp skills, rtk and caveman. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function mistral() {
     case "$1" in
@@ -870,8 +870,8 @@ ai() (
   # the claude ones.
   function _mistral_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Writes the labelvier block into $vibe_agents_md and installs LARAVEL.md. Flags: --force" ;;
-      uninstall) echo -e "${__bold}uninstall${__reset} - Removes the labelvier block and LARAVEL.md (asks for confirmation)" ;;
+      install) echo -e "${__bold}install${__reset} - Writes the labelvier block into $vibe_agents_md, installs LARAVEL.md, links the skills and wires rtk and caveman. Flags: --force, --skip-caveman" ;;
+      uninstall) echo -e "${__bold}uninstall${__reset} - Removes the labelvier block, LARAVEL.md, the skill links, rtk's Vibe hook and caveman (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
   }
@@ -936,16 +936,136 @@ ai() (
     rm -f "$vibe_agents_md.tmp"
   }
 
+  # Skills shared with Vibe as symlinks to their Claude Code / Basecamp copy,
+  # as "name:source dir:required". One copy on disk, so a Claude install or
+  # update reaches Vibe as well, and the paths inside SKILL.md
+  # (~/.claude/skills/..., ~/.claude/.env) stay valid. Optional skills are
+  # only linked when their source is installed.
+  function _vibe_skill_links() {
+    echo "timesheet:$skill_dir:required"
+    echo "label-vier-dashboard-api:$dashboard_skill_dir:optional"
+    echo "basecamp:$HOME/.agents/skills/basecamp:optional"
+  }
+
+  # True (0) if $1 is a symlink that points at $2.
+  function _is_link_to() {
+    [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ]
+  }
+
+  # Links each skill from _vibe_skill_links into $vibe_dir/skills. Never
+  # replaces a real directory someone put there.
+  function _link_vibe_skills() {
+    mkdir -p "$vibe_dir/skills"
+    local entry name source kind target
+    while IFS= read -r entry; do
+      name="${entry%%:*}"
+      kind="${entry##*:}"
+      source="${entry#*:}"
+      source="${source%:*}"
+      target="$vibe_dir/skills/$name"
+
+      if [ ! -f "$source/SKILL.md" ]; then
+        if [ "$kind" = "required" ]; then
+          echo -e "${__red}Skipped the $name skill:${__reset} $source is not installed. Run ${__blue}labelvier ai claude install${__reset} first."
+        fi
+        continue
+      fi
+
+      if _is_link_to "$target" "$source"; then
+        echo -e "${__green}✓${__reset} $name skill already linked"
+      elif [ -e "$target" ] && [ ! -L "$target" ]; then
+        echo -e "${__red}Skipped the $name skill:${__reset} $target already exists and is not a link."
+      else
+        ln -sfn "$source" "$target"
+        echo -e "${__green}Linked${__reset} $target → $source"
+      fi
+    done < <(_vibe_skill_links)
+  }
+
+  # Removes only the links _link_vibe_skills made.
+  function _unlink_vibe_skills() {
+    local entry name source target
+    while IFS= read -r entry; do
+      name="${entry%%:*}"
+      source="${entry#*:}"
+      source="${source%:*}"
+      target="$vibe_dir/skills/$name"
+      if _is_link_to "$target" "$source"; then
+        rm -f "$target"
+        echo -e "${__green}Removed${__reset} $target"
+      fi
+    done < <(_vibe_skill_links)
+  }
+
+  # rtk ships its own Vibe integration: hooks.toml + prompts/rtk.md.
+  function _wire_vibe_rtk() {
+    if ! type -P rtk >/dev/null 2>&1; then
+      echo -e "${__red}Skipped rtk:${__reset} it is not installed. Run ${__blue}labelvier ai claude install${__reset} first."
+      return 0
+    fi
+    rtk init -g --agent vibe --auto-patch \
+      || echo -e "${__red}rtk init for Vibe failed.${__reset} Run it yourself: ${__blue}rtk init -g --agent vibe${__reset}"
+  }
+
+  # True (0) if rtk reports nothing left to change for Vibe.
+  function _vibe_rtk_wired() {
+    ! rtk init -g --agent vibe --dry-run 2>&1 | grep -q '^\[dry-run\] would'
+  }
+
+  # Caveman has no Vibe plugin; its skills go in through the `skills` CLI
+  # (npx), the way caveman's own installer does it. -g puts them in
+  # $VIBE_HOME/skills; run from $HOME so nothing lands in a project.
+  function _vibe_caveman_installed() {
+    [ -f "$vibe_dir/skills/caveman/SKILL.md" ]
+  }
+
+  function _install_vibe_caveman() {
+    if _vibe_caveman_installed; then
+      echo -e "${__green}✓${__reset} caveman skills for Vibe already installed"
+      return 0
+    fi
+    if ! _require_npm; then
+      echo -e "${__red}Skipped caveman:${__reset} npm is not installed. Run ${__blue}labelvier setup tools${__reset} first."
+      return 0
+    fi
+
+    ( cd "$HOME" && npx -y skills add JuliusBrussee/caveman --skill '*' -a mistral-vibe -g --yes ) < /dev/null
+
+    if _vibe_caveman_installed; then
+      echo -e "${__green}Installed${__reset} caveman skills for Vibe"
+    else
+      echo -e "${__red}Failed to install caveman for Vibe.${__reset} Run it yourself: ${__blue}npx skills add JuliusBrussee/caveman --skill '*' -a mistral-vibe -g${__reset}"
+    fi
+  }
+
+  # Removes the caveman skills from Vibe only. The names come from the skills
+  # CLI's global lock file (source JuliusBrussee/caveman), so other skills
+  # stay. Falls back to just "caveman" when the lock file can't be read.
+  function _remove_vibe_caveman() {
+    _vibe_caveman_installed || return 0
+    # No _require_npm here: an uninstall must not offer to install node.
+    if ! type -P npx >/dev/null 2>&1 && ! { _load_nvm >/dev/null 2>&1 && type -P npx >/dev/null 2>&1; }; then
+      echo "Skipping caveman removal for Vibe: npm is not installed."
+      return 0
+    fi
+
+    local lock="$HOME/.agents/.skill-lock.json" names=""
+    if [ -f "$lock" ] && type -P jq >/dev/null 2>&1; then
+      names=$(jq -r '.skills // {} | to_entries[] | select(.value.source == "JuliusBrussee/caveman") | .key' "$lock" 2>/dev/null | tr '\n' ' ')
+    fi
+    [ -n "$names" ] || names="caveman"
+
+    # $names is unquoted on purpose: one argument per skill name.
+    ( cd "$HOME" && npx -y skills remove $names -a mistral-vibe -g --yes ) < /dev/null \
+      && echo -e "${__green}Removed${__reset} caveman skills from Vibe" \
+      || echo -e "${__red}Removing caveman from Vibe failed.${__reset} Run it yourself: ${__blue}npx skills remove $names -a mistral-vibe -g${__reset}"
+  }
+
   # AGENTS.md is the user's own file, like CLAUDE.md: created empty when
   # missing; only the managed block in it is replaced. --force rewrites an
   # up-to-date block and LARAVEL.md too.
-  function _mistral_install() {
-    local force=1
-    _flag_is_present force "$@" && force=0
-
-    if ! _vibe_present; then
-      echo -e "${__blue}Mistral Vibe was not found${__reset} ('vibe' is not on your PATH and $vibe_dir does not exist). Installing the config anyway."
-    fi
+  function _install_vibe_block() {
+    local force="$1"
 
     mkdir -p "$vibe_labelvier_dir"
     _install_config_file "$vibe_labelvier_dir/LARAVEL.md" "$claude_tpl_dir/labelvier/LARAVEL.md.tpl" "$force"
@@ -973,15 +1093,47 @@ ai() (
     else
       echo -e "${__green}Added${__reset} the labelvier block (version $wanted) to $vibe_agents_md"
     fi
+  }
+
+  # The Vibe counterpart of `ai claude install`: config block, LARAVEL.md,
+  # skill links, rtk and caveman. The toon hook stays Claude-only (Vibe hooks
+  # are experimental). --skip-caveman leaves caveman out.
+  function _mistral_install() {
+    local force=1
+    _flag_is_present force "$@" && force=0
+
+    if ! _vibe_present; then
+      echo -e "${__blue}Mistral Vibe was not found${__reset} ('vibe' is not on your PATH and $vibe_dir does not exist). Installing the config anyway."
+    fi
+
+    _install_vibe_block "$force"
+
+    echo
+    _link_vibe_skills
+
+    echo
+    _wire_vibe_rtk
+
+    if _flag_is_present skip-caveman "$@"; then
+      echo "Skipped caveman (--skip-caveman)."
+    else
+      echo
+      _install_vibe_caveman
+    fi
+
     echo
     echo -e "${__bold}Done.${__reset} Restart your Vibe session to pick up the changes."
   }
 
-  # Removes the managed block (never the AGENTS.md file itself) and LARAVEL.md.
+  # Removes what _mistral_install set up — never the AGENTS.md file itself,
+  # nor the Claude Code copies the skill links point at.
   function _mistral_uninstall() {
     echo -e "${__red}${__bold}Warning:${__reset} this removes everything ${__bold}labelvier ai mistral install${__reset} sets up:"
     echo -e "  - the labelvier block in $vibe_agents_md (not the file itself)"
     echo -e "  - $vibe_labelvier_dir/LARAVEL.md"
+    echo -e "  - the skill links in $vibe_dir/skills (not the skills they point at)"
+    echo -e "  - rtk's Vibe hook and prompt via ${__bold}rtk init -g --agent vibe --uninstall${__reset}, if rtk is installed"
+    echo -e "  - the caveman skills for Vibe, if installed"
 
     echo
     local answer
@@ -1001,6 +1153,14 @@ ai() (
       echo -e "${__green}Removed${__reset} $vibe_labelvier_dir/LARAVEL.md"
     fi
     rmdir "$vibe_labelvier_dir" 2>/dev/null || true
+
+    _unlink_vibe_skills
+    _remove_vibe_caveman
+
+    if type -P rtk >/dev/null 2>&1; then
+      rtk init -g --agent vibe --uninstall --auto-patch \
+        || echo -e "${__red}rtk init -g --agent vibe --uninstall failed.${__reset} Run it yourself."
+    fi
 
     echo
     echo -e "${__bold}Done.${__reset} Restart your Vibe session to pick up the changes."
@@ -1329,6 +1489,36 @@ ai() (
       outdated) echo -e "${__red}✗${__reset} $target ${__red}(outdated: installed $(_file_version "$target"), available $(_file_version "$template"); run: labelvier ai mistral install)${__reset}" ;;
       *) echo -e "${__red}✗${__reset} $target ${__red}(missing, run: labelvier ai mistral install)${__reset}" ;;
     esac
+    local entry name source kind link
+    while IFS= read -r entry; do
+      name="${entry%%:*}"
+      kind="${entry##*:}"
+      source="${entry#*:}"
+      source="${source%:*}"
+      link="$vibe_dir/skills/$name"
+      if _is_link_to "$link" "$source" && [ -f "$link/SKILL.md" ]; then
+        echo -e "${__green}✓${__reset} $link ($name skill for Vibe)"
+      elif [ "$kind" = "optional" ] && [ ! -f "$source/SKILL.md" ]; then
+        # Not installed for Claude Code either: nothing to link, no ✗.
+        echo -e "- $link ($name skill for Vibe, optional, not installed)"
+      else
+        echo -e "${__red}✗${__reset} $link ($name skill for Vibe) ${__red}(missing, run: labelvier ai mistral install)${__reset}"
+      fi
+    done < <(_vibe_skill_links)
+
+    if type -P rtk >/dev/null 2>&1; then
+      if _vibe_rtk_wired; then
+        echo -e "${__green}✓${__reset} rtk wired into Vibe"
+      else
+        echo -e "${__red}✗${__reset} rtk not fully wired into Vibe ${__red}(run: labelvier ai mistral install)${__reset}"
+      fi
+    fi
+
+    if _vibe_caveman_installed; then
+      echo -e "${__green}✓${__reset} caveman skills for Vibe"
+    else
+      echo -e "${__red}✗${__reset} caveman skills for Vibe ${__red}(missing, run: labelvier ai mistral install)${__reset}"
+    fi
   }
 
   # ---------------------------------------------------------------------------
