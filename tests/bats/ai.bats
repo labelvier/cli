@@ -1107,13 +1107,39 @@ EOT
   assert_stub_called '^rtk init -g --agent vibe --auto-patch$'
   assert_stub_called "^npx -y skills add JuliusBrussee/caveman --skill \\* -a mistral-vibe -g --yes$"
   assert_output_contains "Installed caveman skills for Vibe"
+  assert_output_contains "Activated caveman for every Vibe session"
+  [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+  grep -qF 'Respond terse like smart caveman' "$VIBE_DIR/AGENTS.md"
 
   : > "$STUB_LOG"
   run_ai mistral install < /dev/null
   [ "$status" -eq 0 ]
   assert_output_contains "✓ timesheet skill already linked"
   assert_output_contains "✓ caveman skills for Vibe already installed"
+  assert_output_contains "✓ caveman always on in $VIBE_DIR/AGENTS.md"
   refute_stub_called '^npx'
+  [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+}
+
+@test "ai mistral install refreshes an outdated caveman block and keeps personal content" {
+  stub_vibe_toolchain
+  mkdir -p "$VIBE_DIR/skills/caveman"
+  echo "---" > "$VIBE_DIR/skills/caveman/SKILL.md"
+  cat > "$VIBE_DIR/AGENTS.md" <<'EOT'
+# mine
+<!-- caveman-begin -->
+old caveman rule
+<!-- caveman-end -->
+keep me
+EOT
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Activated caveman for every Vibe session"
+  grep -qxF '# mine' "$VIBE_DIR/AGENTS.md"
+  grep -qxF 'keep me' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'old caveman rule' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
 }
 
 @test "ai mistral install asks for ai claude install when the timesheet skill is missing" {
@@ -1146,6 +1172,7 @@ EOT
   assert_output_contains "Skipped rtk: it is not installed."
   assert_output_contains "Skipped caveman (--skip-caveman)."
   refute_stub_called '^npx'
+  [ "$(grep -c 'caveman-begin' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
 }
 
 @test "ai mistral uninstall removes the links, rtk's Vibe hook and only the caveman skills" {
@@ -1164,6 +1191,8 @@ EOT
   # The Claude Code copy the link pointed at stays.
   [ -f "$CLAUDE_DIR/skills/timesheet/SKILL.md" ]
   assert_stub_called '^npx -y skills remove caveman cavecrew -a mistral-vibe -g --yes$'
+  assert_output_contains "Removed the caveman always-on block"
+  [ "$(grep -c 'caveman-begin' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
   refute_stub_called 'other'
   assert_stub_called '^rtk init -g --agent vibe --uninstall --auto-patch$'
 }
@@ -1178,8 +1207,14 @@ EOT
   assert_output_contains "✓ $VIBE_DIR/skills/timesheet (timesheet skill for Vibe)"
   assert_output_contains "- $VIBE_DIR/skills/basecamp (basecamp skill for Vibe, optional, not installed)"
   assert_output_contains "✓ rtk wired into Vibe"
-  assert_output_contains "✓ caveman skills for Vibe"
+  assert_output_contains "✓ caveman skills for Vibe (always on)"
   refute_output_contains "ai mistral install"
+
+  # Skill present, but the always-on block gone: flagged.
+  sed '/caveman-begin/,/caveman-end/d' "$VIBE_DIR/AGENTS.md" > "$TEST_TMP/agents"
+  cp "$TEST_TMP/agents" "$VIBE_DIR/AGENTS.md"
+  run_ai check
+  assert_output_contains "✗ caveman not always on in $VIBE_DIR/AGENTS.md"
 }
 
 @test "ai check flags rtk that is not wired into Vibe" {

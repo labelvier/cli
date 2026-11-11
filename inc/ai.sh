@@ -50,6 +50,13 @@ ai() (
   local vibe_labelvier_dir="$vibe_dir/labelvier"
   local vibe_layout_version="1"
   local vibe_inline="GLOBAL WORDPRESS ANGULAR BACKEND"
+  # Vibe does not auto-activate skills, so caveman gets an always-on block in
+  # AGENTS.md, fenced with caveman's own markers (as its opencode installer
+  # does). Kept apart from the labelvier block: it follows the caveman
+  # install, not the templates. Compared by content, no version stamp.
+  local vibe_caveman_tpl="$current_dir/../templates/vibe/caveman-activate.md.tpl"
+  local vibe_caveman_start_re='^<!-- caveman-begin -->[[:space:]]*$'
+  local vibe_caveman_end_re='^<!-- caveman-end -->[[:space:]]*$'
 
   # Where the Basecamp CLI keeps its OAuth credentials and its cache.
   local basecamp_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/basecamp"
@@ -628,16 +635,20 @@ ai() (
     rm -f "$tmp_file"
   }
 
-  # Removes the labelvier-ai:start/end block from file $1 (see _strip_snippet
-  # for the rules). Keeps a .bak and writes through `cat >`.
+  # Removes a marker-fenced block from file $1 (see _strip_snippet for the
+  # rules). $2/$3 are awk regexes for the start and end marker lines; the
+  # default is the labelvier-ai:start/end block. Keeps a .bak and writes
+  # through `cat >`.
   function _strip_block() {
     local file="$1"
+    local start_re="${2:-^<!-- labelvier-ai:start version=.* -->[[:space:]]*\$}"
+    local end_re="${3:-^<!-- labelvier-ai:end -->[[:space:]]*\$}"
     [ -f "$file" ] || return 0
     local tmp_file="$file.tmp"
     cp "$file" "$file.bak"
-    awk '
-      /^<!-- labelvier-ai:start version=.* -->[[:space:]]*$/ { if (inblock) printf "%s", buf; inblock=1; buf=$0 ORS; next }
-      inblock { buf=buf $0 ORS; if ($0 ~ /^<!-- labelvier-ai:end -->[[:space:]]*$/) { inblock=0; buf="" } ; next }
+    awk -v start_re="$start_re" -v end_re="$end_re" '
+      $0 ~ start_re { if (inblock) printf "%s", buf; inblock=1; buf=$0 ORS; next }
+      inblock { buf=buf $0 ORS; if ($0 ~ end_re) { inblock=0; buf="" } ; next }
       { print }
       END { if (inblock) printf "%s", buf }
     ' "$file" > "$tmp_file"
@@ -926,14 +937,37 @@ ai() (
     echo "<!-- labelvier-ai:end -->"
   }
 
-  # Removes the managed block from AGENTS.md plus the blank lines it leaves
-  # at the end, so repeated installs don't grow the file.
+  # Removes the managed block (or, with start/end regexes as $1/$2, another
+  # fenced block) from AGENTS.md plus the blank lines it leaves at the end,
+  # so repeated installs don't grow the file.
   function _strip_vibe_block() {
-    _strip_block "$vibe_agents_md"
+    _strip_block "$vibe_agents_md" "$@"
     awk '{ line[NR] = $0 } END { n = NR; while (n > 0 && line[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print line[i] }' \
       "$vibe_agents_md" > "$vibe_agents_md.tmp"
     cat "$vibe_agents_md.tmp" > "$vibe_agents_md"
     rm -f "$vibe_agents_md.tmp"
+  }
+
+  # Puts the content of file $3 in AGENTS.md in place of the block fenced by
+  # start/end regexes $1/$2, so the block keeps its spot. Appends it (after
+  # one blank line) when there is no complete block yet. Keeps a .bak.
+  function _put_vibe_block() {
+    local start_re="$1" end_re="$2" content="$3"
+    [ -f "$vibe_agents_md" ] || : > "$vibe_agents_md"
+    cp "$vibe_agents_md" "$vibe_agents_md.bak"
+
+    if awk -v s="$start_re" -v e="$end_re" '$0 ~ s { b=1 } b && $0 ~ e { f=1 } END { exit !f }' "$vibe_agents_md"; then
+      awk -v s="$start_re" -v e="$end_re" -v content="$content" '
+        !done && $0 ~ s { inblock=1; while ((getline line < content) > 0) print line; next }
+        inblock { if ($0 ~ e) { inblock=0; done=1 } ; next }
+        { print }
+      ' "$vibe_agents_md" > "$vibe_agents_md.tmp"
+      cat "$vibe_agents_md.tmp" > "$vibe_agents_md"
+      rm -f "$vibe_agents_md.tmp"
+    else
+      [ -s "$vibe_agents_md" ] && echo >> "$vibe_agents_md"
+      cat "$content" >> "$vibe_agents_md"
+    fi
   }
 
   # Skills shared with Vibe as symlinks to their Claude Code / Basecamp copy,
@@ -1019,9 +1053,35 @@ ai() (
     [ -f "$vibe_dir/skills/caveman/SKILL.md" ]
   }
 
+  # The caveman block as it is in AGENTS.md now (empty when there is none).
+  function _vibe_caveman_block() {
+    [ -f "$vibe_agents_md" ] || return 0
+    awk -v start_re="$vibe_caveman_start_re" -v end_re="$vibe_caveman_end_re" '
+      $0 ~ start_re { inblock=1 }
+      inblock { print }
+      inblock && $0 ~ end_re { exit }
+    ' "$vibe_agents_md"
+  }
+
+  # True (0) if AGENTS.md holds the always-on block exactly as in the template.
+  function _vibe_caveman_active() {
+    [ "$(_vibe_caveman_block)" = "$(cat "$vibe_caveman_tpl")" ]
+  }
+
+  # Writes (or refreshes) the always-on block at the end of AGENTS.md.
+  function _activate_vibe_caveman() {
+    if _vibe_caveman_active; then
+      echo -e "${__green}✓${__reset} caveman always on in $vibe_agents_md"
+      return 0
+    fi
+    _put_vibe_block "$vibe_caveman_start_re" "$vibe_caveman_end_re" "$vibe_caveman_tpl"
+    echo -e "${__green}Activated${__reset} caveman for every Vibe session in $vibe_agents_md"
+  }
+
   function _install_vibe_caveman() {
     if _vibe_caveman_installed; then
       echo -e "${__green}✓${__reset} caveman skills for Vibe already installed"
+      _activate_vibe_caveman
       return 0
     fi
     if ! _require_npm; then
@@ -1033,6 +1093,7 @@ ai() (
 
     if _vibe_caveman_installed; then
       echo -e "${__green}Installed${__reset} caveman skills for Vibe"
+      _activate_vibe_caveman
     else
       echo -e "${__red}Failed to install caveman for Vibe.${__reset} Run it yourself: ${__blue}npx skills add JuliusBrussee/caveman --skill '*' -a mistral-vibe -g${__reset}"
     fi
@@ -1042,6 +1103,10 @@ ai() (
   # CLI's global lock file (source JuliusBrussee/caveman), so other skills
   # stay. Falls back to just "caveman" when the lock file can't be read.
   function _remove_vibe_caveman() {
+    if [ -n "$(_vibe_caveman_block)" ]; then
+      _strip_vibe_block "$vibe_caveman_start_re" "$vibe_caveman_end_re"
+      echo -e "${__green}Removed${__reset} the caveman always-on block from $vibe_agents_md"
+    fi
     _vibe_caveman_installed || return 0
     # No _require_npm here: an uninstall must not offer to install node.
     if ! type -P npx >/dev/null 2>&1 && ! { _load_nvm >/dev/null 2>&1 && type -P npx >/dev/null 2>&1; }; then
@@ -1083,10 +1148,10 @@ ai() (
       return 0
     fi
 
-    _strip_vibe_block
-    # Keep one blank line between the user's own content and the block.
-    [ -s "$vibe_agents_md" ] && echo >> "$vibe_agents_md"
-    _vibe_block >> "$vibe_agents_md"
+    local block_file="$vibe_agents_md.block"
+    _vibe_block > "$block_file"
+    _put_vibe_block '^<!-- labelvier-ai:start version=.* -->[[:space:]]*$' '^<!-- labelvier-ai:end -->[[:space:]]*$' "$block_file"
+    rm -f "$block_file"
 
     if [ -n "$installed" ]; then
       echo -e "${__green}Updated${__reset} the labelvier block in $vibe_agents_md (version $installed → $wanted)"
@@ -1133,7 +1198,7 @@ ai() (
     echo -e "  - $vibe_labelvier_dir/LARAVEL.md"
     echo -e "  - the skill links in $vibe_dir/skills (not the skills they point at)"
     echo -e "  - rtk's Vibe hook and prompt via ${__bold}rtk init -g --agent vibe --uninstall${__reset}, if rtk is installed"
-    echo -e "  - the caveman skills for Vibe, if installed"
+    echo -e "  - the caveman skills for Vibe and their always-on block in $vibe_agents_md, if installed"
 
     echo
     local answer
@@ -1514,10 +1579,12 @@ ai() (
       fi
     fi
 
-    if _vibe_caveman_installed; then
-      echo -e "${__green}✓${__reset} caveman skills for Vibe"
-    else
+    if ! _vibe_caveman_installed; then
       echo -e "${__red}✗${__reset} caveman skills for Vibe ${__red}(missing, run: labelvier ai mistral install)${__reset}"
+    elif ! _vibe_caveman_active; then
+      echo -e "${__red}✗${__reset} caveman not always on in $vibe_agents_md ${__red}(missing or outdated, run: labelvier ai mistral install)${__reset}"
+    else
+      echo -e "${__green}✓${__reset} caveman skills for Vibe (always on)"
     fi
   }
 
