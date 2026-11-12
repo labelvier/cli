@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-12
+
 ### Added
 - `labelvier ai mistral install|uninstall`: rolls the Label Vier GLOBAL/WORDPRESS/ANGULAR/BACKEND instructions out to Mistral Vibe as a managed block in `~/.vibe/AGENTS.md` (respects `VIBE_HOME`), with LARAVEL.md loaded on demand.
 - `labelvier ai mistral install` also links the timesheet, dashboard and basecamp skills into `~/.vibe/skills`, wires rtk into Vibe and installs the caveman skills for Vibe (`--skip-caveman` to leave it out).
 - Caveman is always on in Vibe: `ai mistral install` writes the full caveman ruleset (from the installed `SKILL.md`) into `~/.vibe/AGENTS.md` as a `<!-- caveman-begin/end -->` block, because Vibe does not auto-activate skills.
 - `labelvier ai check` reports the Mistral Vibe config when Vibe is installed.
+- `labelvier siteground sites` and `labelvier siteground accounts` show the hosting server IP next to each site/account.
 
 ## [1.4.1] - 2026-11-11
 
