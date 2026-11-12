@@ -108,9 +108,9 @@ export class SiteGroundClient {
 		return (await this.get('/accounts?sort_field=created&sort_order=DESC')).accounts;
 	}
 
-	/** Resolve a hosting account by id or (case-insensitive, partial) name, e.g. "Hamerkop". */
-	async findAccount(nameOrId) {
-		const accounts = await this.accounts();
+	/** Resolve a hosting account by id or (case-insensitive, partial) name, e.g. "Hamerkop". Pass a fetched list as `accounts` to avoid a second GET /accounts. */
+	async findAccount(nameOrId, accounts) {
+		accounts ??= await this.accounts();
 		const needle = nameOrId.toLowerCase();
 		const matches = accounts.filter((a) => a.id === nameOrId || a.name.toLowerCase().includes(needle));
 		if (matches.length !== 1) {

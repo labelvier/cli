@@ -37,6 +37,8 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 
 - `templates/claude/**` holds the files `labelvier ai claude install` deploys to `~/.claude` (WORDPRESS.md, GLOBAL.md, skills, ...). Each carries a `<!-- labelvier-ai-version: <n> -->` stamp.
 - **Always bump that stamp when you change a template's content** — otherwise `labelvier ai claude check`/`install` sees no change and colleagues never receive the update.
+- `labelvier ai mistral install` reuses the same `templates/claude/labelvier/*.md.tpl` for Mistral Vibe. Vibe has no `@import`, so GLOBAL/WORDPRESS/ANGULAR/BACKEND are inlined into a managed block in `${VIBE_HOME:-~/.vibe}/AGENTS.md`; that block's version is built from the template stamps, so the same stamp bump rolls it out. LARAVEL.md is copied to `~/.vibe/labelvier/` and the `~/.claude/labelvier/` path in BACKEND.md is rewritten to it. Keep templates tool-neutral (no Claude-only paths besides that one).
+- `ai mistral install` also links the timesheet, dashboard and basecamp skills into `~/.vibe/skills` as symlinks to their Claude Code / `~/.agents` copy (one copy on disk; the `~/.claude/...` paths inside them stay valid), wires rtk via `rtk init -g --agent vibe` and installs caveman via `npx skills add JuliusBrussee/caveman --skill '*' -a mistral-vibe -g`. The toon hook stays Claude-only.
 
 ## Environment constraints
 
