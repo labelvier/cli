@@ -11,6 +11,8 @@ import {
 	accountsOverview,
 	describeAccount,
 	findSite,
+	withServerIps,
+	describeSite,
 	siteDiskUsage,
 	describeDiskUsage,
 	USAGE_METRICS,
@@ -129,8 +131,22 @@ test('accountsOverview(): site count per plan, disk in GB, null when the stats c
 
 test('describeAccount(): one aligned line, whitespace in the plan description collapsed', async () => {
 	const [a, b] = await accountsOverview(fakeSg());
-	assert.equal(describeAccount(a), 'Develop - Hamerkop       2 sites  10/40 GB (25%), 30 GB free         GoGeek Dev  Amsterdam');
-	assert.equal(describeAccount(b), 'Basis - Albatros         1 sites  disk usage unknown                 GrowBig  Amsterdam');
+	assert.equal(describeAccount(a), 'Develop - Hamerkop       2 sites  10/40 GB (25%), 30 GB free         GoGeek Dev  Amsterdam  35.214.252.94');
+	assert.equal(describeAccount(b), 'Basis - Albatros         1 sites  disk usage unknown                 GrowBig  Amsterdam  35.214.165.2');
+	assert.equal(describeAccount({ ...b, server: undefined }), 'Basis - Albatros         1 sites  disk usage unknown                 GrowBig  -  -', 'no server: location and IP fall back to -');
+});
+
+test('withServerIps(): server IP of the account as ip, null for an unknown account', async () => {
+	const enriched = withServerIps(SITES, ACCOUNTS);
+	assert.deepEqual(enriched.map((s) => s.ip), [SERVER_IP, SERVER_IP, '35.214.165.2']);
+	assert.deepEqual(withServerIps([{ id: 'S9', account_id: 'nope' }], ACCOUNTS).map((s) => s.ip), [null]);
+	assert.equal(SITES[0].ip, undefined, 'the input list is not mutated');
+});
+
+test('describeSite(): one aligned line with the server IP next to the domain', async () => {
+	const [s1, , s3] = withServerIps(SITES, ACCOUNTS);
+	assert.equal(describeSite({ ...s1, cms: 'wordpress', status: 'active', account_name: 'Develop - Hamerkop' }), 'S1  analytics.labelvier.dev                  35.214.252.94    wordpress  active         Develop - Hamerkop');
+	assert.equal(describeSite({ ...s3, ip: null, cms: 'none', status: 'pending', account_name: 'Basis - Albatros' }), 'S3  yoni.care                                -                none       pending        Basis - Albatros');
 });
 
 test('siteDiskUsage(): the site figure from its plan disk stats, null when the site is not listed', async () => {

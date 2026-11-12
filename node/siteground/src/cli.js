@@ -22,7 +22,9 @@ import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
 import {
 	accountsOverview,
 	describeAccount,
+	describeSite,
 	findSite,
+	withServerIps,
 	siteDiskUsage,
 	describeDiskUsage,
 	siteUsage,
@@ -65,8 +67,8 @@ Session
                                  login credentials (.env)
 
 Overview
-  accounts                       Hosting plans with site count and disk usage
-  sites [--account <name|id>]    Websites, optionally filtered on plan
+  accounts                       Hosting plans with site count, disk usage and server IP
+  sites [--account <name|id>]    Websites with server IP, optionally filtered on plan
 
 Usage (find the site behind a CPU spike or an autoscale)
   account:stats <name|id> [--days 31] [--top 15] [--sort cpu|exec]
@@ -267,12 +269,14 @@ const commands = {
 
 	async sites(sg) {
 		let sites = await task('Getting websites…', () => sg.sites(), { done: (s) => `${s.length} websites` });
+		const accounts = await sg.accounts();
 		if (values.account) {
-			const account = await sg.findAccount(values.account);
+			const account = await sg.findAccount(values.account, accounts);
 			sites = sites.filter((s) => s.account_id === account.id);
 		}
+		sites = withServerIps(sites, accounts);
 		if (values.json) return console.log(JSON.stringify(sites, null, 2));
-		for (const s of sites) console.log(`${s.id}  ${s.domain.padEnd(40)} ${s.cms.padEnd(10)} ${s.status.padEnd(14)} ${s.account_name}`);
+		for (const s of sites) console.log(describeSite(s));
 	},
 
 	async 'account:stats'(sg, [nameOrId = values.account]) {

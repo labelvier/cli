@@ -53,7 +53,7 @@ export function describeAccount(a) {
 		a.diskLimitGb != null
 			? `${a.diskUsedGb.toFixed(0)}/${a.diskLimitGb.toFixed(0)} GB (${Math.round((a.diskUsedGb / a.diskLimitGb) * 100)}%), ${(a.diskLimitGb - a.diskUsedGb).toFixed(0)} GB free`
 			: 'disk usage unknown';
-	return `${a.name.padEnd(22)} ${String(a.siteCount).padStart(3)} sites  ${disk.padEnd(34)} ${a.plan_description.replace(/\s+/g, ' ')}  ${a.server.location}`;
+	return `${a.name.padEnd(22)} ${String(a.siteCount).padStart(3)} sites  ${disk.padEnd(34)} ${a.plan_description.replace(/\s+/g, ' ')}  ${a.server?.location ?? '-'}  ${a.server?.ip ?? '-'}`;
 }
 
 /**
@@ -80,6 +80,16 @@ export async function findSite(sg, domain) {
 	const site = (await sg.sites()).find((s) => s.domain === domain);
 	if (!site) throw new Error(`No site found for ${domain}`);
 	return site;
+}
+
+/** Attach the hosting server IP of each site (from its account) as `ip`; null when the account is unknown. */
+export function withServerIps(sites, accounts) {
+	const ipByAccount = new Map(accounts.map((a) => [a.id, a.server?.ip]));
+	return sites.map((s) => ({ ...s, ip: ipByAccount.get(s.account_id) ?? null }));
+}
+
+export function describeSite(s) {
+	return `${s.id}  ${s.domain.padEnd(40)} ${(s.ip ?? '-').padEnd(16)} ${s.cms.padEnd(10)} ${s.status.padEnd(14)} ${s.account_name}`;
 }
 
 export const USAGE_METRICS = { cpu: 'cpu_seconds', exec: 'program_executions' };
