@@ -29,6 +29,7 @@ import {
 	defaultSshAlias,
 	addSshAlias,
 	createDatabase,
+	rotateDbPassword,
 	serverPhpVersions,
 	parsePhpVersion,
 	phpLabel,
@@ -431,6 +432,30 @@ test('createDatabase(): database, user with a generated password, grant; progres
 	assert.match(db.password, /a1!$/);
 	assert.deepEqual(st.calls, [['createDatabase', 'shop'], ['createDbUser', 'shop', db.password], ['grantAll', 1, 2]]);
 	assert.deepEqual(texts, ['Creating database "shop"…', 'Creating database user "shop"…', 'Granting privileges…']);
+});
+
+test('rotateDbPassword(): sole user gets a generated password; --user picks by name or label', async () => {
+	const one = fakeSt({ dbUsers: [{ id: 1, label: '', name: 'uabc' }], setDbUserPassword: {} });
+	const r = await rotateDbPassword(one);
+	assert.equal(r.user, 'uabc');
+	assert.match(r.password, /a1!$/);
+	assert.deepEqual(one.calls, [['dbUsers'], ['setDbUserPassword', 1, r.password]]);
+
+	const many = () => fakeSt({ dbUsers: [{ id: 1, label: 'shop', name: 'uabc' }, { id: 2, label: '', name: 'udef' }], setDbUserPassword: {} });
+	const byLabel = many();
+	assert.equal((await rotateDbPassword(byLabel, { user: 'shop' })).user, 'uabc');
+	assert.equal(byLabel.calls.at(-1)[1], 1);
+	const byName = many();
+	assert.equal((await rotateDbPassword(byName, { user: 'udef' })).user, 'udef');
+	assert.equal(byName.calls.at(-1)[1], 2);
+});
+
+test('rotateDbPassword(): refuses to guess and never writes on a miss', async () => {
+	const many = fakeSt({ dbUsers: [{ id: 1, label: '', name: 'uabc' }, { id: 2, label: '', name: 'udef' }], setDbUserPassword: {} });
+	await assert.rejects(rotateDbPassword(many), /More than one database user, pick one with --user: uabc, udef/);
+	await assert.rejects(rotateDbPassword(many, { user: 'nope' }), /No database user "nope" \(found: uabc, udef\)/);
+	await assert.rejects(rotateDbPassword(fakeSt({ dbUsers: [], setDbUserPassword: {} })), /no database users/);
+	assert.ok(!many.calls.some(([name]) => name === 'setDbUserPassword'));
 });
 
 // --- PHP -----------------------------------------------------------------------------------------

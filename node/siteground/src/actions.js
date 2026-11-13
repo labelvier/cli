@@ -283,6 +283,22 @@ export async function createDatabase(st, { label }, progress) {
 	return { label, name: db.name, user: user.name, password, host: 'localhost' };
 }
 
+/**
+ * Give an existing database user a new generated password. `user` matches the user's name or
+ * label; without it the site must have exactly one database user. Returns { user, password }.
+ */
+export async function rotateDbPassword(st, { user } = {}) {
+	const users = await st.dbUsers();
+	const matches = user ? users.filter((u) => u.name === user || (u.label && u.label === user)) : users;
+	if (matches.length === 0) {
+		throw new Error(user ? `No database user "${user}" (found: ${users.map((u) => u.name).join(', ') || 'none'})` : 'This site has no database users');
+	}
+	if (matches.length > 1) throw new Error(`More than one database user, pick one with --user: ${matches.map((u) => u.name).join(', ')}`);
+	const password = generatePassword();
+	await st.setDbUserPassword(matches[0].id, password);
+	return { user: matches[0].name, password };
+}
+
 // --- PHP ----------------------------------------------------------------------
 
 /**
