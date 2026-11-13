@@ -247,6 +247,12 @@ test('MySQL: createDatabase, createDbUser, grantAll payloads', async (t) => {
 	assert.deepEqual(calls.map((c) => c.body), [{ label: 'shop' }, { label: 'shop', password: 'pw' }, { db_id: 1, dbuser_id: 2, grants: { all: 1 } }]);
 });
 
+test('MySQL: setDbUserPassword sends PUT /db-mysql_user/<id> with only the password', async (t) => {
+	const { st, calls } = client(t, { 'PUT /db-mysql_user/1': {} });
+	await st.setDbUserPassword(1, 'pw');
+	assert.deepEqual(calls[0], { ...calls[0], method: 'PUT', endpoint: '/db-mysql_user/1', body: { password: 'pw' } });
+});
+
 test('Cron: create/update/delete payloads, day-of-week 7 is sent as 0', async (t) => {
 	const { st, calls } = client(t, { 'POST /cron': {}, 'PUT /cron/4': {}, 'DELETE /cron/4': {} });
 	const schedule = { min: '0', hour: '3', day: '*', mon: '*', dow: '7' };

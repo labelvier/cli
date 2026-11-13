@@ -42,6 +42,7 @@ import {
 	defaultSshAlias,
 	addSshAlias,
 	createDatabase,
+	rotateDbPassword,
 	serverPhpVersions,
 	parsePhpVersion,
 	phpLabel,
@@ -99,6 +100,8 @@ Site Tools (existing site)
                                              Logs in as the first admin @labelvier.nl (or @<domain>), else
                                              as SiteGround's pick; "any" skips that
   site:db <domain> [--db <label>]            Create MySQL database + user with all privileges
+  site:db-password <domain> [--user <name>]  Give a database user a new generated password (prints it
+                                             once, saved in .credentials); --user when there are several
   site:cron <domain>                         List cron jobs
   site:cron <domain> --add "<command>" [--at "<min hour day mon dow>"]
                                              Add a cron job (default every minute; @hourly/@daily/… also work)
@@ -123,6 +126,7 @@ const { positionals, values } = parseArgs({
 		'no-ssh-alias': { type: 'boolean' },
 		db: { type: 'string' },
 		'no-db': { type: 'boolean' },
+		user: { type: 'string' }, // site:db-password: which database user
 		off: { type: 'boolean' },
 		demo: { type: 'boolean' }, // hidden: see src/demo.js
 		add: { type: 'string' },
@@ -594,6 +598,15 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		});
 		const file = await storeCredentials(domain, { [`database_${db.name}`]: db });
 		console.log(`name ${db.name}  user ${db.user}  password ${db.password}  host localhost\nSaved in ${file}`);
+	},
+
+	async 'site:db-password'(sg, [domain]) {
+		const { st } = await siteToolsFor(sg, domain);
+		const db = await task('Setting a new database password…', () => rotateDbPassword(st, { user: values.user }), {
+			done: (db) => `New password set for database user ${db.user}`,
+		});
+		const file = await storeCredentials(domain, { [`database_user_${db.user}`]: { ...db, rotated_at: new Date().toISOString() } });
+		console.log(`user ${db.user}  password ${db.password}\nSaved in ${file}\nUpdate the site config (.env / wp-config.php) with this password now.`);
 	},
 
 	async 'site:cron'(sg, [domain]) {
