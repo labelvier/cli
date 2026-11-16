@@ -20,11 +20,19 @@ setup() (
   }
 
   # @function all
-  # @description Walk through the whole setup: required tools, notifications, old wp-takeoff leftovers, then the AI check and install. Runs when no subcommand is given.
+  # @description Walk through the whole setup: old wp-takeoff leftovers, required tools, notifications, then the AI check and install. Runs when no subcommand is given.
   function all() {
     echo -e "${__bold}Label Vier CLI setup${__reset}"
     echo "Checks the tools the CLI needs and offers to install what is missing. Nothing is installed without your yes."
     echo
+
+    # First, so `tools` below does not report leftovers that are fixed here.
+    # Skipped when the update flow just ran the cleanup itself.
+    if [ -z "${LABELVIER_SKIP_CLEANUP:-}" ]; then
+      echo -e "${__bold}Old wp-takeoff CLI${__reset}"
+      core cleanup
+      echo
+    fi
 
     echo -e "${__bold}Tools${__reset}"
     tools
@@ -32,10 +40,6 @@ setup() (
     echo
     echo -e "${__bold}Notifications${__reset}"
     core notifications
-
-    echo
-    echo -e "${__bold}Old wp-takeoff CLI${__reset}"
-    core cleanup
 
     echo
     echo -e "${__bold}AI${__reset}"
@@ -47,7 +51,7 @@ setup() (
   }
 
   # @function tools
-  # @description Check the required tools (Homebrew, git, jq, nvm, Node, Docker, Composer) and offer to install missing ones.
+  # @description Check the required tools (Homebrew, git, jq, nvm, Node, Docker, Composer) and old wp-takeoff leftovers, and offer to install missing tools.
   function tools() {
     local missing=""
 
@@ -63,6 +67,14 @@ setup() (
     _require_node || missing="$missing node"
     _require_docker || missing="$missing docker"
     _brew_tool composer "needed by the zed commands" composer || missing="$missing composer"
+
+    # Leftovers of the old wp-takeoff CLI count as a problem too: the daily
+    # auto-update runs `setup tools` and sends a notification that opens
+    # `labelvier setup` when it fails, and setup starts with the cleanup.
+    if core _has_legacy_leftovers; then
+      echo -e "${__red}✗${__reset} The old wp-takeoff CLI left an alias or install behind. Run: labelvier core cleanup"
+      missing="$missing wp-takeoff-leftovers"
+    fi
 
     echo
     if [ -z "$missing" ]; then
