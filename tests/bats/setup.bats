@@ -92,6 +92,40 @@ refute_installs() {
   refute_installs
 }
 
+@test "tools fails on wp-takeoff leftovers so the auto-update notification opens setup" {
+  stub uname 'echo Linux'
+  stub_all_tools
+  echo "alias wt='wp-takeoff'" > "$HOME/.zshrc"
+  run_cli_notty setup tools
+  [ "$status" -eq 1 ]
+  assert_output_contains "The old wp-takeoff CLI left an alias or install behind. Run: labelvier core cleanup"
+  assert_output_contains "Still missing: wp-takeoff-leftovers"
+  # only checked, nothing changed
+  grep -qx "alias wt='wp-takeoff'" "$HOME/.zshrc"
+}
+
+@test "bare setup starts with the wp-takeoff cleanup, before the tools" {
+  stub uname 'echo Linux'
+  stub_all_tools
+  run_cli_notty setup
+  [ "$status" -eq 0 ]
+  local plain cleanup_line tools_line
+  plain="$(plain_output)"
+  cleanup_line=$(printf '%s\n' "$plain" | grep -n "^Old wp-takeoff CLI$" | cut -d: -f1)
+  tools_line=$(printf '%s\n' "$plain" | grep -n "^Tools$" | cut -d: -f1)
+  [ -n "$cleanup_line" ] && [ -n "$tools_line" ]
+  [ "$cleanup_line" -lt "$tools_line" ]
+}
+
+@test "setup skips the wp-takeoff section when the update flow already ran it" {
+  stub uname 'echo Linux'
+  stub_all_tools
+  LABELVIER_SKIP_CLEANUP=1 run_cli_notty setup
+  [ "$status" -eq 0 ]
+  refute_output_contains "Old wp-takeoff CLI"
+  assert_output_contains "AI"
+}
+
 @test "setup --help prints the docs" {
   run_cli_notty setup --help
   assert_output_contains "Available functions:"

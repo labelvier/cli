@@ -27,7 +27,7 @@ make_cli_copy() {
   cat > "$dir/inc/setup.sh" <<'EOF'
 #!/bin/bash
 setup() (
-  echo "fake setup $*"
+  echo "fake setup $* skip-cleanup=${LABELVIER_SKIP_CLEANUP:-no}"
   exit "${FAKE_SETUP_STATUS:-0}"
 )
 EOF
@@ -365,6 +365,35 @@ stub_notifier() {
   run core _run_update_checker <<< "y"
   [ "$status" -eq 10 ]
   assert_output_contains "fake setup"
+}
+
+@test "_run_update_checker checks wp-takeoff leftovers right after a pull" {
+  make_cli_git
+  push_upstream "v2"
+  load_cli_copy
+  touch -t 202001010000 "$CLI_COPY/.last_git_check"
+  echo "alias wt='wp-takeoff'" > "$HOME/.zshrc"
+  unset LABELVIER_AUTO_UPDATE
+  export CONFIRM=yes
+  run core _run_update_checker <<< "y"
+  [ "$status" -eq 10 ]
+  assert_output_contains "Update complete."
+  assert_output_contains "~/.zshrc has an alias for the old wp-takeoff CLI: wt"
+  # setup does not ask the same again
+  assert_output_contains "fake setup  skip-cleanup=1"
+}
+
+@test "_run_update_checker stays quiet about leftovers after a pull on a clean system" {
+  make_cli_git
+  push_upstream "v2"
+  load_cli_copy
+  touch -t 202001010000 "$CLI_COPY/.last_git_check"
+  unset LABELVIER_AUTO_UPDATE
+  export CONFIRM=no
+  run core _run_update_checker <<< "y"
+  [ "$status" -eq 10 ]
+  refute_output_contains "wp-takeoff"
+  refute_output_contains "No leftovers"
 }
 
 @test "the entry script stops after a self-update" {
@@ -1051,6 +1080,24 @@ load_cli_confirm() {
     echo "$1 [Y/n] (test answers: ${CONFIRM:-no})"
     [ "${CONFIRM:-no}" = "yes" ]
   }
+}
+
+@test "_has_legacy_leftovers finds an alias, an old install and a stale PATH line" {
+  load_cli_confirm
+  run core _has_legacy_leftovers
+  [ "$status" -eq 1 ]
+  echo "alias wt='wp-takeoff'" > "$HOME/.bashrc"
+  run core _has_legacy_leftovers
+  [ "$status" -eq 0 ]
+  rm "$HOME/.bashrc"
+  make_old_install
+  run core _has_legacy_leftovers
+  [ "$status" -eq 0 ]
+  rm -rf "$HOME/.wp-takeoff"
+  echo 'export PATH=$PATH:$HOME/.wp-takeoff' > "$HOME/.zshrc"
+  run core _has_legacy_leftovers
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 @test "cleanup reports a clean system" {
