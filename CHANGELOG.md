@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-11-16
+
+### Changed
+- `labelvier setup tools` asks right away whether to clean up wp-takeoff leftovers ([Y/n]), like it does for a missing tool. Without a terminal it only checks. The separate wp-takeoff section in `labelvier setup` is gone; the tools step covers it.
+
 ## [1.6.1] - 2026-11-16
 
 ### Fixed
