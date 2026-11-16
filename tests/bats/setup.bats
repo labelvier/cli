@@ -84,6 +84,8 @@ refute_installs() {
   assert_output_contains "All required tools are installed."
   assert_output_contains "Notifications"
   assert_output_contains "Notifications are only supported on macOS."
+  assert_output_contains "Old wp-takeoff CLI"
+  assert_output_contains "No leftovers of the old wp-takeoff CLI found"
   assert_output_contains "AI"
   assert_output_contains "Check and install the AI setup (Claude Code config, skills, Basecamp, rtk) now? [Y/n] (no terminal to ask on, skipped)"
   assert_output_contains "Ok, run it later with: labelvier ai update"

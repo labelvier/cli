@@ -20,7 +20,7 @@ setup() (
   }
 
   # @function all
-  # @description Walk through the whole setup: required tools, notifications, then the AI check and install. Runs when no subcommand is given.
+  # @description Walk through the whole setup: required tools, notifications, old wp-takeoff leftovers, then the AI check and install. Runs when no subcommand is given.
   function all() {
     echo -e "${__bold}Label Vier CLI setup${__reset}"
     echo "Checks the tools the CLI needs and offers to install what is missing. Nothing is installed without your yes."
@@ -32,6 +32,10 @@ setup() (
     echo
     echo -e "${__bold}Notifications${__reset}"
     core notifications
+
+    echo
+    echo -e "${__bold}Old wp-takeoff CLI${__reset}"
+    core cleanup
 
     echo
     echo -e "${__bold}AI${__reset}"
