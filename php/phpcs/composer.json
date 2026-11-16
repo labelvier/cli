@@ -1,0 +1,15 @@
+{
+	"name": "labelvier/cli-phpcs",
+	"description": "PHP_CodeSniffer and the WordPress standards used by `labelvier check php`.",
+	"type": "project",
+	"license": "proprietary",
+	"require": {
+		"wp-coding-standards/wpcs": "^3.0",
+		"phpcompatibility/phpcompatibility-wp": "*"
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}
