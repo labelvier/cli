@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-16
+
+### Fixed
+- Clicking the auto-update notification now leads to the wp-takeoff cleanup. `labelvier setup tools` fails when wp-takeoff leftovers exist, so the notification opens `labelvier setup`, and setup now starts with the cleanup. This also works for installs that update from 1.5.0 or 1.6.0.
+
+### Changed
+- After a manual update the wp-takeoff cleanup runs right away, before the question to run `labelvier setup`. Setup then skips the cleanup.
+
 ## [1.6.0] - 2026-11-16
 
 ### Added

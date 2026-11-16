@@ -265,8 +265,9 @@ core() (
     "$cli_dir/labelvier" setup tools </dev/null >/dev/null 2>&1 || tools_ok=0
     result=$("$cli_dir/labelvier" ai check 2>&1)
     if [ "$tools_ok" -eq 0 ]; then
-      # setup also walks through notifications and `ai update`, so it covers everything.
-      _auto_log "setup tools found missing tools"
+      # setup also walks through the wp-takeoff cleanup, notifications and
+      # `ai update`, so it covers everything.
+      _auto_log "setup tools found missing tools or wp-takeoff leftovers"
       _notify "Label Vier CLI" "The Label Vier CLI needs a quick update. Click here and we'll sort it out." "$(printf '%q' "$cli_dir/labelvier") setup"
     elif echo "$result" | grep -q '✗'; then
       _auto_log "ai check found problems"
@@ -460,9 +461,12 @@ PLIST
           # An update can bring new tools, skills or config. This process still
           # runs the old functions, so setup runs in a fresh CLI process.
           cd "$OLDPWD"
+          # Leftovers of the old wp-takeoff CLI, right away (silent when clean).
+          "$current_dir/../labelvier" core _check_legacy_leftovers
           echo
           if _confirm "Run 'labelvier setup' now to install what this update needs?"; then
-            "$current_dir/../labelvier" setup
+            # The leftovers were just handled, setup skips them.
+            LABELVIER_SKIP_CLEANUP=1 "$current_dir/../labelvier" setup
           else
             echo "Run it later with: labelvier setup"
           fi
@@ -607,6 +611,57 @@ PLIST
     return $found
   }
 
+  # Silent version for unattended runs: returns 0 when any leftover exists.
+  function _has_legacy_leftovers() {
+    local rc
+    _legacy_install_dir >/dev/null && return 0
+    for rc in $legacy_rc_files; do
+      [ -f "$HOME/$rc" ] || continue
+      [ -n "$(_legacy_alias_names "$HOME/$rc")" ] && return 0
+      [ ! -e "$HOME/.wp-takeoff" ] && _rc_has_legacy_path "$HOME/$rc" && return 0
+    done
+    return 1
+  }
+
+  # Prints the names of the aliases in file $1 that call wp-takeoff, each
+  # with a leading space (" wt 2"). Prints nothing when there are none.
+  function _legacy_alias_names() {
+    local line names=""
+    while IFS= read -r line || [ -n "$line" ]; do
+      if [[ "$line" =~ $legacy_alias_re ]]; then
+        case " $names " in
+          *" ${BASH_REMATCH[1]} "*) ;;
+          *) names="$names ${BASH_REMATCH[1]}" ;;
+        esac
+      fi
+    done < "$1"
+    printf '%s' "$names"
+  }
+
+  # Succeeds when file $1 has a PATH line that only adds ~/.wp-takeoff.
+  function _rc_has_legacy_path() {
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+      [[ "$line" =~ $legacy_path_re ]] && return 0
+    done < "$1"
+    return 1
+  }
+
+  # Prints the real folder of the old CLI checkout in ~/.wp-takeoff (a folder,
+  # or a symlink to one). Fails when there is none, when it is this CLI itself,
+  # or when it resolves to the home or root folder.
+  function _legacy_install_dir() {
+    local old="$HOME/.wp-takeoff" self resolved
+    [ -d "$old" ] && [ -e "$old/wp-takeoff" ] && [ -d "$old/inc" ] || return 1
+    self=$(cd "$current_dir/.." && pwd -P)
+    resolved=$(cd "$old" && pwd -P) || return 1
+    [ "$resolved" = "$self" ] && return 1
+    if [ "$resolved" = "/" ] || [ "$resolved" = "$(cd "$HOME" && pwd -P)" ]; then
+      return 1
+    fi
+    echo "$resolved"
+  }
+
   # Rewrites one shell file line by line. $1 = file, $2 = mode:
   #   alias-change  alias lines that point to wp-takeoff become `alias <name>='labelvier'`
   #   alias-remove  alias lines that point to wp-takeoff are dropped
@@ -638,19 +693,11 @@ PLIST
   # Aliases (such as `wt`) that still call wp-takeoff. Asks per shell file to
   # remove them or point them to labelvier. Enter (or no terminal) = skip.
   function _check_legacy_aliases() {
-    local rc file found=1 line names answer
+    local rc file found=1 names answer
     for rc in $legacy_rc_files; do
       file="$HOME/$rc"
       [ -f "$file" ] || continue
-      names=""
-      while IFS= read -r line || [ -n "$line" ]; do
-        if [[ "$line" =~ $legacy_alias_re ]]; then
-          case " $names " in
-            *" ${BASH_REMATCH[1]} "*) ;;
-            *) names="$names ${BASH_REMATCH[1]}" ;;
-          esac
-        fi
-      done < "$file"
+      names=$(_legacy_alias_names "$file")
       [ -z "$names" ] && continue
       found=0
 
@@ -676,18 +723,10 @@ PLIST
     return $found
   }
 
-  # The old CLI checkout in ~/.wp-takeoff (a folder, or a symlink to one).
-  # Skipped when ~/.wp-takeoff is this CLI itself.
+  # The old CLI checkout in ~/.wp-takeoff. Asks before removing it.
   function _check_legacy_install() {
-    local old="$HOME/.wp-takeoff" self resolved
-    [ -d "$old" ] && [ -e "$old/wp-takeoff" ] && [ -d "$old/inc" ] || return 1
-    self=$(cd "$current_dir/.." && pwd -P)
-    resolved=$(cd "$old" && pwd -P) || return 1
-    [ "$resolved" = "$self" ] && return 1
-    # Never anything that looks like a home or root folder.
-    if [ "$resolved" = "/" ] || [ "$resolved" = "$(cd "$HOME" && pwd -P)" ]; then
-      return 1
-    fi
+    local old="$HOME/.wp-takeoff" resolved
+    resolved=$(_legacy_install_dir) || return 1
 
     local where="$old"
     [ -L "$old" ] && where="$old -> $resolved"
@@ -717,11 +756,7 @@ PLIST
     for rc in $legacy_rc_files; do
       file="$HOME/$rc"
       [ -f "$file" ] || continue
-      local hit=1 line
-      while IFS= read -r line || [ -n "$line" ]; do
-        [[ "$line" =~ $legacy_path_re ]] && { hit=0; break; }
-      done < "$file"
-      [ $hit -eq 0 ] || continue
+      _rc_has_legacy_path "$file" || continue
       found=0
       echo -e "${__red}⚠${__reset}  ~/$rc still adds the removed ~/.wp-takeoff folder to your PATH."
       if _confirm "   Remove that line?"; then
