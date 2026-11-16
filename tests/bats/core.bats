@@ -1033,3 +1033,179 @@ stub_notifier() {
   grep -qx 'export PATH=$PATH:$HOME/.labelvier' "$HOME/.zshrc"
   assert_output_contains "now restart your zsh shell"
 }
+
+# --- cleanup (old wp-takeoff leftovers) -------------------------------------
+
+# A fake old wp-takeoff checkout at $1 (default ~/.wp-takeoff).
+make_old_install() {
+  local dir="${1:-$HOME/.wp-takeoff}"
+  mkdir -p "$dir/inc"
+  printf '#!/bin/bash\necho old\n' > "$dir/wp-takeoff"
+  chmod +x "$dir/wp-takeoff"
+}
+
+# load_cli with a _confirm that answers from $CONFIRM (yes|no, default no).
+load_cli_confirm() {
+  load_cli
+  _confirm() {
+    echo "$1 [Y/n] (test answers: ${CONFIRM:-no})"
+    [ "${CONFIRM:-no}" = "yes" ]
+  }
+}
+
+@test "cleanup reports a clean system" {
+  load_cli_confirm
+  echo "alias ll='ls -la'" > "$HOME/.zshrc"
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "No leftovers of the old wp-takeoff CLI found"
+}
+
+@test "cleanup skips a wt alias on Enter and leaves the file alone" {
+  load_cli_confirm
+  printf "export FOO=bar\nalias wt='wp-takeoff'\n" > "$HOME/.zshrc"
+  cp "$HOME/.zshrc" "$TEST_TMP/before"
+  run core cleanup <<< ""
+  [ "$status" -eq 0 ]
+  assert_output_contains "~/.zshrc has an alias for the old wp-takeoff CLI: wt"
+  assert_output_contains "Skipped. Run 'labelvier core cleanup' to fix it later."
+  refute_output_contains "No leftovers"
+  cmp "$HOME/.zshrc" "$TEST_TMP/before"
+}
+
+@test "cleanup skips the alias without a terminal (EOF)" {
+  load_cli_confirm
+  echo "alias wt='wp-takeoff'" > "$HOME/.bashrc"
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Skipped."
+  grep -qx "alias wt='wp-takeoff'" "$HOME/.bashrc"
+}
+
+@test "cleanup removes every wp-takeoff alias and keeps the rest" {
+  load_cli_confirm
+  printf '%s\n' "export FOO=bar" "alias wt='wp-takeoff'" "alias wt=\"wp-takeoff\"" \
+    'alias x=$HOME/.wp-takeoff/wp-takeoff' "alias l='labelvier'" > "$HOME/.bashrc"
+  run core cleanup <<< "r"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Removed from ~/.bashrc"
+  ! grep -q "wp-takeoff" "$HOME/.bashrc"
+  grep -qx "export FOO=bar" "$HOME/.bashrc"
+  grep -qx "alias l='labelvier'" "$HOME/.bashrc"
+}
+
+@test "cleanup changes a wt alias to labelvier" {
+  load_cli_confirm
+  printf "export FOO=bar\nalias wt='wp-takeoff'\n" > "$HOME/.zshrc"
+  run core cleanup <<< "c"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Changed to labelvier in ~/.zshrc"
+  grep -qx "alias wt='labelvier'" "$HOME/.zshrc"
+  grep -qx "export FOO=bar" "$HOME/.zshrc"
+}
+
+@test "cleanup keeps a symlinked dotfile a symlink" {
+  load_cli_confirm
+  mkdir -p "$HOME/dotfiles"
+  echo "alias wt='wp-takeoff'" > "$HOME/dotfiles/zshrc"
+  ln -s "$HOME/dotfiles/zshrc" "$HOME/.zshrc"
+  run core cleanup <<< "c"
+  [ "$status" -eq 0 ]
+  [ -L "$HOME/.zshrc" ]
+  grep -qx "alias wt='labelvier'" "$HOME/dotfiles/zshrc"
+}
+
+@test "cleanup keeps the old install on a no" {
+  load_cli_confirm
+  make_old_install
+  export CONFIRM=no
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "The old wp-takeoff CLI is still installed: $HOME/.wp-takeoff"
+  assert_output_contains "Kept. Run 'labelvier core cleanup' to remove it later."
+  [ -d "$HOME/.wp-takeoff" ]
+}
+
+@test "cleanup removes the old install and its PATH line on a yes" {
+  load_cli_confirm
+  make_old_install
+  printf '%s\n' 'export PATH=$PATH:$HOME/.wp-takeoff' 'export PATH=$PATH:$HOME/.labelvier' > "$HOME/.zshrc"
+  export CONFIRM=yes
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Removed the old wp-takeoff CLI"
+  assert_output_contains "~/.zshrc still adds the removed ~/.wp-takeoff folder to your PATH."
+  [ ! -e "$HOME/.wp-takeoff" ]
+  ! grep -q "wp-takeoff" "$HOME/.zshrc"
+  grep -qx 'export PATH=$PATH:$HOME/.labelvier' "$HOME/.zshrc"
+}
+
+@test "cleanup removes a symlinked old install and the folder it points to" {
+  load_cli_confirm
+  make_old_install "$TEST_TMP/Sites/wp-takeoff-cli"
+  ln -s "$TEST_TMP/Sites/wp-takeoff-cli" "$HOME/.wp-takeoff"
+  export CONFIRM=yes
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "$HOME/.wp-takeoff -> "
+  [ ! -L "$HOME/.wp-takeoff" ]
+  [ ! -e "$TEST_TMP/Sites/wp-takeoff-cli" ]
+}
+
+@test "cleanup does not remove an old install with uncommitted changes" {
+  load_cli_confirm
+  make_old_install
+  git -C "$HOME/.wp-takeoff" init -q
+  export CONFIRM=yes
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "It has uncommitted changes, so it is not removed automatically."
+  [ -d "$HOME/.wp-takeoff" ]
+}
+
+@test "cleanup leaves ~/.wp-takeoff alone when it is this CLI" {
+  CLI_COPY="$TEST_TMP/cli"
+  make_cli_copy "$CLI_COPY"
+  ln -s labelvier "$CLI_COPY/wp-takeoff"
+  ln -s "$CLI_COPY" "$HOME/.wp-takeoff"
+  load_cli_copy
+  export CONFIRM=yes
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "No leftovers of the old wp-takeoff CLI found"
+  [ -d "$CLI_COPY/inc" ]
+}
+
+@test "cleanup ignores a ~/.wp-takeoff that is not a CLI checkout" {
+  load_cli_confirm
+  mkdir -p "$HOME/.wp-takeoff"
+  echo x > "$HOME/.wp-takeoff/notes.txt"
+  export CONFIRM=yes
+  run core cleanup < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "No leftovers of the old wp-takeoff CLI found"
+  [ -f "$HOME/.wp-takeoff/notes.txt" ]
+}
+
+@test "_run_update_checker also checks for wp-takeoff leftovers" {
+  make_cli_git
+  load_cli_copy
+  touch -t 202001010000 "$CLI_COPY/.last_git_check"
+  echo "alias wt='wp-takeoff'" > "$HOME/.zshrc"
+  unset LABELVIER_AUTO_UPDATE
+  run core _run_update_checker < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Up-to-date"
+  assert_output_contains "~/.zshrc has an alias for the old wp-takeoff CLI: wt"
+}
+
+@test "_run_update_checker does not check leftovers when the last check is recent" {
+  make_cli_git
+  load_cli_copy
+  touch "$CLI_COPY/.last_git_check"
+  echo "alias wt='wp-takeoff'" > "$HOME/.zshrc"
+  unset LABELVIER_AUTO_UPDATE
+  run core _run_update_checker < /dev/null
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
