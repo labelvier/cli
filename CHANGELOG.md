@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-16
+
+### Added
+- `labelvier core cleanup`: finds leftovers of the old wp-takeoff CLI. Aliases that still call `wp-takeoff` (such as `wt`) in `.bashrc`, `.zshrc`, `.bash_profile` or `.zprofile` can be removed or changed to `labelvier`. The old `~/.wp-takeoff` checkout (also when it is a symlink) can be removed, together with the PATH line that added it. A checkout with uncommitted changes is never removed automatically.
+- The wp-takeoff check runs with the 12-hour update check and in `labelvier setup`.
+
 ## [1.5.0] - 2026-11-12
 
 ### Added
