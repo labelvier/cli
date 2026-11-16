@@ -84,8 +84,7 @@ refute_installs() {
   assert_output_contains "All required tools are installed."
   assert_output_contains "Notifications"
   assert_output_contains "Notifications are only supported on macOS."
-  assert_output_contains "Old wp-takeoff CLI"
-  assert_output_contains "No leftovers of the old wp-takeoff CLI found"
+  assert_output_contains "no old wp-takeoff CLI leftovers"
   assert_output_contains "AI"
   assert_output_contains "Check and install the AI setup (Claude Code config, skills, Basecamp, rtk) now? [Y/n] (no terminal to ask on, skipped)"
   assert_output_contains "Ok, run it later with: labelvier ai update"
@@ -98,31 +97,20 @@ refute_installs() {
   echo "alias wt='wp-takeoff'" > "$HOME/.zshrc"
   run_cli_notty setup tools
   [ "$status" -eq 1 ]
-  assert_output_contains "The old wp-takeoff CLI left an alias or install behind. Run: labelvier core cleanup"
+  assert_output_contains "The old wp-takeoff CLI left an alias or install behind."
+  assert_output_contains "Clean it up now? [Y/n] (no terminal to ask on, skipped)"
+  assert_output_contains "Skipped. Run it later with: labelvier core cleanup"
   assert_output_contains "Still missing: wp-takeoff-leftovers"
   # only checked, nothing changed
   grep -qx "alias wt='wp-takeoff'" "$HOME/.zshrc"
 }
 
-@test "bare setup starts with the wp-takeoff cleanup, before the tools" {
-  stub uname 'echo Linux'
-  stub_all_tools
-  run_cli_notty setup
-  [ "$status" -eq 0 ]
-  local plain cleanup_line tools_line
-  plain="$(plain_output)"
-  cleanup_line=$(printf '%s\n' "$plain" | grep -n "^Old wp-takeoff CLI$" | cut -d: -f1)
-  tools_line=$(printf '%s\n' "$plain" | grep -n "^Tools$" | cut -d: -f1)
-  [ -n "$cleanup_line" ] && [ -n "$tools_line" ]
-  [ "$cleanup_line" -lt "$tools_line" ]
-}
-
-@test "setup skips the wp-takeoff section when the update flow already ran it" {
+@test "setup skips the wp-takeoff check when the update flow already ran it" {
   stub uname 'echo Linux'
   stub_all_tools
   LABELVIER_SKIP_CLEANUP=1 run_cli_notty setup
   [ "$status" -eq 0 ]
-  refute_output_contains "Old wp-takeoff CLI"
+  refute_output_contains "wp-takeoff"
   assert_output_contains "AI"
 }
 
@@ -288,4 +276,20 @@ refute_installs() {
   [ "$status" -eq 1 ]
   assert_output_contains "Still missing: jq composer."
   refute_installs
+}
+
+@test "tools cleans up wp-takeoff leftovers on a yes and passes" {
+  stub uname 'echo Linux'
+  stub_all_tools
+  mkdir -p "$HOME/.wp-takeoff/inc"
+  printf '#!/bin/bash\n' > "$HOME/.wp-takeoff/wp-takeoff"
+  load_cli
+  _confirm() { echo "$1 [Y/n] (test answers: yes)"; return 0; }
+  run setup tools < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Clean it up now? [Y/n] (test answers: yes)"
+  assert_output_contains "Removed the old wp-takeoff CLI"
+  assert_output_contains "wp-takeoff leftovers cleaned up"
+  assert_output_contains "All required tools are installed."
+  [ ! -e "$HOME/.wp-takeoff" ]
 }
