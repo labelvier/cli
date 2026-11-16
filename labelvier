@@ -17,7 +17,9 @@ __bold="\033[1m"
 __reset="\033[0m" # Reset to default color
 # Honour NO_COLOR and plain (non-tty) output in one place: every command
 # collection inherits these variables, so emptying them here covers them all.
-if [ -n "${NO_COLOR:-}" ] || [ ! -t 1 ]; then
+# FORCE_COLOR keeps colours when stdout is not a terminal but a person still reads
+# it, e.g. the pre-push hook from `check install-hook`. NO_COLOR always wins.
+if [ -n "${NO_COLOR:-}" ] || { [ ! -t 1 ] && [ -z "${FORCE_COLOR:-}" ]; }; then
   __red="" __blue="" __green="" __bold="" __reset=""
 fi
 
