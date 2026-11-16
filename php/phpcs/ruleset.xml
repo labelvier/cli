@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<ruleset name="Labelvier">
+	<description>Label Vier: security and correctness only. Code style (spaces, array syntax, doc comments) is left out on purpose.</description>
+
+	<!--
+	No <file> here: `labelvier check php` passes the theme path or the changed files.
+	-->
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/dist/*</exclude-pattern>
+	<exclude-pattern>*/build/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="parallel" value="8"/>
+	<!-- Use the terminal width, so long messages are not wrapped over several lines. -->
+	<arg name="report-width" value="auto"/>
+	<!-- s: show the sniff code, so a finding can be looked up or ignored. -->
+	<arg value="s"/>
+
+	<!-- Warnings are shown but do not fail the check; errors do. -->
+	<config name="ignore_warnings_on_exit" value="1"/>
+	<config name="testVersion" value="8.1-"/>
+	<config name="minimum_wp_version" value="6.4"/>
+
+	<!-- Security: user input, nonces on POST, SQL, redirects. -->
+	<rule ref="WordPress.Security"/>
+
+	<!--
+	Only report what visitors can reach: user input ($_GET, $_POST, $_COOKIE, $_SERVER, $_REQUEST)
+	used without sanitizing is reported by WordPress.Security.ValidatedSanitizedInput, also when
+	it is echoed straight away. Echoing a variable or function result without escaping is not:
+	phpcs cannot see where the value comes from, and in our themes that is almost always an ACF
+	or editor field only editors can fill. That gave hundreds of findings per theme and hid the
+	real ones.
+	- OutputNotEscaped: echo $var / echo some_function() without esc_*().
+	- UnsafePrintingFunction: _e() / _ex(), the text comes from our own translations.
+	- InputNotValidated: missing isset() on a superglobal index, a PHP notice, not a security issue.
+	-->
+	<rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.Security.EscapeOutput.UnsafePrintingFunction">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.Security.ValidatedSanitizedInput.InputNotValidated">
+		<severity>0</severity>
+	</rule>
+
+	<!--
+	A nonce protects a form that changes something. Reading $_GET for a search, filter
+	or sort is not that, so the "Recommended" variant is noise. Processing $_POST
+	without a nonce (NonceVerification.Missing) is still reported.
+	-->
+	<rule ref="WordPress.Security.NonceVerification.Recommended">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.DB.PreparedSQL"/>
+	<rule ref="WordPress.DB.PreparedSQLPlaceholders"/>
+	<rule ref="WordPress.PHP.DontExtract"/>
+	<rule ref="Squiz.PHP.Eval"/>
+
+	<!-- Real bugs. -->
+	<rule ref="PHPCompatibilityWP"/>
+	<rule ref="Universal.Arrays.DuplicateArrayKey"/>
+	<rule ref="Generic.CodeAnalysis.JumbledIncrementer"/>
+	<rule ref="Generic.CodeAnalysis.UnconditionalIfStatement"/>
+	<rule ref="Squiz.PHP.NonExecutableCode"/>
+	<rule ref="WordPress.WP.DeprecatedFunctions"/>
+	<rule ref="WordPress.WP.DeprecatedParameters"/>
+	<!--
+	Theme templates are loaded through load_template(), so their top-level variables
+	($title, $post_type, ...) are function scoped and do not touch the WP globals.
+	Assignments inside functions after `global $post;` are still reported.
+	-->
+	<rule ref="WordPress.WP.GlobalVariablesOverride">
+		<properties>
+			<property name="treat_files_as_scoped" value="true"/>
+		</properties>
+	</rule>
+
+	<!--
+	Our own global functions start with labelvier_, so they cannot clash with WordPress,
+	a plugin or a parent theme. We only define functions in the theme's inc/ folder and
+	functions.php, so the rule only looks there (not in template-parts/, _library/, ...).
+	Functions in a namespace (modules/) count as prefixed. Only functions: classes,
+	constants, globals and hook names are left alone.
+	The include-patterns are regular expressions, matched against the full file path.
+	-->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<include-pattern>/themes/[^/]+/inc/</include-pattern>
+		<include-pattern>/themes/[^/]+/functions\.php$</include-pattern>
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="labelvier"/>
+			</property>
+		</properties>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound">
+		<severity>0</severity>
+	</rule>
+
+	<!-- Debug code that should not reach production (warning). -->
+	<rule ref="WordPress.PHP.DevelopmentFunctions"/>
+</ruleset>
