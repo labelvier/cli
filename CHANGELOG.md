@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-18
+
+### Added
+- `labelvier uptime-kuma`: manage the monitors on status.labelvier.nl from the terminal. It replaces the `uptime-kuma` script in the uptime-kuma Docker project, which needed a Python venv and only supported Uptime Kuma 1.x (the server runs 2.3.2).
+  - `list`, `add <url>`, `pause`, `resume`, `delete` and `update`, plus `set-interval`, `set-timeout` and `set-method`.
+  - Pick monitors with `--domain` (includes subdomains and www), `--id`, `--filter`, `--name`, `--tag` or `--all`.
+  - Writes first list the monitors they will change and ask for confirmation; `--yes` skips the question.
+  - `add` uses our usual settings (every 5 minutes, HEAD, 3 retries, default notifications) and asks first when the domain already has a monitor.
+- `labelvier uptime-kuma login` reads the shared login from `~/Sites/uptime-kuma/.env` and stores only a token in `~/.config/labelvier/uptime-kuma` (chmod 600), never the password. Without a working token every command explains where the login is and offers to log in right away.
+- The `CLI.md` instructions for AI agents describe `uptime-kuma` (version 2). Run `labelvier ai update` to get them.
+
+### Changed
+- siteground and uptime-kuma share their terminal prompts, `.env` handling and wrapper checks (`node/lib`, `_prepare_node_cli`). siteground works as before.
+
+### Fixed
+- The siteground demo mode sometimes made a 9-character database name, which made a test fail at random.
+
 ## [1.7.0] - 2026-11-18
 
 ### Added
