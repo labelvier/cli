@@ -310,7 +310,8 @@ test('site:backup --create without --name uses a generated label', async () => {
 test('site:backup --create: a failed task is reported and the list is not shown', async () => {
 	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'fail'], { env: loggedIn() });
 	assert.equal(r.code, 1);
-	assert.match(r.stderr, /Error: 17 task BKFAIL/);
+	assert.match(r.stderr, /Error: SiteGround could not create backup "fail" \(No free backup slots\)\. No backup was made; try again/);
+	assert.doesNotMatch(r.stderr, /task BKFAIL/);
 	assert.equal(r.stdout, '');
 	assert.ok(!requested().includes('GET /backup'));
 });

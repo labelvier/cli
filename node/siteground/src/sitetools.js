@@ -3,7 +3,10 @@ import { decodeJwt } from './session.js';
 export class SiteToolsError extends Error {
 	constructor(status, body, url) {
 		const msg = body?.message || body?.err_message || JSON.stringify(body)?.slice(0, 300);
-		super(`${status} ${url}: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+		const detail = typeof msg === 'string' ? msg : JSON.stringify(msg);
+		super(`${status} ${url}: ${detail}`);
+		this.detail = detail;
+		this.taskUrl = url;
 		this.status = status;
 		this.body = body;
 	}

@@ -18,7 +18,7 @@ function jwtExpiry(token, what) {
 }
 import { ask, confirm, select, closePrompt, interactive } from './prompt.js';
 import { task, suspendSpinner } from './spinner.js';
-import { TaskTimeoutError } from './sitetools.js';
+import { SiteToolsError, TaskTimeoutError } from './sitetools.js';
 import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
 import {
 	accountsOverview,
@@ -644,6 +644,9 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 			try {
 				await task(`Creating backup "${name}"…`, () => st.createBackup({ name, wait }), { done: `Backup "${name}" created` });
 			} catch (err) {
+				if (err instanceof SiteToolsError && /^task /.test(err.taskUrl ?? '')) {
+					throw new Error(`SiteGround could not create backup "${name}" (${err.detail}). No backup was made; try again, and check "site:backup ${domain}" first if you are unsure.`);
+				}
 				if (!(err instanceof TaskTimeoutError)) throw err;
 				throw new Error(`Backup "${name}" is still running (task ${err.taskId}). It was not stopped: check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
 			}

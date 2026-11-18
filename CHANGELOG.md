@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `siteground site:backup <domain>` lists the Site Tools backups (system and manual); `--create [--name "<label>"]` makes an on-demand backup and waits until it is done (up to 30 minutes; if it is still running after that, the command says so and you should not run `--create` again). Times and the default label use local time. Endpoints are derived from the Site Tools bundle and tested against the fake API; not yet verified live.
+- `siteground site:backup <domain>` lists the Site Tools backups (system and manual); `--create [--name "<label>"]` makes an on-demand backup and waits until it is done (up to 30 minutes; if it is still running after that, the command says so and you should not run `--create` again). Times and the default label use local time. Endpoints are derived from the Site Tools bundle and tested against the fake API; not yet verified live. When SiteGround reports the backup task as failed, the command says no backup was made and to try again, instead of only repeating the raw task error.
 
 ## [1.6.2] - 2026-11-16
 
