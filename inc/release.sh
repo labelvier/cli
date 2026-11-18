@@ -350,8 +350,27 @@ release() (
   }
 
   # @function finish
-  # @description Merges the release branch into master (or main) and develop, and tags the release.
+  # @description Merges the release branch into master (or main) and develop, and tags the release, keeping the project's tag prefix (v1.2.3).
   function finish() {
+    # Prefix for the release tag ("v" in v1.2.3). git-flow's gitflow.prefix.versiontag wins; without it
+    # we copy the prefix of the most recently created version tag, so a project that tags v1.2.3 keeps
+    # doing so. No version tags and no config: no prefix.
+    function _release_tag_prefix() {
+      local configured
+      if configured=$(git config --get gitflow.prefix.versiontag); then
+        echo "$configured"
+        return
+      fi
+
+      local tag
+      while IFS= read -r tag; do
+        if [[ $tag =~ ^([^0-9]*)[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+          echo "${BASH_REMATCH[1]}"
+          return
+        fi
+      done < <(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags)
+    }
+
     # Track which local merge steps have completed successfully.
     local master_merged=0
     local develop_merged=0
@@ -433,9 +452,16 @@ release() (
             exit 1
         fi
 
-        echo "Creating tag $version..."
-        if ! git tag -a "$version" -m ""; then
-            echo "Error: Failed to create tag $version."
+        # The branch name decides the tag when it carries its own prefix (release/v1.2.3);
+        # otherwise add the project's tag prefix, so release/1.2.3 becomes v1.2.3 in a v-tagged project.
+        local tag="$version"
+        if [[ $version =~ ^[0-9] ]]; then
+            tag="$(_release_tag_prefix)$version"
+        fi
+
+        echo "Creating tag $tag..."
+        if ! git tag -a "$tag" -m ""; then
+            echo "Error: Failed to create tag $tag."
             exit 1
         fi
 
