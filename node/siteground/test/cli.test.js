@@ -258,7 +258,164 @@ test('site:info without a domain, site:stats --days validation, account:stats wi
 	assert.equal(cron.stderr, 'Error: Use either --add or --remove, not both\n');
 	const at = await run(['site:cron', 'yoni.care', '--add', 'x', '--at', 'nope'], { env: loggedIn() });
 	assert.match(at.stderr, /^Error: Invalid schedule "nope"/);
+	const backupName = await run(['site:backup', 'analytics.labelvier.dev', '--name', 'x'], { env: loggedIn() });
+	assert.equal(backupName.stderr, 'Error: --name only works together with --create\n');
+	const backupEmpty = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', ' '], { env: loggedIn() });
+	assert.equal(backupEmpty.stderr, 'Error: --name needs a label\n');
 	assert.deepEqual(requests(), [], 'all of these fail before the first request');
+});
+
+test('site:backup: without a domain, unknown domain', async () => {
+	const none = await run(['site:backup'], { env: loggedIn() });
+	assert.equal(none.code, 1);
+	assert.equal(none.stderr, 'Error: Domain is required, e.g. labelvier siteground site:info example.com\n');
+	const unknown = await run(['site:backup', 'nope.example'], { env: loggedIn() });
+	assert.equal(unknown.code, 1);
+	assert.match(unknown.stderr, /Error: /);
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup --help prints one description line and runs nothing', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--help'], { env: loggedIn() });
+	assert.equal(r.code, 0);
+	assert.equal(r.stdout.trimEnd().split('\n').length, 1);
+	assert.match(r.stdout, /--create/);
+	assert.deepEqual(requests(), []);
+});
+
+test('site:backup: lists backups, newest first', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.equal(r.stdout, ['#12       2026-01-02 00:00  manual  voor-release', '#11       2026-01-01 00:00  system'].join('\n') + '\n');
+	assert.deepEqual(requested().filter((x) => x.includes('/backup')), ['GET /backup']);
+});
+
+test('site:backup --create --name: posts the label, waits for the task, then lists', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'voor-release'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.match(r.stderr, /Creating backup "voor-release"…/);
+	assert.match(r.stderr, /✔ Backup "voor-release" created/);
+	const post = requests().find((q) => q.method === 'POST' && q.url.endsWith('/backup'));
+	assert.deepEqual(post.body, { instant_label: 'voor-release' });
+	assert.deepEqual(requested().filter((x) => x.includes('/backup') || x.includes('/task/')), ['POST /backup', 'GET /task/BK1', 'GET /backup']);
+});
+
+test('site:backup --create without --name uses a generated label', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	const post = requests().find((q) => q.method === 'POST' && q.url.endsWith('/backup'));
+	assert.match(post.body.instant_label, /^cli-\d{4}-\d{2}-\d{2}-\d{4}$/);
+});
+
+test('site:backup --create: a failed task is reported and the list is not shown', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'fail'], { env: loggedIn() });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: SiteGround could not create backup "fail" \(No free backup slots\)\. No backup was made; try again/);
+	assert.doesNotMatch(r.stderr, /task BKFAIL/);
+	assert.equal(r.stdout, '');
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup --create: a failing status poll is not reported as "no backup made"', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_TASK_STATUS: '500', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(HTTP 500: Task service unavailable\)/);
+	assert.match(r.stderr, /do not run --create again/);
+	assert.doesNotMatch(r.stderr, /Could not create a backup|No backup was made|Try again/);
+	assert.equal(r.stdout, '');
+	assert.equal(requested().filter((x) => x === 'POST /backup').length, 1);
+});
+
+test('site:backup --create: a task that keeps running is reported as still running, not as failed', async () => {
+	const env = { ...loggedIn(), SG_TASK_ATTEMPTS: '2', SG_TASK_INTERVAL_MS: '1' };
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'slow'], { env });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "slow" is still running \(task BKSLOW\)/);
+	assert.match(r.stderr, /do not run --create again/);
+	assert.equal(requested().filter((x) => x === 'POST /backup').length, 1);
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup --create: a failing API call names the domain, status and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'apierror'], { env: loggedIn() });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: Could not create a backup for analytics\.labelvier\.dev \(HTTP 500: Internal error\)\. Try again; check "site:backup analytics\.labelvier\.dev"/);
+	assert.doesNotMatch(r.stderr, /POST \/backup/);
+	assert.equal(r.stdout, '');
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup --create: a 403 without message falls back on the error code and points to login', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'denied'], { env: loggedIn() });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: Could not create a backup for analytics\.labelvier\.dev \(HTTP 403: error code 403\)\. .*"labelvier siteground login"/);
+	assert.doesNotMatch(r.stderr, /undefined/);
+});
+
+test('site:backup: a failing list call names the domain, status and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_BACKUP_LIST_STATUS: '500' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: Could not list backups for analytics\.labelvier\.dev \(HTTP 500: Backup service unavailable\)\. Try again/);
+	assert.equal(r.stdout, '');
+	const denied = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_BACKUP_LIST_STATUS: '403' } });
+	assert.equal(denied.code, 1);
+	assert.match(denied.stderr, /HTTP 403.*"labelvier siteground login"/);
+});
+
+test('site:backup --create: a network error while polling warns that the backup may be running', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_NETWORK_ERROR: 'GET /task/BK1', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(network error: fetch failed, ENOTFOUND\)/);
+	assert.match(r.stderr, /Check with "site:backup analytics\.labelvier\.dev" and do not run --create again/);
+	assert.equal(r.stdout, '');
+	assert.equal(requested().filter((x) => x === 'POST /backup').length, 1);
+});
+
+test('site:backup --create: a network error on the create call names the domain and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'net'], { env: { ...loggedIn(), SG_TEST_NETWORK_ERROR: 'POST /backup' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /^Error: Could not reach SiteGround to create a backup for analytics\.labelvier\.dev \(network error: fetch failed, ENOTFOUND\)\. The backup may have been started anyway: check "site:backup analytics\.labelvier\.dev" before you run --create again\./m);
+	assert.equal(r.stdout, '');
+});
+
+test('site:backup --create: any other error while polling still warns that the backup may be running', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_TASK_THROW: 'Refresh token expired', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(Refresh token expired\)\./);
+	assert.match(r.stderr, /do not run --create again/);
+});
+
+test('site:backup: a network error on the list call names the domain and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_NETWORK_ERROR: 'GET /backup' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /^Error: Could not reach SiteGround to list backups for analytics\.labelvier\.dev \(network error: fetch failed, ENOTFOUND\)/m);
+	assert.doesNotMatch(r.stderr, /^Error: fetch failed$/m);
+});
+
+test('site:backup --create: an expired session while polling points to login', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_TASK_STATUS: '403', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(HTTP 403: Task service unavailable\)\. .*"labelvier siteground login" first\./);
+	assert.match(r.stderr, /do not run --create again/);
+});
+
+test('an error without a message never prints an empty "Error: "', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_THROW_EMPTY: '1' } });
+	assert.equal(r.code, 1);
+	assert.notEqual(r.stderr.trim(), 'Error:');
+	assert.match(r.stderr, /^Error: Unknown error/m);
+});
+
+test('site:backup lists times in local time', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), TZ: 'Europe/Amsterdam' } });
+	assert.equal(r.code, 0, r.stderr);
+	assert.match(r.stdout, /#12 +2026-01-02 01:00 +manual +voor-release/);
+});
+
+test('site:backup --json prints the raw list', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--json'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.equal(JSON.parse(r.stdout)[1].instant_label, 'voor-release');
 });
 
 test('create-site --dry-run: walks every read step with the given options and creates nothing', async () => {
@@ -325,6 +482,44 @@ test('create-site --demo --dry-run: server details hidden, demo plan name shown'
 	rmSync(sandbox, { recursive: true, force: true });
 });
 
+// --- parked domains ----------------------------------------------------------------------
+
+test('site:ssl: main domain first, then parked domains without SSL only with --aliases', async () => {
+	const plain = await run(['site:ssl', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(plain.code, 0, plain.stderr);
+	assert.match(plain.stdout, /Parked domains without SSL: park\.labelvier\.dev \(add --aliases to include them\)/);
+	assert.ok(!requested().includes('POST /ssl-le'));
+
+	const all = await run(['site:ssl', 'analytics.labelvier.dev', '--aliases'], { env: loggedIn() });
+	assert.equal(all.code, 0, all.stderr);
+	const sslPosts = requests().filter((r) => r.url.endsWith('/ssl-le'));
+	assert.deepEqual(sslPosts.map((r) => r.body), [{ domain_id: 2 }]);
+	assert.ok(requested().includes('PUT /domain-all/2'));
+
+	const unknown = await run(['site:ssl', 'analytics.labelvier.dev', '--alias', 'nope.labelvier.dev'], { env: loggedIn() });
+	assert.equal(unknown.code, 2);
+	assert.match(unknown.stdout + unknown.stderr, /nope\.labelvier\.dev is not a domain of this site/);
+});
+
+test('site:alias: lists parked domains, --add parks a new one (existing one is left alone), --ssl secures it', async () => {
+	const list = await run(['site:alias', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(list.code, 0, list.stderr);
+	assert.match(list.stdout, /park\.labelvier\.dev\s+SSL no/);
+
+	const existing = await run(['site:alias', 'analytics.labelvier.dev', '--add', 'park.labelvier.dev'], { env: loggedIn() });
+	assert.equal(existing.code, 0, existing.stderr);
+	assert.ok(!requests().some((r) => r.url.includes('st.siteground.com')));
+
+	const add = await run(['site:alias', 'analytics.labelvier.dev', '--add', 'Extra.labelvier.dev', '--ssl'], { env: loggedIn() });
+	assert.equal(add.code, 0, add.stderr);
+	const post = requests().find((r) => r.url.includes('st.siteground.com'));
+	assert.deepEqual(post.body, { domain: 'extra.labelvier.dev', alias_to: 'analytics.labelvier.dev' });
+	assert.deepEqual(requests().filter((r) => r.url.endsWith('/ssl-le')).map((r) => r.body), [{ domain_id: 3 }]);
+
+	const bad = await run(['site:alias', 'analytics.labelvier.dev', '--add', 'not a domain'], { env: loggedIn() });
+	assert.equal(bad.code, 1);
+});
+
 test('site:login: prints the one-time admin link when stdout is not a terminal, also from a URL', async () => {
 	const r = await run(['site:login', 'https://www.analytics.labelvier.dev/wp-admin/'], { env: loggedIn() });
 	assert.equal(r.code, 0, r.stderr);
@@ -344,4 +539,19 @@ test('site:login: prints the one-time admin link when stdout is not a terminal, 
 	assert.equal(requested().filter((c) => c.includes('/file')).length, 2, 'no extra /file calls with --admin-domain any');
 	const missing = await run(['site:login'], { env: loggedIn() });
 	assert.equal(missing.stderr, 'Error: Domain is required, e.g. labelvier siteground site:info example.com\n');
+});
+
+test('site:db-password: refuses without --yes when there is no terminal; with --yes saves, then changes', async () => {
+	const refused = await run(['site:db-password', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(refused.code, 1);
+	assert.match(refused.stderr, /A new password for uabc123 breaks the site until its config has it\. Add --yes to confirm\./);
+	assert.ok(!requested().includes('PUT /db-mysql_user/4'));
+
+	const r = await run(['site:db-password', 'analytics.labelvier.dev', '--yes'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	const put = requests().find((x) => x.method === 'PUT' && x.url.endsWith('/db-mysql_user/4'));
+	const saved = JSON.parse(readFileSync(path.join(stateDir, '.credentials', 'analytics.labelvier.dev.json'), 'utf8')).database_user_uabc123;
+	assert.equal(saved.password, put.body.password);
+	assert.ok(saved.rotated_at && !saved.pending_since);
+	assert.match(r.stdout, new RegExp(`user uabc123  password ${saved.password.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
 });

@@ -15,14 +15,14 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
       - name: Install bats
-        uses: bats-core/bats-action@3.0.1
+        uses: bats-core/bats-action@4.1.0
         with:
           support-install: false
           assert-install: false

@@ -21,9 +21,11 @@ labelvier siteground create-site --domain x.labelvier.dev --account Hamerkop --a
   --memcached --ssl --https --no-ssh-key --yes       # fully non-interactive
 labelvier siteground site:info x.labelvier.dev
 labelvier siteground site:ssl x.labelvier.dev        # after DNS points to the server
+labelvier siteground site:alias x.nl --add y.nl --ssl  # park y.nl on x.nl + Let's Encrypt (later: site:ssl x.nl --alias y.nl; plain site:ssl x.nl asks for aliases without SSL, --aliases = yes)
 labelvier siteground site:memcached|site:ssh-key|site:ssh|site:db x.labelvier.dev
 labelvier siteground site:login x.labelvier.dev [--print] [--admin-domain labelvier.nl|any]   # domain or URL; admin panel (WordPress) via a one-time auto-login link, as the first @labelvier.nl admin when there is one
 labelvier siteground site:cron x.labelvier.dev [--add "<command>" --at "* * * * *" | --remove <id>]
+labelvier siteground site:backup x.labelvier.dev [--create [--name "<label>"]]   # list backups / make an on-demand one
 labelvier siteground account:stats Albatros [--days 31 --top 15 --sort cpu|exec]   # which site eats CPU / executions
 labelvier siteground account:autoscale Albatros      # autoscale settings + resources added by autoscaling
 labelvier siteground site:stats yoni.care [--days 31]  # CPU seconds + executions per day for one site
@@ -161,6 +163,7 @@ Writes return `task_id`; when the HTTP status is `202`, poll `GET /task/{id}` un
 |---|---|---|
 | Meta / limits | `GET /endpoint` | `data.features.username` = SSH user (e.g. `u114-…`), PHP limits, quotas |
 | Domains | `GET /domain-all` | `id`, `name`, `main`, `cert_id`, `sg_pointed`, `config.ssh_host`, `settings` |
+| Parked domains | `POST https://st.siteground.com/v1/sites/{siteId}/domain-alias` `{"domain":"y.nl","alias_to":"x.nl"}` with the **client** token; `DELETE` same path `{"domain"}` (not used) | not on the server API; aliases then show in `GET /domain-all` as `domain_type: "alias"` with `alias_to`, so Let's Encrypt / force HTTPS work per alias id. Send the JSON body **without** `content-type` like the SPA does: with `application/json` it returns a 500. Verified live 2026-10-28 (dinz.nl/dinzweb.nl on zilliz.nl), ~10 s |
 | Force HTTPS | `PUT /domain-all/{id}` `{"settings":{"https_enforce":1,"https_rewrite_links":0}}` | needs a certificate |
 | SSL list | `GET /ssl` | `not_after`, `issuer`, `info.cert.le` |
 | Let's Encrypt | `POST /ssl-le` `{"domain_id":1}` | covers domain + www. UI field `generate` is rejected ("Unsupported input field"), wildcard unknown |
@@ -172,12 +175,13 @@ Writes return `task_id`; when the HTTP status is `202`, poll `GET /task/{id}` un
 | WordPress installs | `GET /wordpress` | `id`, `app` (`wordpress`/`woocommerce`), `app_url`, `admin_url`, `path`, `is_staging`, plugins/themes |
 | WP auto-login | `PUT /wordpress/{id}?auto_login=1` body `{}` | → `data.autologin_url` = one-time `http://<domain>/wp_auto_login_<hash>.php` (treat as secret). "Log in to admin panel" in Site Tools |
 | File manager | `GET /dir?id=/example.com/public_html` (list: `n` name, `t` d/f, `p` perms); `GET /file?filename=<path>` (raw file, not JSON); `POST /file?filename=<path>` multipart field `file` (save) | paths start with the site folder (`/<domain_name>/<docroot>/…`). Used by `site:login` to patch the auto-login script |
+| Backups | `GET /backup` → `[{id, ts_start (unix s), instant_backup (1 manual / 0 system), instant_label}]`; `POST /backup` `{"instant_label"}` (required in the UI form; capped by `features.max_user_backups` in `GET /endpoint`); `DELETE /backup/{id}` (manual only, not used) | Taken from the Site Tools bundle, **not verified live**. Hourly tracks: `GET /backup?track=<id>` (`/backup-track`, premium) and restore via `/backup-restore*`: not used. `site:backup --create` without `--name` uses `cli-YYYY-MM-DD-HHMM` (local time, like the list); it polls the task for up to 30 min (`SG_TASK_ATTEMPTS` / `SG_TASK_INTERVAL_MS` override this, used by tests) and on a time-out reports that the backup is still running instead of failing |
 | PHP versions | `GET /php-version` | `[{id: 83, version: "PHP 8.3.35", default?, recommended?, mod_php}]` |
 | PHP version (main domain) | Ultrafast PHP (mod_php): `PUT /uservice/{apacheId}` `{"settings":{"php_version":83}}`, `{"settings":{}}` = managed. Standard PHP to Ultrafast: `POST /uservice` `{"type":"apache"}` (back: `DELETE /uservice/apache`) | apache uservice from `GET /uservice`; none = standard PHP, version then is `php_version` on the main domain in `GET /domain` (`PUT /domain/{id}` `{"php_version":83}`, 0 = managed; not used). `site:php` always switches to Ultrafast |
 
 `wp_auto_login_<hash>.php` (written by the PUT above, deletes itself on first run, ignored after 30 min) logs in as `get_users(['role'=>'administrator'])[0]`: no API parameter picks another user (`GET /wordpress-user?id=` only lists login names, for the change-password dialog). `site:login` therefore rewrites that line through the File Manager API before the link is opened (`preferAdminDomain` in `actions.js`): first administrator whose email ends in `@labelvier.nl` (`--admin-domain`, `any` = untouched), falling back to SiteGround's pick with a warning when reading/writing fails or the script changed shape.
 
-Other resources in the bundle: backup, dns-*, email*, ftp, location-* (redirects, protect, IP block),
+Other resources in the bundle: backup-restore*, dns-*, email*, ftp, location-* (redirects, protect, IP block),
 php-variable/extension, wordpress (incl. staging), webstats, errorlogs/accesslogs.
 
 ## Research method (for next time)

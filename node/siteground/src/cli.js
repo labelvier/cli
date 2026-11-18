@@ -18,6 +18,7 @@ function jwtExpiry(token, what) {
 }
 import { ask, confirm, select, closePrompt, interactive } from '../../lib/prompt.js';
 import { task, suspendSpinner } from './spinner.js';
+import { SiteToolsError, TaskTimeoutError } from './sitetools.js';
 import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
 import {
 	accountsOverview,
@@ -36,12 +37,15 @@ import {
 	enableMemcached,
 	disableMemcached,
 	setupSsl,
+	addDomainAlias,
 	addSshKey,
 	sshCommand,
 	sshDetails,
 	defaultSshAlias,
 	addSshAlias,
 	createDatabase,
+	rotateDbPassword,
+	pickDbUser,
 	serverPhpVersions,
 	parsePhpVersion,
 	phpLabel,
@@ -88,7 +92,13 @@ Site Tools (existing site)
   site:info <domain>                         Domains, SSL, PHP, Memcached, SSH, storage, databases
   site:memcached <domain> [--off]            Enable (or disable) Memcached
   site:php <domain> [--php <8.3|managed>]    Show or set the PHP version
-  site:ssl <domain> [--no-https]             Let's Encrypt when DNS points to the server, force HTTPS
+  site:ssl <domain> [--alias <domain>] [--[no-]aliases] [--no-https]
+                                             Let's Encrypt when DNS points to the server, force HTTPS;
+                                             then asks for parked domains without SSL (--aliases: yes);
+                                             --alias for one parked domain instead of the main domain
+  site:alias <domain>                        List parked domains (aliases)
+  site:alias <domain> --add <alias> [--ssl] [--no-https]
+                                             Park a domain on the site; --ssl also installs Let's Encrypt
   site:ssh-key <domain> [--ssh-key <file>] [--ssh-alias <name>]
                                              Authorize a public key (default ~/.ssh/id_ed25519.pub)
                                              and add a Host alias to ~/.ssh/config (via labelvier ssh alias)
@@ -99,10 +109,17 @@ Site Tools (existing site)
                                              Logs in as the first admin @labelvier.nl (or @<domain>), else
                                              as SiteGround's pick; "any" skips that
   site:db <domain> [--db <label>]            Create MySQL database + user with all privileges
+  site:db-password <domain> [--user <name>] [--yes]
+                                             Give a database user a new generated password (prints it
+                                             once, saved in .credentials); --user when there are several;
+                                             asks first, --yes skips that (required without a terminal)
   site:cron <domain>                         List cron jobs
   site:cron <domain> --add "<command>" [--at "<min hour day mon dow>"]
                                              Add a cron job (default every minute; @hourly/@daily/… also work)
   site:cron <domain> --remove <id>           Delete a cron job (asks first in a terminal unless --yes)
+  site:backup <domain>                       List backups (system and manual)
+  site:backup <domain> --create [--name "<label>"]
+                                             Create an on-demand backup and wait until it is done
 `;
 
 const { positionals, values } = parseArgs({
@@ -123,11 +140,16 @@ const { positionals, values } = parseArgs({
 		'no-ssh-alias': { type: 'boolean' },
 		db: { type: 'string' },
 		'no-db': { type: 'boolean' },
+		user: { type: 'string' }, // site:db-password: which database user
 		off: { type: 'boolean' },
 		demo: { type: 'boolean' }, // hidden: see src/demo.js
 		add: { type: 'string' },
+		alias: { type: 'string' },
+		aliases: { type: 'boolean' },
 		at: { type: 'string' },
 		remove: { type: 'string' },
+		create: { type: 'boolean' },
+		name: { type: 'string' },
 		yes: { type: 'boolean', short: 'y' },
 		'dry-run': { type: 'boolean' },
 		json: { type: 'boolean' },
@@ -150,6 +172,16 @@ async function option(flag, question, defaultValue) {
 	if (values[flag] !== undefined) return values[flag];
 	if (!interactive) return defaultValue;
 	return confirm(question, { defaultValue, flag: `--${flag}` });
+}
+
+/** Let's Encrypt (+ force HTTPS unless --no-https) for one domain of a site; exit code 2 when skipped. */
+async function sslFor(st, account, domain, { strict = false } = {}) {
+	const r = await task(`Setting up SSL for ${domain}…`, async (s) => {
+		const res = await setupSsl(st, { domain, serverIp: account.server.ip, https: values.https !== false, strict }, s);
+		if (!res.ok) s.info(res.message);
+		return res;
+	}, { done: (res) => res.message });
+	if (!r.ok) process.exitCode = 2;
 }
 
 async function siteToolsFor(sg, domain) {
@@ -194,6 +226,12 @@ const intOption = (flag, fallback) => {
 	if (!Number.isInteger(n) || n < 1) throw new Error(`--${flag} needs a positive whole number`);
 	return n;
 };
+/** Local time as YYYY-MM-DD<sep>HHMM (sep ' ' adds a colon: "YYYY-MM-DD HH:MM"). */
+function localStamp(d, sep = '-') {
+	const p = (n) => String(n).padStart(2, '0');
+	const day = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+	return sep === ' ' ? `${day} ${p(d.getHours())}:${p(d.getMinutes())}` : `${day}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
 const METRIC_LABELS = { cpu: 'CPU seconds', exec: 'Program executions' };
 
 function printRanking(rows, key, top) {
@@ -211,6 +249,41 @@ const ACTIVATION_LABELS = { site_activation: 'site', cms_install: 'app install' 
 const STATUS_LABELS = { '-1': 'failed', 0: 'pending', 1: 'running', 100: 'done' };
 const describeActivation = (items) =>
 	items.map((it) => `${ACTIVATION_LABELS[it.product_name] || it.product_name} ${STATUS_LABELS[it.status] ?? it.status}`).join(', ');
+
+const LOGIN_HINT = 'Your session may have expired: log in again with "labelvier siteground login"';
+
+/** A request that never got an answer (DNS, connection refused, timeout): fetch throws a TypeError("fetch failed"). */
+function isNetworkError(err) {
+	return (err instanceof TypeError && err.message === 'fetch failed') || err?.name === 'AbortError' || err?.name === 'TimeoutError';
+}
+
+/** The cause of a failed request in a few words: the HTTP status and SiteGround's message, or the network error. */
+function backupCause(err) {
+	if (err instanceof SiteToolsError) return `HTTP ${err.status}: ${err.detail}`;
+	if (!isNetworkError(err)) return errorMessage(err);
+	const code = err?.cause?.code || err?.cause?.message;
+	return `network error: ${err.message}${code ? `, ${code}` : ''}`;
+}
+
+const isAuthError = (err) => err?.status === 401 || err?.status === 403;
+
+/** One readable line for a failed site:backup API call: what, which site, the cause and what to do next. */
+function backupApiError(action, domain, err) {
+	if (isNetworkError(err)) {
+		return new Error(`Could not reach SiteGround to ${action} for ${domain} (${backupCause(err)}). Check your connection and try again; check "site:backup ${domain}" first if you are unsure.`);
+	}
+	const next = isAuthError(err) ? `${LOGIN_HINT} and retry.` : `Try again; check "site:backup ${domain}" to see the current backups.`;
+	return new Error(`Could not ${action} for ${domain} (${backupCause(err)}). ${next}`);
+}
+
+/** Never an empty "Error: ": fall back on the error name, a status, or the thrown value itself. */
+function errorMessage(err) {
+	if (err?.message) return err.message;
+	if (err?.name && err.name !== 'Error') return err.name;
+	if (err?.status) return `HTTP ${err.status}`;
+	const text = err instanceof Error ? '' : String(err ?? '');
+	return text || 'Unknown error (no details were given)';
+}
 
 const commands = {
 	async setup() {
@@ -545,12 +618,33 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 
 	async 'site:ssl'(sg, [domain]) {
 		const { account, st } = await siteToolsFor(sg, domain);
-		const r = await task('Setting up SSL…', async (s) => {
-			const res = await setupSsl(st, { domain, serverIp: account.server.ip, https: values.https !== false }, s);
-			if (!res.ok) s.info(res.message);
-			return res;
-		}, { done: (res) => res.message });
-		if (!r.ok) process.exitCode = 2;
+		if (values.alias) return sslFor(st, account, values.alias, { strict: true });
+		await sslFor(st, account, domain);
+		// Then the parked domains that have no certificate yet: --aliases / --no-aliases, otherwise asked.
+		const missing = (await st.domains()).filter((d) => d.domain_type === 'alias' && !d.cert_id);
+		if (!missing.length) return;
+		const names = missing.map((d) => d.name).join(', ');
+		const withAliases = values.aliases ?? (interactive && (await confirm(`Also install SSL on parked domain(s) ${names}?`, { defaultValue: false })));
+		if (!withAliases) {
+			if (values.aliases === undefined) console.log(`Parked domains without SSL: ${names} (add --aliases to include them)`);
+			return;
+		}
+		for (const d of missing) await sslFor(st, account, d.name, { strict: true });
+	},
+
+	async 'site:alias'(sg, [domain]) {
+		const { site, account, st } = await siteToolsFor(sg, domain);
+		if (!values.add) {
+			const aliases = (await task('Getting domains…', () => st.domains())).filter((d) => d.domain_type === 'alias');
+			if (!aliases.length) return console.log('No parked domains.');
+			for (const d of aliases) console.log(`  ${d.name.padEnd(36)} SSL ${d.cert_id ? 'yes' : 'no'}  HTTPS forced ${d.settings?.https_enforce ? 'yes' : 'no'}`);
+			return;
+		}
+		const alias = values.add.toLowerCase();
+		const invalid = isDomain(alias);
+		if (invalid) throw new Error(`--add ${values.add}: ${invalid}`);
+		await task(`Parking ${alias}…`, () => addDomainAlias(sg, st, site, alias), { done: (m) => m });
+		if (values.ssl) await sslFor(st, account, alias, { strict: true });
 	},
 
 	async 'site:ssh-key'(sg, [domain]) {
@@ -596,6 +690,30 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		console.log(`name ${db.name}  user ${db.user}  password ${db.password}  host localhost\nSaved in ${file}`);
 	},
 
+	async 'site:db-password'(sg, [domain]) {
+		const { st } = await siteToolsFor(sg, domain);
+		const users = await task('Getting database users…', () => st.dbUsers(), { done: (u) => `${u.length} database user(s)` });
+		const target = pickDbUser(users, values.user);
+		// The site loses its database connection until its config has the new password.
+		if (!values.yes) {
+			if (!interactive) throw new Error(`A new password for ${target.name} breaks the site until its config has it. Add --yes to confirm.`);
+			if (!(await confirm(`Set a new password for database user ${target.name}? The site cannot reach its database until .env / wp-config.php has it.`, { defaultValue: false }))) return console.log('Cancelled.');
+		}
+		const key = `database_user_${target.name}`;
+		let file, saved;
+		try {
+			await task('Setting a new database password…', () => rotateDbPassword(st, target, {
+				// Saved before SiteGround is asked: a failed or timed-out change cannot lose a password that may be live.
+				before: async (db) => { saved = db; file = await storeCredentials(domain, { [key]: { ...db, pending_since: new Date().toISOString() } }); },
+			}), { done: `New password set for database user ${target.name}` });
+		} catch (err) {
+			if (file) console.error(`The new password is saved in ${file} (${key}, pending): SiteGround may have set it anyway. Check before you run this again.`);
+			throw err;
+		}
+		await storeCredentials(domain, { [key]: { ...saved, rotated_at: new Date().toISOString() } });
+		console.log(`user ${saved.user}  password ${saved.password}\nSaved in ${file}\nUpdate the site config (.env / wp-config.php) with this password now.`);
+	},
+
 	async 'site:cron'(sg, [domain]) {
 		if (values.add !== undefined && values.remove !== undefined) throw new Error('Use either --add or --remove, not both');
 		const schedule = values.at ?? '* * * * *';
@@ -619,11 +737,60 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		if (values.json) return console.log(JSON.stringify(jobs, null, 2));
 		for (const j of jobs) console.log(`#${String(j.id).padEnd(8)} ${cronSchedule(j).padEnd(20)} ${j.cmd}`);
 	},
+
+	async 'site:backup'(sg, [domain]) {
+		if (values.name !== undefined && !values.create) throw new Error('--name only works together with --create');
+		if (values.name !== undefined && !values.name.trim()) throw new Error('--name needs a label');
+		const { st } = await siteToolsFor(sg, domain);
+
+		if (values.create) {
+			const name = values.name?.trim() || `cli-${localStamp(new Date())}`;
+			// Test knobs for the polling; the real defaults wait up to 30 minutes.
+			const wait = { attempts: Number(process.env.SG_TASK_ATTEMPTS) || 600, intervalMs: Number(process.env.SG_TASK_INTERVAL_MS) || 3000 };
+			try {
+				await task(`Creating backup "${name}"…`, () => st.createBackup({ name, wait }), { done: `Backup "${name}" created` });
+			} catch (err) {
+				// Any failure while polling (HTTP, network, a session that could not be refreshed): the backup was accepted.
+				if (err?.polling) {
+					const login = isAuthError(err) ? ` ${LOGIN_HINT} first.` : '';
+					throw new Error(`Backup "${name}" was started, but its status could not be fetched (${backupCause(err)}).${login} Check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
+				}
+				if (err instanceof SiteToolsError && err.task) {
+					throw new Error(`SiteGround could not create backup "${name}" (${err.detail}). No backup was made; try again, and check "site:backup ${domain}" first if you are unsure.`);
+				}
+				if (err instanceof TaskTimeoutError) {
+					throw new Error(`Backup "${name}" is still running (task ${err.taskId}). It was not stopped: check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
+				}
+				// No answer to the create call: SiteGround may have queued the backup anyway.
+				if (isNetworkError(err)) {
+					throw new Error(`Could not reach SiteGround to create a backup for ${domain} (${backupCause(err)}). The backup may have been started anyway: check "site:backup ${domain}" before you run --create again.`);
+				}
+				if (err instanceof SiteToolsError) throw backupApiError('create a backup', domain, err);
+				throw err;
+			}
+		}
+
+		const backups = await task('Getting backups…', () => st.backups(), { done: (b) => `${b.length} backup(s)` }).catch((err) => {
+			throw err instanceof SiteToolsError || isNetworkError(err) ? backupApiError('list backups', domain, err) : err;
+		});
+		if (values.json) return console.log(JSON.stringify(backups, null, 2));
+		for (const b of [...backups].sort((x, y) => y.ts_start - x.ts_start)) {
+			console.log(`#${String(b.id).padEnd(8)} ${localStamp(new Date(b.ts_start * 1000), ' ')}  ${(b.instant_backup === 1 ? 'manual' : 'system').padEnd(7)} ${b.instant_label ?? ''}`.trimEnd());
+		}
+	},
 };
 
 if (values.demo || process.env.SG_DEMO === '1') enableDemo();
 
 const [cmd, ...args] = positionals;
+// Commands with their own one-line help: `<command> --help` prints just that line.
+const COMMAND_HELP = {
+	'site:backup': 'List a site\'s backups, or with --create [--name "<label>"] make a manual backup and wait until it is done',
+};
+if (cmd && commands[cmd] && values.help && COMMAND_HELP[cmd]) {
+	console.log(COMMAND_HELP[cmd]);
+	process.exit(0);
+}
 if (!cmd || !commands[cmd] || values.help) {
 	if (cmd && !commands[cmd] && !values.help) console.error(`\x1b[31m✗\x1b[0m Unknown command: ${cmd}`);
 	console.log(HELP);
@@ -639,7 +806,7 @@ try {
 	}) : null;
 	await commands[cmd](needsClient ? await SiteGroundClient.fromSavedSession({ relogin }) : undefined, args);
 } catch (err) {
-	console.error(`Error: ${err.message}`);
+	console.error(`Error: ${errorMessage(err)}`);
 	process.exitCode = 1;
 } finally {
 	closePrompt();

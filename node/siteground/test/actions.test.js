@@ -23,12 +23,15 @@ import {
 	enableMemcached,
 	disableMemcached,
 	setupSsl,
+	addDomainAlias,
 	addSshKey,
 	sshDetails,
 	sshCommand,
 	defaultSshAlias,
 	addSshAlias,
 	createDatabase,
+	rotateDbPassword,
+	pickDbUser,
 	serverPhpVersions,
 	parsePhpVersion,
 	phpLabel,
@@ -386,6 +389,31 @@ test('enableMemcached() / disableMemcached() messages and calls', async () => {
 	assert.deepEqual(st.calls.at(-1), ['del', '/uservice/4']);
 });
 
+test('setupSsl(): strict does not fall back to the main domain', async () => {
+	const st = fakeSt({ domains: [{ id: 1, name: 'main.nl' }], mainDomain: { id: 1, name: 'main.nl' }, installLetsEncrypt: {}, enforceHttps: {} });
+	const r = await setupSsl(st, { domain: 'alias.nl', serverIp: SERVER_IP, strict: true });
+	assert.deepEqual(r, { ok: false, message: 'alias.nl is not a domain of this site' });
+	assert.equal(st.mainDomain.mock.callCount(), 0);
+	assert.equal(st.installLetsEncrypt.mock.callCount(), 0);
+});
+
+test('addDomainAlias(): parks the domain and waits until Site Tools lists it', async () => {
+	let listed = [{ name: 'main.nl' }];
+	const sg = { addDomainAlias: mock.fn(async () => { listed = [...listed, { name: 'alias.nl' }]; }) };
+	const st = fakeSt({ domains: () => listed });
+	const site = { id: 'S1', domain: 'main.nl' };
+	assert.equal(await addDomainAlias(sg, st, site, 'Alias.NL', { intervalMs: 0 }), 'alias.nl parked on main.nl');
+	assert.deepEqual(sg.addDomainAlias.mock.calls[0].arguments, ['S1', 'alias.nl', 'main.nl']);
+
+	// Already there: no write.
+	assert.equal(await addDomainAlias(sg, st, site, 'alias.nl', { intervalMs: 0 }), 'alias.nl is already a domain of main.nl');
+	assert.equal(sg.addDomainAlias.mock.callCount(), 1);
+
+	// Never shows up: error after the attempts.
+	const slow = { addDomainAlias: mock.fn(async () => {}) };
+	await assert.rejects(addDomainAlias(slow, fakeSt({ domains: [] }), site, 'late.nl', { intervalMs: 0, attempts: 2 }), /does not list it yet/);
+});
+
 test('setupSsl(): skipped while DNS does not point to the server', async (t) => {
 	const dns = await startDnsStub({});
 	t.after(() => dns.close());
@@ -431,6 +459,30 @@ test('createDatabase(): database, user with a generated password, grant; progres
 	assert.match(db.password, /a1!$/);
 	assert.deepEqual(st.calls, [['createDatabase', 'shop'], ['createDbUser', 'shop', db.password], ['grantAll', 1, 2]]);
 	assert.deepEqual(texts, ['Creating database "shop"…', 'Creating database user "shop"…', 'Granting privileges…']);
+});
+
+test('pickDbUser(): the sole user, or --user by name or label; never guesses', () => {
+	assert.equal(pickDbUser([{ id: 1, label: '', name: 'uabc' }]).id, 1);
+	const many = [{ id: 1, label: 'shop', name: 'uabc' }, { id: 2, label: '', name: 'udef' }];
+	assert.equal(pickDbUser(many, 'shop').id, 1);
+	assert.equal(pickDbUser(many, 'udef').id, 2);
+	assert.throws(() => pickDbUser(many), /More than one database user, pick one with --user: uabc, udef/);
+	assert.throws(() => pickDbUser(many, 'nope'), /No database user "nope" \(found: uabc, udef\)/);
+	assert.throws(() => pickDbUser([]), /no database users/);
+});
+
+test('rotateDbPassword(): generated password, handed to before() ahead of the change', async () => {
+	const st = fakeSt({ setDbUserPassword: {} });
+	const order = [];
+	const r = await rotateDbPassword(st, { id: 7, name: 'uabc' }, { before: async (db) => order.push(['before', db.password, st.calls.length]) });
+	assert.equal(r.user, 'uabc');
+	assert.match(r.password, /a1!$/);
+	assert.deepEqual(st.calls, [['setDbUserPassword', 7, r.password]]);
+	assert.deepEqual(order, [['before', r.password, 0]], 'before() runs before SiteGround is asked');
+
+	const failing = fakeSt({ setDbUserPassword: {} });
+	await assert.rejects(rotateDbPassword(failing, { id: 7, name: 'uabc' }, { before: async () => { throw new Error('disk full'); } }), /disk full/);
+	assert.deepEqual(failing.calls, [], 'a failed save never changes the password');
 });
 
 // --- PHP -----------------------------------------------------------------------------------------

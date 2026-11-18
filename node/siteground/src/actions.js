@@ -197,9 +197,13 @@ export async function disableMemcached(st) {
 	return 'Memcached disabled';
 }
 
-/** Install Let's Encrypt when DNS points to the server; optionally force HTTPS. */
-export async function setupSsl(st, { domain, serverIp, https = true }, progress) {
-	const d = (await st.domains()).find((x) => x.name === domain) || (await st.mainDomain());
+/**
+ * Install Let's Encrypt when DNS points to the server; optionally force HTTPS.
+ * strict: the domain must exist on the site (an alias), no fallback to the main domain.
+ */
+export async function setupSsl(st, { domain, serverIp, https = true, strict = false }, progress) {
+	const d = (await st.domains()).find((x) => x.name === domain) || (strict ? null : await st.mainDomain());
+	if (!d) return { ok: false, message: `${domain} is not a domain of this site` };
 	if (progress) progress.text = `Checking DNS of ${d.name}…`;
 	if (!(await dnsPointsTo(d.name, serverIp))) {
 		return { ok: false, message: `SSL skipped: ${d.name} does not resolve to ${serverIp} yet` };
@@ -218,6 +222,22 @@ export async function setupSsl(st, { domain, serverIp, https = true }, progress)
 		parts.push('HTTPS forced');
 	}
 	return { ok: true, message: parts.join(', ') };
+}
+
+/**
+ * Park `alias` on a site (an alias of its main domain), then wait until Site Tools lists it.
+ * Returns the message; an alias that is already there is left alone.
+ */
+export async function addDomainAlias(sg, st, site, alias, { intervalMs = 3000, attempts = 20 } = {}) {
+	const name = alias.toLowerCase();
+	const listed = async () => (await st.domains()).find((d) => d.name === name);
+	if (await listed()) return `${name} is already a domain of ${site.domain}`;
+	await sg.addDomainAlias(site.id, name, site.domain);
+	for (let i = 0; i < attempts; i++) {
+		if (await listed()) return `${name} parked on ${site.domain}`;
+		await new Promise((r) => setTimeout(r, intervalMs));
+	}
+	throw new Error(`${name} was added but Site Tools does not list it yet; check with site:info`);
 }
 
 export async function addSshKey(st, { keyFile, comment }) {
@@ -281,6 +301,31 @@ export async function createDatabase(st, { label }, progress) {
 	if (progress) progress.text = 'Granting privileges…';
 	await st.grantAll(db.id, user.id);
 	return { label, name: db.name, user: user.name, password, host: 'localhost' };
+}
+
+/**
+ * The database user to rotate. `user` matches the user's name or label; without it the site must
+ * have exactly one database user. Never guesses: throws when nothing or more than one matches.
+ */
+export function pickDbUser(users, user) {
+	const matches = user ? users.filter((u) => u.name === user || (u.label && u.label === user)) : users;
+	if (matches.length === 0) {
+		throw new Error(user ? `No database user "${user}" (found: ${users.map((u) => u.name).join(', ') || 'none'})` : 'This site has no database users');
+	}
+	if (matches.length > 1) throw new Error(`More than one database user, pick one with --user: ${matches.map((u) => u.name).join(', ')}`);
+	return matches[0];
+}
+
+/**
+ * Give a database user (from pickDbUser) a new generated password. `before` runs with
+ * { user, password } before SiteGround is asked, so the caller can save the password first:
+ * if the change fails halfway, the password that may now be live is not lost. Returns { user, password }.
+ */
+export async function rotateDbPassword(st, target, { before } = {}) {
+	const password = generatePassword();
+	if (before) await before({ user: target.name, password });
+	await st.setDbUserPassword(target.id, password);
+	return { user: target.name, password };
 }
 
 // --- PHP ----------------------------------------------------------------------

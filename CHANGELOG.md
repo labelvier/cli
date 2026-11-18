@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-18
+
+### Added
+- `siteground site:backup <domain>` lists the Site Tools backups (system and manual); `--create [--name "<label>"]` makes an on-demand backup and waits until it is done (up to 30 minutes; if it is still running after that, the command says so and you should not run `--create` again). Times and the default label use local time. Endpoints are derived from the Site Tools bundle and tested against the fake API; not yet verified live. When SiteGround reports the backup task as failed, the command says no backup was made and to try again, instead of only repeating the raw task error.
+- `siteground site:db-password <domain> [--user <name>]` gives an existing database user a new generated password. The password is saved in the site credentials file before SiteGround is asked, so a failed change never loses it. The command asks first; without a terminal it needs `--yes`.
+- `siteground site:alias <domain>` lists the parked domains of a site; `--add <alias> [--ssl] [--no-https]` parks a new one. `site:ssl --alias <alias>` secures one parked domain, and `site:ssl <domain>` offers to secure parked domains without a certificate (`--aliases` / `--no-aliases`, default no).
+- `labelvier gitops setup`: wizard that sets up GitOps for a Laravel project on SiteGround. It creates a deploy key, prepares the server (shared `.env`/storage, `public_html` symlink), sets the GitHub environment secrets, scaffolds `deploy.php` and the workflow, and runs the first deploy. Also `gitops status` and `gitops tests`, which checks for local tests and offers to run them in GitHub Actions before each staging deploy (a failing test blocks it) and on every PR that is opened or updated. CI uses the PHP version SiteGround runs for the site.
+
+### Changed
+- `siteground site:backup` errors are one readable line with the domain, the cause (HTTP status and SiteGround's message, or the network error) and a next step. A 401/403 points to `labelvier siteground login`. When the backup was started but its status could not be fetched (HTTP error, expired session or network error), the command says the backup may still be running and not to run `--create` again. A create call that gets no answer says the backup may have started anyway and to check `site:backup` before retrying.
+- The CLI never prints an empty `Error: ` line; an error without a message falls back on its name or status.
+- When `npm ci` fails while installing the SiteGround or Uptime Kuma dependencies, the wrapper shows the last lines of npm's output and a hint instead of hiding it.
+- CI runs on actions/checkout v7, actions/setup-node v7 and bats-core/bats-action 4.1.0.
+
+### Fixed
+- `l4 release finish` respects the project's tag prefix: a project that tags `v1.2.3` no longer gets a bare `1.2.3` tag. The prefix comes from `gitflow.prefix.versiontag` when set (an empty value means no prefix), otherwise from the most recently created version tag. A prefix already in the branch name (`release/v1.2.3`) is kept as is.
+
 ## [1.8.0] - 2026-11-18
 
 ### Added

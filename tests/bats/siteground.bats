@@ -104,6 +104,15 @@ NPM_CI_PATTERN='^npm --prefix .*/sg ci --silent --no-audit --no-fund$'
   refute_stub_called 'cli\.js'
 }
 
+@test "a failing npm ci shows what npm said" {
+  stub npm 'echo "npm ERR! network request failed" >&2; exit 1'
+  run_cli siteground sites
+  [ "$status" -eq 1 ]
+  assert_output_contains "npm ci failed in $SG_DIR."
+  assert_output_contains "npm ERR! network request failed"
+  assert_output_contains "run the command again"
+}
+
 # --- chromium (login only) --------------------------------------------------
 
 @test "login installs Chromium through playwright before the CLI" {

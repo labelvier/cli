@@ -49,9 +49,9 @@ run_bats() {
   fi
   # With explicit arguments (files, bats flags) run just those; otherwise the whole directory.
   if [ $# -gt 0 ]; then
-    bats "${jobs[@]}" "$@"
+    bats ${jobs[@]+"${jobs[@]}"} "$@"
   else
-    bats "${jobs[@]}" --recursive "$ROOT/tests/bats"
+    bats ${jobs[@]+"${jobs[@]}"} --recursive "$ROOT/tests/bats"
   fi
 }
 
