@@ -30,6 +30,7 @@ import {
 	addSshAlias,
 	createDatabase,
 	rotateDbPassword,
+	pickDbUser,
 	serverPhpVersions,
 	parsePhpVersion,
 	phpLabel,
@@ -434,28 +435,28 @@ test('createDatabase(): database, user with a generated password, grant; progres
 	assert.deepEqual(texts, ['Creating database "shop"…', 'Creating database user "shop"…', 'Granting privileges…']);
 });
 
-test('rotateDbPassword(): sole user gets a generated password; --user picks by name or label', async () => {
-	const one = fakeSt({ dbUsers: [{ id: 1, label: '', name: 'uabc' }], setDbUserPassword: {} });
-	const r = await rotateDbPassword(one);
-	assert.equal(r.user, 'uabc');
-	assert.match(r.password, /a1!$/);
-	assert.deepEqual(one.calls, [['dbUsers'], ['setDbUserPassword', 1, r.password]]);
-
-	const many = () => fakeSt({ dbUsers: [{ id: 1, label: 'shop', name: 'uabc' }, { id: 2, label: '', name: 'udef' }], setDbUserPassword: {} });
-	const byLabel = many();
-	assert.equal((await rotateDbPassword(byLabel, { user: 'shop' })).user, 'uabc');
-	assert.equal(byLabel.calls.at(-1)[1], 1);
-	const byName = many();
-	assert.equal((await rotateDbPassword(byName, { user: 'udef' })).user, 'udef');
-	assert.equal(byName.calls.at(-1)[1], 2);
+test('pickDbUser(): the sole user, or --user by name or label; never guesses', () => {
+	assert.equal(pickDbUser([{ id: 1, label: '', name: 'uabc' }]).id, 1);
+	const many = [{ id: 1, label: 'shop', name: 'uabc' }, { id: 2, label: '', name: 'udef' }];
+	assert.equal(pickDbUser(many, 'shop').id, 1);
+	assert.equal(pickDbUser(many, 'udef').id, 2);
+	assert.throws(() => pickDbUser(many), /More than one database user, pick one with --user: uabc, udef/);
+	assert.throws(() => pickDbUser(many, 'nope'), /No database user "nope" \(found: uabc, udef\)/);
+	assert.throws(() => pickDbUser([]), /no database users/);
 });
 
-test('rotateDbPassword(): refuses to guess and never writes on a miss', async () => {
-	const many = fakeSt({ dbUsers: [{ id: 1, label: '', name: 'uabc' }, { id: 2, label: '', name: 'udef' }], setDbUserPassword: {} });
-	await assert.rejects(rotateDbPassword(many), /More than one database user, pick one with --user: uabc, udef/);
-	await assert.rejects(rotateDbPassword(many, { user: 'nope' }), /No database user "nope" \(found: uabc, udef\)/);
-	await assert.rejects(rotateDbPassword(fakeSt({ dbUsers: [], setDbUserPassword: {} })), /no database users/);
-	assert.ok(!many.calls.some(([name]) => name === 'setDbUserPassword'));
+test('rotateDbPassword(): generated password, handed to before() ahead of the change', async () => {
+	const st = fakeSt({ setDbUserPassword: {} });
+	const order = [];
+	const r = await rotateDbPassword(st, { id: 7, name: 'uabc' }, { before: async (db) => order.push(['before', db.password, st.calls.length]) });
+	assert.equal(r.user, 'uabc');
+	assert.match(r.password, /a1!$/);
+	assert.deepEqual(st.calls, [['setDbUserPassword', 7, r.password]]);
+	assert.deepEqual(order, [['before', r.password, 0]], 'before() runs before SiteGround is asked');
+
+	const failing = fakeSt({ setDbUserPassword: {} });
+	await assert.rejects(rotateDbPassword(failing, { id: 7, name: 'uabc' }, { before: async () => { throw new Error('disk full'); } }), /disk full/);
+	assert.deepEqual(failing.calls, [], 'a failed save never changes the password');
 });
 
 // --- PHP -----------------------------------------------------------------------------------------
