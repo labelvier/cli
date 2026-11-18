@@ -75,6 +75,8 @@ wizard_answers() {
 }
 
 @test "gitops setup writes deploy.php and the workflow with the placeholders filled in" {
+  echo '{"scripts":{"build":"vite build"}}' > package.json
+  echo '{}' > package-lock.json
   run_cli gitops setup <<< "$(wizard_answers 1)"
   [ "$status" -eq 0 ]
   grep -q "set('application', 'shop')" deploy.php
@@ -84,6 +86,34 @@ wizard_answers() {
   grep -q "php-version: '8.4'" .github/workflows/deploy-staging.yml
   grep -q "node-version: 24" .github/workflows/deploy-staging.yml
   ! grep -rqE "__(APP|REPO_URL|PHP_BIN|PHP_VERSION|BASE_BRANCH)__" deploy.php .github/workflows/deploy-staging.yml
+}
+
+@test "gitops setup leaves the Node steps out of the deploy workflow without a package-lock.json" {
+  echo '{"scripts":{"build":"vite build"}}' > package.json
+  run_cli gitops setup <<< "$(wizard_answers 1)"
+  [ "$status" -eq 0 ]
+  ! grep -q "setup-node" .github/workflows/deploy-staging.yml
+  ! grep -q "#NODE#" .github/workflows/deploy-staging.yml
+  grep -q "vendor/bin/dep deploy staging" .github/workflows/deploy-staging.yml
+}
+
+@test "gitops setup refuses a domain that is not a plain host name" {
+  run_cli gitops setup <<< $'example.com;rm -rf ~\n'
+  [ "$status" -eq 1 ]
+  assert_output_contains "is not a domain name"
+  refute_stub_called '^ssh'
+}
+
+@test "gitops setup leaves a real public_html alone when you press Enter" {
+  run_cli gitops setup <<< "$(printf '%s\n' example.com "" y y "" y n n)"
+  assert_output_contains "Left as is"
+  refute_stub_called "mv ~/www/example.com/public_html"
+  refute_stub_called "rm -rf"
+}
+
+@test "gitops setup accepts a new host key on the first login" {
+  run_cli gitops setup <<< "$(wizard_answers 1)"
+  assert_stub_called "^ssh .*StrictHostKeyChecking=accept-new"
 }
 
 @test "gitops setup leaves existing files alone and does not ask again" {
@@ -298,6 +328,7 @@ make_tests() {
   make_tests
   echo '{"require":{"laravel/framework":"^12.0"},"scripts":{"test":"phpunit"}}' > composer.json
   echo '{"scripts":{"build":"vite build"}}' > package.json
+  echo '{}' > package-lock.json
   run_cli gitops tests <<< $'n\ny\ny\nexample.com\n'
   grep -q "run: composer test" .github/workflows/tests.yml
   grep -q "node-version: 24" .github/workflows/tests.yml

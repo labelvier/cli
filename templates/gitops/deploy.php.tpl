@@ -6,8 +6,8 @@
  * Usage:
  *   vendor/bin/dep deploy staging
  *
- * The working directory is built and uploaded (no git clone on the server), so what
- * is checked out is what ships. The target comes from DEPLOY_STAGING_* in the
+ * The working directory is built and uploaded (no git clone on the server): in CI that
+ * is the checked-out commit, locally also uncommitted files that git does not ignore. The target comes from DEPLOY_STAGING_* in the
  * environment or, locally, from .env. See DEPLOY.md, "Staging".
  *
  * The app .env lives on the server (shared/.env) and is never uploaded: CI only
@@ -65,8 +65,8 @@ host('staging')
     ->setRemoteUser($setting('DEPLOY_STAGING_USER'))
     ->setPort($setting('DEPLOY_STAGING_PORT') ?: 22)
     ->setDeployPath($remotePath($setting('DEPLOY_STAGING_PATH')))
-    // Web root: a symlink next to the deploy path, pointing at current/public.
-    ->set('public_html_path', $remotePath($setting('DEPLOY_STAGING_PUBLIC_PATH') ?: dirname($setting('DEPLOY_STAGING_PATH')) . '/public_html'))
+    // Web root: SiteGround serves www/<domain>/public_html, a symlink inside the deploy path to current/public.
+    ->set('public_html_path', $remotePath($setting('DEPLOY_STAGING_PUBLIC_PATH') ?: $setting('DEPLOY_STAGING_PATH') . '/public_html'))
     ->set('ssh_multiplexing', true);
 
 // Optional key file (`labelvier gitops` uses it for the first local deploy); CI uses ~/.ssh/id_ed25519.
@@ -74,8 +74,16 @@ if ($key = $setting('DEPLOY_STAGING_KEY_FILE')) {
     host('staging')->setIdentityFile($key);
 }
 
-// Build the Vite assets locally: shared hosting can't run node.
+// Build the Vite assets locally: shared hosting can't run node. Skipped for a project without a
+// package-lock.json and a "build" script (an API without a frontend).
 task('deploy:assets', function () {
+    $package = __DIR__ . '/package.json';
+    if (! file_exists(__DIR__ . '/package-lock.json') || ! file_exists($package)
+        || ! isset(json_decode((string) file_get_contents($package), true)['scripts']['build'])) {
+        writeln('No package-lock.json with a build script: no assets to build.');
+
+        return;
+    }
     runLocally('npm ci --no-audit --no-fund && npm run build');
 })->desc('Build Vite assets locally');
 
@@ -88,6 +96,8 @@ task('deploy:update_code', function () {
             '--exclude=/.github/',
             '--exclude=/.claude/',
             '--exclude=/.env',
+            '--exclude=/.env.*',
+            '--exclude=/auth.json',
             '--exclude=/vendor/',
             '--exclude=/node_modules/',
             '--exclude=/storage/',

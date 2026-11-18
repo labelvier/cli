@@ -43,20 +43,26 @@ jobs:
           php-version: '__PHP_VERSION__'
           tools: composer
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
+      #NODE#- uses: actions/setup-node@v4
+      #NODE#  with:
+      #NODE#    node-version: 24
+      #NODE#    cache: npm
 
       - run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.DEPLOY_STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_STAGING_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "${DEPLOY_STAGING_PORT:-22}" "$DEPLOY_STAGING_HOSTNAME" >> ~/.ssh/known_hosts
+          # The host key `labelvier gitops` stored; scanning trusts whoever answers and is only a fallback.
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${DEPLOY_STAGING_PORT:-22}" "$DEPLOY_STAGING_HOSTNAME" >> ~/.ssh/known_hosts
+          fi
 
       - run: vendor/bin/dep deploy staging -v

@@ -201,7 +201,7 @@ gitops() (
 
   # Run a command on the server with your own key or, once it exists, the deploy key.
   function _remote() {
-    command ssh -o BatchMode=yes -o ConnectTimeout=10 -p "$port" "${_ssh_extra[@]}" "$user@$host" "$@"
+    command ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$port" "${_ssh_extra[@]}" "$user@$host" "$@"
   }
 
   function _key_path() {
@@ -328,7 +328,7 @@ gitops() (
       _ok "$to already exists, left alone"
       return
     fi
-    grep -qs '"build"[[:space:]]*:' package.json && node_filter="s/#NODE#//"
+    _has_node_build && node_filter="s/#NODE#//"
     [ "$2" = "1" ] && pr_filter="s/#PR#//"
     sed -e "$node_filter" -e "$pr_filter" \
       -e "s#__PHP_VERSION__#$php_version#g" \
@@ -363,13 +363,19 @@ gitops() (
   }
 
   # Copy a template to its destination with the placeholders filled in, unless it exists.
+  # Node steps only for a project with a package-lock.json and a build script (npm ci needs the lock file).
+  function _has_node_build() {
+    [ -f package-lock.json ] && grep -qs '"build"[[:space:]]*:' package.json
+  }
+
   function _render() {
-    local from="$1" to="$2"
+    local from="$1" to="$2" node_filter="/#NODE#/d"
     if [ -f "$to" ]; then
       _ok "$to already exists, left alone"
       return
     fi
-    sed -e "s#__APP__#$(basename "$repo")#g" \
+    _has_node_build && node_filter="s/#NODE#//"
+    sed -e "$node_filter" -e "s#__APP__#$(basename "$repo")#g" \
       -e "s#__REPO_URL__#$repo_url#g" \
       -e "s#__PHP_VERSION__#$php_version#g" \
       -e "s#__BASE_BRANCH__#$base_branch#g" \
@@ -384,6 +390,11 @@ gitops() (
     domain=$(_ask "Domain of the staging site (as in SiteGround)" "")
     if [ -z "$domain" ]; then
       _fail "No domain given."
+      return 1
+    fi
+    # The domain ends up in remote shell commands (mv, rm -rf): only plain host names.
+    if ! [[ "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
+      _fail "'$domain' is not a domain name."
       return 1
     fi
 
@@ -405,7 +416,7 @@ gitops() (
     fi
 
     _warn "Your own SSH key cannot log in yet."
-    if ! _yes "Authorize your default public key on $domain with 'labelvier siteground site:ssh-key' now?"; then
+    if ! _yes "Authorize your default public key on $domain with 'labelvier siteground site:ssh-key' now?" n; then
       _fail "Without a login the wizard cannot prepare the server."
       return 1
     fi
@@ -449,7 +460,7 @@ gitops() (
     fi
 
     _warn "PHP is older than the $required the project needs. Composer would fail on the server."
-    if ! _yes "Change the PHP version of $domain with 'labelvier siteground site:php' now?"; then
+    if ! _yes "Change the PHP version of $domain with 'labelvier siteground site:php' now?" n; then
       _warn "Left as is. Fix it in Site Tools → Devs → PHP Manager before the first deploy."
       return 0
     fi
@@ -508,7 +519,7 @@ gitops() (
     if _remote "grep -qF '$pub' ~/.ssh/authorized_keys 2>/dev/null"; then
       _ok "Public key already authorized on the server"
     else
-      if ! _yes "Authorize the public key on the server (~/.ssh/authorized_keys)?"; then
+      if ! _yes "Authorize the public key on the server (~/.ssh/authorized_keys)?" n; then
         _fail "The deploy key has to be authorized to continue."
         return 1
       fi
@@ -551,7 +562,7 @@ gitops() (
       local env_file
       env_file=$(_ask "Local env file to upload once (empty = I will do it myself)" "")
       if [ -n "$env_file" ] && [ -f "$env_file" ]; then
-        command scp -q -o BatchMode=yes -P "$port" "${_ssh_extra[@]}" "$env_file" "$user@$host:$deploy_path/shared/.env" && _ok "Uploaded $env_file to shared/.env"
+        command scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P "$port" "${_ssh_extra[@]}" "$env_file" "$user@$host:$deploy_path/shared/.env" && _ok "Uploaded $env_file to shared/.env"
       else
         _warn "Create $deploy_path/shared/.env on the server before the first deploy."
       fi
@@ -575,11 +586,11 @@ gitops() (
         ;;
       dir)
         echo "  $public_path is a real directory. The deploy needs a symlink there."
-        echo "    1) Move it aside (public_html.bak-<date>), recommended"
+        echo "    1) Move it aside (public_html.bak-<date>), recommended; the site is offline until the first deploy"
         echo "    2) Delete it"
         echo "    3) Leave it, I will do it myself"
         local choice backup
-        choice=$(_ask "Choice" "1")
+        choice=$(_ask "Choice (1, 2 or 3)" "3")
         case "$choice" in
           1)
             backup="$public_path.bak-$(date +%Y%m%d)"
@@ -608,8 +619,8 @@ gitops() (
 
   function _github() {
     echo "  Environment '$stage' in $repo gets these secrets (names only, values never printed):"
-    echo "    DEPLOY_STAGING_SSH_KEY, _HOSTNAME, _USER, _PORT, _PATH"
-    if ! _yes "Create the environment and set the secrets?"; then
+    echo "    DEPLOY_STAGING_SSH_KEY, _HOSTNAME, _USER, _PORT, _PATH, _KNOWN_HOSTS"
+    if ! _yes "Create the environment and set the secrets?" n; then
       _warn "Skipped. Set them yourself or re-run: labelvier gitops setup"
       return 0
     fi
@@ -625,11 +636,21 @@ gitops() (
     gh secret set DEPLOY_STAGING_USER --env "$stage" --repo "$repo" --body "$user" >/dev/null || return 1
     gh secret set DEPLOY_STAGING_PORT --env "$stage" --repo "$repo" --body "$port" >/dev/null || return 1
     gh secret set DEPLOY_STAGING_PATH --env "$stage" --repo "$repo" --body "$deploy_path" >/dev/null || return 1
-    _ok "5 secrets set"
+    # The host key your own login accepted, so CI does not have to trust whatever answers ssh-keyscan.
+    local known_name="$host" known
+    [ "$port" != "22" ] && known_name="[$host]:$port"
+    known=$(ssh-keygen -F "$known_name" 2>/dev/null | grep -v '^#')
+    if [ -n "$known" ]; then
+      gh secret set DEPLOY_STAGING_KNOWN_HOSTS --env "$stage" --repo "$repo" --body "$known" >/dev/null || return 1
+      _ok "6 secrets set"
+    else
+      _warn "No host key for $known_name in ~/.ssh/known_hosts: CI falls back to ssh-keyscan."
+      _ok "5 secrets set"
+    fi
 
     if git ls-remote --exit-code --heads origin "$stage" >/dev/null 2>&1; then
       _ok "Branch $stage exists on origin"
-    elif _yes "Branch '$stage' does not exist on origin. Create it from ${base_branch:-$(_default_base_branch)}?"; then
+    elif _yes "Branch '$stage' does not exist on origin. Create it from ${base_branch:-$(_default_base_branch)}?" n; then
       git push origin "refs/heads/${base_branch:-$(_default_base_branch)}:refs/heads/$stage" && _ok "Pushed $stage"
     else
       _warn "The workflow checks out '$stage'; create it before the first merge."
@@ -645,7 +666,7 @@ gitops() (
       return 0
     fi
     echo "  The first deploy runs from this machine with the deploy key; later deploys run in GitHub Actions."
-    if ! _yes "Deploy $(git rev-parse --abbrev-ref HEAD) to $stage now?"; then
+    if ! _yes "Deploy $(git rev-parse --abbrev-ref HEAD) to $stage now?" n; then
       _warn "Skipped the first deploy; the action does it after the next push to $(_default_base_branch)."
       return 0
     fi
@@ -684,13 +705,15 @@ gitops() (
     fi
 
     if [ "$current" = "$base" ]; then
-      _yes "Push $base to origin now? Every merge here then deploys to $stage." || {
+      _yes "Push $base to origin now? Every merge here then deploys to $stage." n || {
         _warn "Not pushed. Push $base yourself to activate GitOps."
         return 0
       }
       git push origin "$base" || return 1
     else
-      _yes "Push '$current' to origin/$base now (fast-forward only)? Every merge there then deploys to $stage." || {
+      local ahead
+      ahead=$(git rev-list --count "origin/$base..$current" 2>/dev/null || echo "?")
+      _yes "Push '$current' to origin/$base now (fast-forward only, $ahead commit(s), not only the gitops commit)? Every merge there then deploys to $stage." n || {
         _warn "Not pushed. Merge '$current' into $base to activate GitOps."
         return 0
       }
