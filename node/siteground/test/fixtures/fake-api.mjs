@@ -35,6 +35,11 @@ const uapi = {
 	'GET /auth/sites/SmczellITUpKZz09/token': { site_token: jwt({ api_url: API_URL, cts: now, vsec: 3600 }) },
 	'POST /auth/refresh-client-token': { client_token: jwt({ exp: now + 3600, tokenType: 'access' }) },
 };
+// analytics.labelvier.dev: main domain with a certificate plus one parked domain without; parking adds to the list.
+const domains = [
+	{ id: 1, name: 'analytics.labelvier.dev', main: 1, domain_type: 'main_domain', cert_id: 5, settings: { https_enforce: 0, https_rewrite_links: 0 } },
+	{ id: 2, name: 'park.labelvier.dev', main: 0, domain_type: 'alias', alias_to: 'analytics.labelvier.dev', cert_id: null, settings: { https_enforce: 0 } },
+];
 const siteTools = {
 	'GET /backup': [
 		{ id: 11, ts_start: 1767225600, instant_backup: 0, instant_label: '' },
@@ -43,6 +48,11 @@ const siteTools = {
 	'GET /task/BK1': { options: { completed: 1 }, response: { err_code: '0' } },
 	'GET /task/BKSLOW': { options: { completed: 0 } },
 	'GET /task/BKFAIL': { options: { completed: 1 }, response: { err_code: 17, err_message: 'No free backup slots' } },
+	'GET /domain-all': domains,
+	'POST /ssl-le': {},
+	'PUT /domain-all/1': {},
+	'PUT /domain-all/2': {},
+	'PUT /domain-all/3': {},
 	'GET /wordpress': [{ id: 3, app: 'wordpress', app_url: 'https://analytics.labelvier.dev/', path: '/', domain_name: 'analytics.labelvier.dev', docroot: 'public_html' }],
 	'PUT /wordpress/3?auto_login=1': { autologin_url: 'http://analytics.labelvier.dev/wp_auto_login_abc.php' },
 	'GET /db-mysql_user': [{ id: 4, label: 'wp', name: 'uabc123' }],
@@ -84,6 +94,11 @@ globalThis.fetch = async (url, init = {}) => {
 		const taskId = label === 'fail' ? 'BKFAIL' : label === 'slow' ? 'BKSLOW' : 'BK1';
 		return new Response(JSON.stringify({ status: 202, task_id: taskId }), { status: 202, headers: { 'content-type': 'application/json' } });
 	}
+	if (url === 'https://st.siteground.com/v1/sites/SmczellITUpKZz09/domain-alias' && method === 'POST') {
+		const { domain, alias_to } = JSON.parse(init.body);
+		domains.push({ id: domains.length + 1, name: domain, main: 0, domain_type: 'alias', alias_to, cert_id: null, settings: { https_enforce: 0 } });
+		return new Response(JSON.stringify({ status: 200, message: 'OK', data: {} }), { status: 200, headers: { 'content-type': 'application/json' } });
+	}
 	// File manager: the login script as SiteGround writes it (raw, not JSON), saves are accepted.
 	if (key === 'GET /file?filename=%2Fanalytics.labelvier.dev%2Fpublic_html%2Fwp_auto_login_abc.php') {
 		return new Response('<?php\n\t\t$admins = get_users(array(\'role\'=>\'administrator\'));\n\t\t$user_id = $admins[0]->ID;\n', { status: 200 });
@@ -95,8 +110,8 @@ globalThis.fetch = async (url, init = {}) => {
 	return new Response(JSON.stringify({ status: 200, message: 'OK', data: table[key] }), { status: 200, headers: { 'content-type': 'application/json' } });
 };
 
-// DNS: new.labelvier.dev points to the Hamerkop server, nothing else resolves.
-const records = { 'new.labelvier.dev': SERVER_IP };
+// DNS: these point to the Hamerkop server, nothing else resolves.
+const records = { 'new.labelvier.dev': SERVER_IP, 'analytics.labelvier.dev': SERVER_IP, 'park.labelvier.dev': SERVER_IP, 'extra.labelvier.dev': SERVER_IP };
 const server = dgram.createSocket('udp4');
 server.on('message', (msg, rinfo) => {
 	let off = 12;
