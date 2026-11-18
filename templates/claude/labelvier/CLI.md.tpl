@@ -1,7 +1,7 @@
-<!-- labelvier-ai-version: 2 -->
+<!-- labelvier-ai-version: 3 -->
 # Label Vier CLI
 
-`labelvier` (shorthand `l4`) is the team's command tool. It is installed on every developer machine. Use it before you script something yourself or click through a hosting panel: releases, deploys, SiteGround sites, cron, SSH aliases and storage are covered.
+`labelvier` (shorthand `l4`) is the team's command tool. It is installed on every developer machine. Use it before you script something yourself or click through a hosting panel: releases, deploys, SiteGround sites and backups, GitOps for Laravel, cron, SSH aliases and storage are covered.
 
 ## Getting help
 
@@ -20,6 +20,7 @@ Read that help before you guess flags. Missing arguments are asked for interacti
 | `deploy staging [--all-features]` | Merge the current branch into `staging`, deploy, purge the SiteGround cache |
 | `deploy production [--yes]` | Deploy from master/main or `release/*`, log who deployed, purge the cache |
 | `deploy log [amount]` | Production deploy history of the project |
+| `gitops setup\|tests\|status` | GitOps for a Laravel project on SiteGround: merges into `develop` deploy to staging through GitHub Actions and Deployer (see below) |
 | `siteground …` | SiteGround hosting through its API (see below) |
 | `uptime-kuma list\|add\|pause\|resume\|delete\|update` | Monitors on status.labelvier.nl (see below) |
 | `cron deploy <ssh-host>` | Upload `run_cron_jobs.sh` to a SiteGround server and set `DISABLE_WP_CRON` |
@@ -28,6 +29,7 @@ Read that help before you guess flags. Missing arguments are asked for interacti
 | `migrate start\|staging\|load\|sync-status` | Move a site from a VPS or localhost to SiteGround |
 | `starterkit install\|update\|fix-permissions` | Set up or update a Starter Kit project |
 | `woocommerce add\|remove` | WooCommerce SCSS compilation in the theme |
+| `zed autocomplete` | PHP autocompletion for the Zed editor |
 | `setup` | Check and install the required tools on a new machine |
 | `ai check\|update`, `ai claude install`, `ai mistral install` | AI tooling and these instruction files |
 | `core update` | Update the CLI itself |
@@ -41,6 +43,9 @@ Read that help before you guess flags. Missing arguments are asked for interacti
 - Overview: `accounts`, `sites [--account <name>]`, `site:info <domain>`.
 - New site: `create-site --domain <domain> --account <plan> --app wordpress --memcached --ssl --https --yes`. Use `--dry-run` first.
 - Existing site: `site:ssl`, `site:memcached`, `site:php`, `site:db`, `site:ssh`, `site:login <domain> --print`.
+- Parked domains: `site:alias <domain>` lists them, `--add <alias> [--ssl]` parks one. `site:ssl <domain> --alias <alias>` secures one parked domain; `site:ssl <domain> --aliases` also secures every parked domain without a certificate.
+- Backups: `site:backup <domain>` lists them, `--create [--name <label>]` makes a manual backup and waits until it is done. When it reports that the backup may still be running, do not run `--create` again: check with `site:backup <domain>` first, every extra run uses a manual backup slot.
+- Database password: `site:db-password <domain> [--user <name>] --yes` gives a database user a new generated password, saved in the site credentials. The site loses its database connection until `.env` or `wp-config.php` has the new password, so update that right after.
 - SSH key: `site:ssh-key <domain> [--ssh-key <file.pub>] [--ssh-alias <name>]` authorizes the key and adds a Host alias through `labelvier ssh alias`. After that, `ssh <alias>` works.
 - Cron: `site:cron <domain>` lists jobs, `--add "<command>" --at "<min hour day mon dow>"` adds one, `--remove <id>` deletes one. This is the only way to set cron on SiteGround: SSH has no `crontab`.
 - Usage: `account:stats <plan>`, `site:stats <domain>` and `account:autoscale <plan>` find the site behind a CPU spike.
@@ -54,6 +59,13 @@ Credentials and sessions live in `~/.config/labelvier/siteground`. Never print, 
 
 No SSH alias yet? Run `labelvier siteground site:ssh-key <domain>` first.
 
+## GitOps (Laravel)
+
+`labelvier gitops setup` is a wizard, run from the root of a Laravel project, that makes every merge into `develop` deploy to a SiteGround staging site: GitHub Actions merges into `staging` and deploys with Deployer. It writes `deploy.php` and the workflows, creates a deploy key, prepares the server (shared `.env` and storage, `public_html` symlink), sets the GitHub environment and secrets and runs the first deploy. Every step that changes the server, GitHub or SiteGround asks first and defaults to no, so it needs a terminal: ask the user to run it.
+
+- `gitops tests` adds the tests workflow (on every PR and before each staging deploy).
+- `gitops status` shows what is in place: project files, deploy key, GitHub environment, secrets and branch.
+
 ## Uptime Kuma
 
 `labelvier uptime-kuma` manages the monitors on status.labelvier.nl. Use it instead of the web interface.
@@ -66,4 +78,4 @@ No SSH alias yet? Run `labelvier siteground site:ssh-key <domain>` first.
 
 ## Safety
 
-Many commands change remote servers, git branches or paid hosting. Never run them just to test or explore. Ask the user first for: `deploy`, `release finish`, `create-site`, `site:*` writes, `site:cron --add/--remove`, `cron deploy`, `migrate`, `storage cleanup`, `storage convert-to-webp` and `uptime-kuma add/pause/resume/delete/update`. Reading commands (`--help`, `accounts`, `sites`, `site:info`, `site:cron` without flags, `deploy log`, `ssh list`, `uptime-kuma list/session:status`) are safe.
+Many commands change remote servers, git branches or paid hosting. Never run them just to test or explore. Ask the user first for: `deploy`, `release finish`, `create-site`, `site:*` writes (including `site:backup --create`, `site:db-password` and `site:alias --add`), `site:cron --add/--remove`, `gitops setup`, `cron deploy`, `migrate`, `storage cleanup`, `storage convert-to-webp` and `uptime-kuma add/pause/resume/delete/update`. Reading commands (`--help`, `accounts`, `sites`, `site:info`, `site:cron`, `site:backup` and `site:alias` without flags, `gitops status`, `deploy log`, `ssh list`, `uptime-kuma list/session:status`) are safe.

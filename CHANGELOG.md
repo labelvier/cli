@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-11-18
+
+### Changed
+- The `CLI.md` instructions for AI agents (version 3) describe `gitops`, `siteground site:backup`, `site:db-password`, `site:alias`, `site:ssl --alias/--aliases` and `zed`, and add the new write commands to the ask-first list. Run `labelvier ai update` to get them.
+
 ## [1.9.0] - 2026-11-18
 
 ### Added
