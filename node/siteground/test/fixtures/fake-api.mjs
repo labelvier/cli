@@ -57,9 +57,17 @@ globalThis.fetch = async (url, init = {}) => {
 		table = siteTools;
 		key = `${method} ${url.replace(`https://${API_URL}/api-sgcp/v00`, '')}`;
 	}
+	// Test knobs: SG_TEST_BACKUP_LIST_STATUS makes GET /backup fail with that HTTP status, SG_TEST_THROW_EMPTY throws an error without a message.
+	if (key === 'GET /backup' && process.env.SG_TEST_THROW_EMPTY) throw new Error('');
+	if (key === 'GET /backup' && process.env.SG_TEST_BACKUP_LIST_STATUS) {
+		const status = Number(process.env.SG_TEST_BACKUP_LIST_STATUS);
+		return new Response(JSON.stringify({ status, message: 'Backup service unavailable' }), { status, headers: { 'content-type': 'application/json' } });
+	}
 	// On-demand backup: a 202 with a task id (label "fail" makes the task fail, "slow" never finishes), like the real API.
 	if (key === 'POST /backup') {
 		const label = JSON.parse(init.body).instant_label;
+		if (label === 'apierror') return new Response(JSON.stringify({ status: 500, message: 'Internal error' }), { status: 500, headers: { 'content-type': 'application/json' } });
+		if (label === 'denied') return new Response(JSON.stringify({ status: 403 }), { status: 403, headers: { 'content-type': 'application/json' } });
 		const taskId = label === 'fail' ? 'BKFAIL' : label === 'slow' ? 'BKSLOW' : 'BK1';
 		return new Response(JSON.stringify({ status: 202, task_id: taskId }), { status: 202, headers: { 'content-type': 'application/json' } });
 	}

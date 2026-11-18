@@ -326,6 +326,39 @@ test('site:backup --create: a task that keeps running is reported as still runni
 	assert.ok(!requested().includes('GET /backup'));
 });
 
+test('site:backup --create: a failing API call names the domain, status and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'apierror'], { env: loggedIn() });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: Could not create a backup for analytics\.labelvier\.dev \(HTTP 500: Internal error\)\. Try again; check "site:backup analytics\.labelvier\.dev"/);
+	assert.doesNotMatch(r.stderr, /POST \/backup/);
+	assert.equal(r.stdout, '');
+	assert.ok(!requested().includes('GET /backup'));
+});
+
+test('site:backup --create: a 403 without message falls back on the error code and points to login', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'denied'], { env: loggedIn() });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: Could not create a backup for analytics\.labelvier\.dev \(HTTP 403: error code 403\)\. .*siteground login/);
+	assert.doesNotMatch(r.stderr, /undefined/);
+});
+
+test('site:backup: a failing list call names the domain, status and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_BACKUP_LIST_STATUS: '500' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Error: Could not list backups for analytics\.labelvier\.dev \(HTTP 500: Backup service unavailable\)\. Try again/);
+	assert.equal(r.stdout, '');
+	const denied = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_BACKUP_LIST_STATUS: '403' } });
+	assert.equal(denied.code, 1);
+	assert.match(denied.stderr, /HTTP 403.*siteground login/);
+});
+
+test('an error without a message never prints an empty "Error: "', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_THROW_EMPTY: '1' } });
+	assert.equal(r.code, 1);
+	assert.notEqual(r.stderr.trim(), 'Error:');
+	assert.match(r.stderr, /^Error: Unknown error/m);
+});
+
 test('site:backup lists times in local time', async () => {
 	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), TZ: 'Europe/Amsterdam' } });
 	assert.equal(r.code, 0, r.stderr);

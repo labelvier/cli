@@ -1,12 +1,17 @@
 import { decodeJwt } from './session.js';
 
 export class SiteToolsError extends Error {
-	constructor(status, body, url) {
-		const msg = body?.message || body?.err_message || JSON.stringify(body)?.slice(0, 300);
-		const detail = typeof msg === 'string' ? msg : JSON.stringify(msg);
+	/** `task: true` when the error is the outcome of a polled task (waitForTask), not of a plain request. */
+	constructor(status, body, url, { task = false } = {}) {
+		// A body that is only a status envelope ({ status: 403 }) says nothing: fall back on the error code.
+		const informative = body != null && typeof body === 'object' && Object.keys(body).some((k) => k !== 'status');
+		const msg = body?.message || body?.err_message || (informative || (body != null && typeof body !== 'object') ? JSON.stringify(body)?.slice(0, 300) : '');
+		const text = typeof msg === 'string' ? msg : JSON.stringify(msg);
+		const detail = text || `error code ${status}`;
 		super(`${status} ${url}: ${detail}`);
 		this.detail = detail;
-		this.taskUrl = url;
+		this.url = url;
+		this.task = task;
 		this.status = status;
 		this.body = body;
 	}
@@ -82,7 +87,7 @@ export class SiteToolsClient {
 			const { data: task } = await this.request('GET', `/task/${taskId}`);
 			if (task?.options?.completed === 0) continue;
 			if (task?.response && parseInt(task.response.err_code, 10) !== 0) {
-				throw new SiteToolsError(task.response.err_code, task.response, `task ${taskId}`);
+				throw new SiteToolsError(task.response.err_code, task.response, `task ${taskId}`, { task: true });
 			}
 			return task;
 		}

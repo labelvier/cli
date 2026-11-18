@@ -224,6 +224,23 @@ const STATUS_LABELS = { '-1': 'failed', 0: 'pending', 1: 'running', 100: 'done' 
 const describeActivation = (items) =>
 	items.map((it) => `${ACTIVATION_LABELS[it.product_name] || it.product_name} ${STATUS_LABELS[it.status] ?? it.status}`).join(', ');
 
+/** One readable line for a failed site:backup API call: what, which site, the cause and what to do next. */
+function backupApiError(action, domain, err) {
+	const next = err.status === 401 || err.status === 403
+		? 'Your session may have expired: log in again with "siteground login" and retry.'
+		: `Try again; check "site:backup ${domain}" to see the current backups.`;
+	return new Error(`Could not ${action} for ${domain} (HTTP ${err.status}: ${err.detail}). ${next}`);
+}
+
+/** Never an empty "Error: ": fall back on the error name, a status, or the thrown value itself. */
+function errorMessage(err) {
+	if (err?.message) return err.message;
+	if (err?.name && err.name !== 'Error') return err.name;
+	if (err?.status) return `HTTP ${err.status}`;
+	const text = err instanceof Error ? '' : String(err ?? '');
+	return text || 'Unknown error (no details were given)';
+}
+
 const commands = {
 	async setup() {
 		await setupLogin();
@@ -644,15 +661,20 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 			try {
 				await task(`Creating backup "${name}"…`, () => st.createBackup({ name, wait }), { done: `Backup "${name}" created` });
 			} catch (err) {
-				if (err instanceof SiteToolsError && /^task /.test(err.taskUrl ?? '')) {
+				if (err instanceof SiteToolsError && err.task) {
 					throw new Error(`SiteGround could not create backup "${name}" (${err.detail}). No backup was made; try again, and check "site:backup ${domain}" first if you are unsure.`);
 				}
-				if (!(err instanceof TaskTimeoutError)) throw err;
-				throw new Error(`Backup "${name}" is still running (task ${err.taskId}). It was not stopped: check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
+				if (err instanceof TaskTimeoutError) {
+					throw new Error(`Backup "${name}" is still running (task ${err.taskId}). It was not stopped: check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
+				}
+				if (err instanceof SiteToolsError) throw backupApiError('create a backup', domain, err);
+				throw err;
 			}
 		}
 
-		const backups = await task('Getting backups…', () => st.backups(), { done: (b) => `${b.length} backup(s)` });
+		const backups = await task('Getting backups…', () => st.backups(), { done: (b) => `${b.length} backup(s)` }).catch((err) => {
+			throw err instanceof SiteToolsError ? backupApiError('list backups', domain, err) : err;
+		});
 		if (values.json) return console.log(JSON.stringify(backups, null, 2));
 		for (const b of [...backups].sort((x, y) => y.ts_start - x.ts_start)) {
 			console.log(`#${String(b.id).padEnd(8)} ${localStamp(new Date(b.ts_start * 1000), ' ')}  ${(b.instant_backup === 1 ? 'manual' : 'system').padEnd(7)} ${b.instant_label ?? ''}`.trimEnd());
@@ -686,7 +708,7 @@ try {
 	}) : null;
 	await commands[cmd](needsClient ? await SiteGroundClient.fromSavedSession({ relogin }) : undefined, args);
 } catch (err) {
-	console.error(`Error: ${err.message}`);
+	console.error(`Error: ${errorMessage(err)}`);
 	process.exitCode = 1;
 } finally {
 	closePrompt();

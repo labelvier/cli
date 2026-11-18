@@ -320,3 +320,11 @@ test('get() unwraps data; the list helpers hit their resources', async (t) => {
 	assert.deepEqual(await st.phpVersions(), ['/php-version']);
 	assert.equal(calls.length, 7);
 });
+
+test('SiteToolsError: detail is always a string and task marks polled-task failures', () => {
+	const empty = new SiteToolsError(403, { status: 403 }, 'POST /backup');
+	assert.equal(typeof empty.detail, 'string');
+	assert.equal(empty.task, false);
+	assert.equal(new SiteToolsError(500, null, 'GET /x').detail, 'error code 500');
+	assert.equal(new SiteToolsError(17, { err_message: 'full' }, 'task T1', { task: true }).task, true);
+});
