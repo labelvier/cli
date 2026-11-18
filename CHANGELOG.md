@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `siteground site:backup <domain>` lists the Site Tools backups (system and manual); `--create [--name "<label>"]` makes an on-demand backup and waits until it is done (up to 30 minutes; if it is still running after that, the command says so and you should not run `--create` again). Times and the default label use local time. Endpoints are derived from the Site Tools bundle and tested against the fake API; not yet verified live. When SiteGround reports the backup task as failed, the command says no backup was made and to try again, instead of only repeating the raw task error.
 
+## [1.7.0] - 2026-11-18
+
+### Added
+- `CLI.md` instruction file for AI agents: what the `labelvier` commands do, the SiteGround workflows (SSH keys, cron, site setup) and which commands need confirmation first. `labelvier ai claude install` adds it to the CLAUDE.md snippet (version 3), `labelvier ai mistral install` inlines it in the Vibe block. Run `labelvier ai update` to get it.
+
 ## [1.6.2] - 2026-11-16
 
 ### Changed

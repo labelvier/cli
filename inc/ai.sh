@@ -33,10 +33,10 @@ ai() (
   # The managed block in CLAUDE.md has its own version (bump it when the list
   # of @labelvier/... refs changes).
   local claude_md="$claude_dir/CLAUDE.md"
-  local snippet_version="2"
+  local snippet_version="3"
   local snippet_start="<!-- labelvier-ai:start version=$snippet_version -->"
   local snippet_end="<!-- labelvier-ai:end -->"
-  local snippet_refs="@labelvier/GLOBAL.md @labelvier/WORDPRESS.md @labelvier/ANGULAR.md @labelvier/BACKEND.md"
+  local snippet_refs="@labelvier/GLOBAL.md @labelvier/CLI.md @labelvier/WORDPRESS.md @labelvier/ANGULAR.md @labelvier/BACKEND.md"
 
   # Mistral Vibe reads one global instruction file, $VIBE_HOME/AGENTS.md
   # (default ~/.vibe/AGENTS.md), and has no @import. So the same templates are
@@ -48,8 +48,8 @@ ai() (
   local vibe_dir="${VIBE_HOME:-$HOME/.vibe}"
   local vibe_agents_md="$vibe_dir/AGENTS.md"
   local vibe_labelvier_dir="$vibe_dir/labelvier"
-  local vibe_layout_version="1"
-  local vibe_inline="GLOBAL WORDPRESS ANGULAR BACKEND"
+  local vibe_layout_version="2"
+  local vibe_inline="GLOBAL CLI WORDPRESS ANGULAR BACKEND"
   # Vibe does not auto-activate skills, so caveman gets an always-on block in
   # AGENTS.md, fenced with caveman's own markers (as its opencode installer
   # does). The block holds the full ruleset from the installed caveman
@@ -310,6 +310,7 @@ ai() (
   # this repo targets bash 3.2 (macOS default).
   function _claude_files() {
     echo "$labelvier_dir/GLOBAL.md:$claude_tpl_dir/labelvier/GLOBAL.md.tpl"
+    echo "$labelvier_dir/CLI.md:$claude_tpl_dir/labelvier/CLI.md.tpl"
     echo "$labelvier_dir/WORDPRESS.md:$claude_tpl_dir/labelvier/WORDPRESS.md.tpl"
     echo "$labelvier_dir/ANGULAR.md:$claude_tpl_dir/labelvier/ANGULAR.md.tpl"
     echo "$labelvier_dir/BACKEND.md:$claude_tpl_dir/labelvier/BACKEND.md.tpl"
@@ -665,7 +666,7 @@ ai() (
   function _remove_refs() {
     [ -f "$claude_md" ] || return 0
 
-    if [ -n "$(_snippet_version)" ] || grep -qE '^@labelvier/(GLOBAL|WORDPRESS|ANGULAR)\.md$' "$claude_md"; then
+    if [ -n "$(_snippet_version)" ] || grep -qE '^@labelvier/(GLOBAL|CLI|WORDPRESS|ANGULAR)\.md$' "$claude_md"; then
       _strip_snippet
       echo -e "${__green}Removed${__reset} the labelvier snippet from $claude_md"
     fi
@@ -680,7 +681,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config (wired into your own CLAUDE.md; BACKEND.md loads LARAVEL.md on demand), the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/CLI.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config (wired into your own CLAUDE.md; BACKEND.md loads LARAVEL.md on demand), the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -854,7 +855,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function mistral
-  # @description Sets up Mistral Vibe: the GLOBAL/WORDPRESS/ANGULAR/BACKEND config in ~/.vibe/AGENTS.md, LARAVEL.md, the timesheet/dashboard/basecamp skills, rtk and caveman. Subcommands: install, uninstall.
+  # @description Sets up Mistral Vibe: the GLOBAL/CLI/WORDPRESS/ANGULAR/BACKEND config in ~/.vibe/AGENTS.md, LARAVEL.md, the timesheet/dashboard/basecamp skills, rtk and caveman. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function mistral() {
     case "$1" in

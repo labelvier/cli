@@ -151,7 +151,7 @@ hook_entries_in_settings() {
 @test "ai claude --help prints the one-line description like any subcommand" {
   run_ai claude --help
   [ "$status" -eq 0 ]
-  assert_output_contains "claude - Installs the global GLOBAL.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config"
+  assert_output_contains "claude - Installs the global GLOBAL.md/CLI.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config"
   assert_output_contains "Subcommands: install, uninstall."
   refute_output_contains "Available functions:"
 }
@@ -236,7 +236,7 @@ hook_entries_in_settings() {
   assert_output_contains "✓ rtk wired into Claude Code"
   assert_output_contains "✓ caveman plugin"
   assert_output_contains "✓ $CLAUDE_DIR/labelvier/GLOBAL.md (version $(template_version "$TPL_DIR/labelvier/GLOBAL.md.tpl"))"
-  assert_output_contains "✓ labelvier snippet in $CLAUDE_DIR/CLAUDE.md (version 2)"
+  assert_output_contains "✓ labelvier snippet in $CLAUDE_DIR/CLAUDE.md (version 3)"
   assert_output_contains "(timesheet skill, version $(template_version "$TPL_DIR/skills/timesheet/SKILL.md.tpl"))"
   assert_output_contains "✓ TIMESHEET_API_TOKEN set"
   assert_output_contains "$HOOK (toon hook, registered)"
@@ -282,7 +282,7 @@ hook_entries_in_settings() {
   assert_output_contains "✗ $CLAUDE_DIR/labelvier/WORDPRESS.md (outdated: installed unversioned, available"
   assert_output_contains "(dashboard skill) (outdated: installed 0, available $(template_version "$TPL_DIR/skills/label-vier-dashboard-api/SKILL.md.tpl")"
   assert_output_contains "(timesheet skill) (outdated: installed 0, available $(template_version "$TPL_DIR/skills/timesheet/SKILL.md.tpl")"
-  assert_output_contains "✗ labelvier snippet in $CLAUDE_DIR/CLAUDE.md (outdated: installed 0, available 2"
+  assert_output_contains "✗ labelvier snippet in $CLAUDE_DIR/CLAUDE.md (outdated: installed 0, available 3"
 }
 
 @test "ai check flags a CLAUDE.md without the managed snippet" {
@@ -326,16 +326,17 @@ hook_entries_in_settings() {
   [ "$status" -eq 0 ]
 
   local name
-  for name in GLOBAL WORDPRESS ANGULAR BACKEND LARAVEL; do
+  for name in GLOBAL CLI WORDPRESS ANGULAR BACKEND LARAVEL; do
     cmp -s "$TPL_DIR/labelvier/$name.md.tpl" "$CLAUDE_DIR/labelvier/$name.md"
     [ "$(file_mode "$CLAUDE_DIR/labelvier/$name.md")" = "600" ]
     assert_output_contains "Installed $CLAUDE_DIR/labelvier/$name.md"
   done
 
   assert_output_contains "Created $CLAUDE_DIR/CLAUDE.md (empty)"
-  assert_output_contains "Added the labelvier snippet (version 2)"
-  grep -qxF '<!-- labelvier-ai:start version=2 -->' "$CLAUDE_DIR/CLAUDE.md"
+  assert_output_contains "Added the labelvier snippet (version 3)"
+  grep -qxF '<!-- labelvier-ai:start version=3 -->' "$CLAUDE_DIR/CLAUDE.md"
   grep -qxF '@labelvier/GLOBAL.md' "$CLAUDE_DIR/CLAUDE.md"
+  grep -qxF '@labelvier/CLI.md' "$CLAUDE_DIR/CLAUDE.md"
   grep -qxF '@labelvier/WORDPRESS.md' "$CLAUDE_DIR/CLAUDE.md"
   grep -qxF '@labelvier/ANGULAR.md' "$CLAUDE_DIR/CLAUDE.md"
   grep -qxF '@labelvier/BACKEND.md' "$CLAUDE_DIR/CLAUDE.md"
@@ -380,7 +381,7 @@ hook_entries_in_settings() {
   run_ai claude install < /dev/null
   [ "$status" -eq 0 ]
   assert_output_contains "Up to date, skipped: $CLAUDE_DIR/labelvier/GLOBAL.md (version"
-  assert_output_contains "✓ CLAUDE.md snippet is up to date (version 2)"
+  assert_output_contains "✓ CLAUDE.md snippet is up to date (version 3)"
   assert_output_contains "Up to date, skipped: $SKILL_DIR/SKILL.md"
   assert_output_contains "✓ timesheet skill dependencies already installed"
   assert_output_contains "✓ caveman plugin already installed"
@@ -444,7 +445,7 @@ EOF
 
   run_ai claude install < /dev/null
   [ "$status" -eq 0 ]
-  assert_output_contains "Updated the labelvier snippet in $CLAUDE_DIR/CLAUDE.md (version 0 → 2)"
+  assert_output_contains "Updated the labelvier snippet in $CLAUDE_DIR/CLAUDE.md (version 0 → 3)"
   grep -qxF '# my notes' "$CLAUDE_DIR/CLAUDE.md"
   grep -qxF '@RTK.md' "$CLAUDE_DIR/CLAUDE.md"
   grep -qxF 'keep this line too' "$CLAUDE_DIR/CLAUDE.md"
@@ -918,10 +919,10 @@ EOF
 
 # --- ai mistral --------------------------------------------------------------
 
-# The block version ai.sh should write: layout 1, then the inlined template stamps.
+# The block version ai.sh should write: layout 2, then the inlined template stamps.
 vibe_block_version() {
-  local version="1" name
-  for name in GLOBAL WORDPRESS ANGULAR BACKEND; do
+  local version="2" name
+  for name in GLOBAL CLI WORDPRESS ANGULAR BACKEND; do
     version="$version-$(template_version "$TPL_DIR/labelvier/$name.md.tpl")"
   done
   echo "$version"
