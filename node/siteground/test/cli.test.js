@@ -502,3 +502,18 @@ test('site:login: prints the one-time admin link when stdout is not a terminal, 
 	const missing = await run(['site:login'], { env: loggedIn() });
 	assert.equal(missing.stderr, 'Error: Domain is required, e.g. labelvier siteground site:info example.com\n');
 });
+
+test('site:db-password: refuses without --yes when there is no terminal; with --yes saves, then changes', async () => {
+	const refused = await run(['site:db-password', 'analytics.labelvier.dev'], { env: loggedIn() });
+	assert.equal(refused.code, 1);
+	assert.match(refused.stderr, /A new password for uabc123 breaks the site until its config has it\. Add --yes to confirm\./);
+	assert.ok(!requested().includes('PUT /db-mysql_user/4'));
+
+	const r = await run(['site:db-password', 'analytics.labelvier.dev', '--yes'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	const put = requests().find((x) => x.method === 'PUT' && x.url.endsWith('/db-mysql_user/4'));
+	const saved = JSON.parse(readFileSync(path.join(stateDir, '.credentials', 'analytics.labelvier.dev.json'), 'utf8')).database_user_uabc123;
+	assert.equal(saved.password, put.body.password);
+	assert.ok(saved.rotated_at && !saved.pending_since);
+	assert.match(r.stdout, new RegExp(`user uabc123  password ${saved.password.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+});

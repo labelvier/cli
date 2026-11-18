@@ -283,6 +283,31 @@ export async function createDatabase(st, { label }, progress) {
 	return { label, name: db.name, user: user.name, password, host: 'localhost' };
 }
 
+/**
+ * The database user to rotate. `user` matches the user's name or label; without it the site must
+ * have exactly one database user. Never guesses: throws when nothing or more than one matches.
+ */
+export function pickDbUser(users, user) {
+	const matches = user ? users.filter((u) => u.name === user || (u.label && u.label === user)) : users;
+	if (matches.length === 0) {
+		throw new Error(user ? `No database user "${user}" (found: ${users.map((u) => u.name).join(', ') || 'none'})` : 'This site has no database users');
+	}
+	if (matches.length > 1) throw new Error(`More than one database user, pick one with --user: ${matches.map((u) => u.name).join(', ')}`);
+	return matches[0];
+}
+
+/**
+ * Give a database user (from pickDbUser) a new generated password. `before` runs with
+ * { user, password } before SiteGround is asked, so the caller can save the password first:
+ * if the change fails halfway, the password that may now be live is not lost. Returns { user, password }.
+ */
+export async function rotateDbPassword(st, target, { before } = {}) {
+	const password = generatePassword();
+	if (before) await before({ user: target.name, password });
+	await st.setDbUserPassword(target.id, password);
+	return { user: target.name, password };
+}
+
 // --- PHP ----------------------------------------------------------------------
 
 /**

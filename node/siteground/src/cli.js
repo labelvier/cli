@@ -43,6 +43,8 @@ import {
 	defaultSshAlias,
 	addSshAlias,
 	createDatabase,
+	rotateDbPassword,
+	pickDbUser,
 	serverPhpVersions,
 	parsePhpVersion,
 	phpLabel,
@@ -100,6 +102,10 @@ Site Tools (existing site)
                                              Logs in as the first admin @labelvier.nl (or @<domain>), else
                                              as SiteGround's pick; "any" skips that
   site:db <domain> [--db <label>]            Create MySQL database + user with all privileges
+  site:db-password <domain> [--user <name>] [--yes]
+                                             Give a database user a new generated password (prints it
+                                             once, saved in .credentials); --user when there are several;
+                                             asks first, --yes skips that (required without a terminal)
   site:cron <domain>                         List cron jobs
   site:cron <domain> --add "<command>" [--at "<min hour day mon dow>"]
                                              Add a cron job (default every minute; @hourly/@daily/… also work)
@@ -127,6 +133,7 @@ const { positionals, values } = parseArgs({
 		'no-ssh-alias': { type: 'boolean' },
 		db: { type: 'string' },
 		'no-db': { type: 'boolean' },
+		user: { type: 'string' }, // site:db-password: which database user
 		off: { type: 'boolean' },
 		demo: { type: 'boolean' }, // hidden: see src/demo.js
 		add: { type: 'string' },
@@ -641,6 +648,30 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		});
 		const file = await storeCredentials(domain, { [`database_${db.name}`]: db });
 		console.log(`name ${db.name}  user ${db.user}  password ${db.password}  host localhost\nSaved in ${file}`);
+	},
+
+	async 'site:db-password'(sg, [domain]) {
+		const { st } = await siteToolsFor(sg, domain);
+		const users = await task('Getting database users…', () => st.dbUsers(), { done: (u) => `${u.length} database user(s)` });
+		const target = pickDbUser(users, values.user);
+		// The site loses its database connection until its config has the new password.
+		if (!values.yes) {
+			if (!interactive) throw new Error(`A new password for ${target.name} breaks the site until its config has it. Add --yes to confirm.`);
+			if (!(await confirm(`Set a new password for database user ${target.name}? The site cannot reach its database until .env / wp-config.php has it.`, { defaultValue: false }))) return console.log('Cancelled.');
+		}
+		const key = `database_user_${target.name}`;
+		let file, saved;
+		try {
+			await task('Setting a new database password…', () => rotateDbPassword(st, target, {
+				// Saved before SiteGround is asked: a failed or timed-out change cannot lose a password that may be live.
+				before: async (db) => { saved = db; file = await storeCredentials(domain, { [key]: { ...db, pending_since: new Date().toISOString() } }); },
+			}), { done: `New password set for database user ${target.name}` });
+		} catch (err) {
+			if (file) console.error(`The new password is saved in ${file} (${key}, pending): SiteGround may have set it anyway. Check before you run this again.`);
+			throw err;
+		}
+		await storeCredentials(domain, { [key]: { ...saved, rotated_at: new Date().toISOString() } });
+		console.log(`user ${saved.user}  password ${saved.password}\nSaved in ${file}\nUpdate the site config (.env / wp-config.php) with this password now.`);
 	},
 
 	async 'site:cron'(sg, [domain]) {

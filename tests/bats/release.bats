@@ -478,6 +478,82 @@ make_package_json() {
   [ ! -f CHANGELOG.md ]
 }
 
+# Tag prefix: a project that tags v1.2.3 keeps doing so.
+
+@test "finish copies the prefix of the latest version tag (v1.0.0 -> v1.1.0)" {
+  add_bare_remote
+  git -C "$REPO" tag -a v1.0.0 -m "" master
+  on_develop
+  git checkout -q -b release/1.1.0
+  commit_file VERSION 1.1.0
+  run_cli release finish
+  [ "$status" -eq 0 ]
+  assert_output_contains "Creating tag v1.1.0"
+  [ "$(git rev-parse v1.1.0^{commit})" = "$(git rev-parse master)" ]
+  ! git show-ref --verify --quiet refs/tags/1.1.0
+  git -C "$BARE" show-ref --verify --quiet refs/tags/v1.1.0
+}
+
+@test "finish follows the most recent tag when old tags have no prefix" {
+  add_bare_remote
+  git -C "$REPO" tag -a 0.9.0 -m "" master
+  sleep 1
+  git -C "$REPO" tag -a v1.0.0 -m "" master
+  on_develop
+  git checkout -q -b release/1.1.0
+  commit_file VERSION 1.1.0
+  run_cli release finish
+  [ "$status" -eq 0 ]
+  assert_output_contains "Creating tag v1.1.0"
+}
+
+@test "finish prefers gitflow.prefix.versiontag over existing tags" {
+  add_bare_remote
+  git -C "$REPO" tag -a v1.0.0 -m "" master
+  git -C "$REPO" config gitflow.prefix.versiontag "rel-"
+  on_develop
+  git checkout -q -b release/1.1.0
+  commit_file VERSION 1.1.0
+  run_cli release finish
+  [ "$status" -eq 0 ]
+  assert_output_contains "Creating tag rel-1.1.0"
+}
+
+@test "finish accepts an empty gitflow.prefix.versiontag as no prefix" {
+  add_bare_remote
+  git -C "$REPO" tag -a v1.0.0 -m "" master
+  git -C "$REPO" config gitflow.prefix.versiontag ""
+  on_develop
+  git checkout -q -b release/1.1.0
+  commit_file VERSION 1.1.0
+  run_cli release finish
+  [ "$status" -eq 0 ]
+  assert_output_contains "Creating tag 1.1.0"
+}
+
+@test "finish keeps a prefix that is already in the branch name" {
+  add_bare_remote
+  git -C "$REPO" tag -a v1.0.0 -m "" master
+  on_develop
+  git checkout -q -b release/v1.1.0
+  commit_file VERSION 1.1.0
+  run_cli release finish
+  [ "$status" -eq 0 ]
+  assert_output_contains "Creating tag v1.1.0"
+  ! git show-ref --verify --quiet refs/tags/vv1.1.0
+}
+
+@test "finish ignores non-version tags when looking for the prefix" {
+  add_bare_remote
+  git -C "$REPO" tag -a backup-before-migration -m "" master
+  on_develop
+  git checkout -q -b release/1.0.0
+  commit_file VERSION 1.0.0
+  run_cli release finish
+  [ "$status" -eq 0 ]
+  assert_output_contains "Creating tag 1.0.0"
+}
+
 # --- merge-features --------------------------------------------------------
 
 @test "merge-features reports when there are no feature branches" {
