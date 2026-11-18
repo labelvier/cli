@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { saveSession, saveLoginEnv, SESSION_FILE, ENV_FILE, decodeJwt, loadLoginEnv } from './session.js';
 import { totp } from './totp.js';
@@ -54,11 +56,22 @@ export async function interactiveLogin({ timeoutMs = 15 * 60_000 } = {}) {
 	const creds = loadLoginEnv();
 	const profileDir = path.join(path.dirname(SESSION_FILE), '.browser-profile');
 	await disablePasswordManager(profileDir);
-	const context = await chromium.launchPersistentContext(profileDir, {
+	const launch = () => chromium.launchPersistentContext(profileDir, {
 		headless: false,
 		viewport: null,
 		args: ['--disable-save-password-bubble'],
 	});
+	let context;
+	try {
+		context = await launch();
+	} catch (err) {
+		// Other commands (site:login, ...) can start this login without the wrapper's Chromium install.
+		if (!/Executable doesn't exist|playwright install/i.test(err.message)) throw err;
+		console.log('Installing Chromium for the login…');
+		const res = spawnSync('npx', ['--no-install', 'playwright', 'install', 'chromium'], { stdio: 'inherit', cwd: path.dirname(fileURLToPath(import.meta.url)) });
+		if (res.status !== 0) throw new Error('Installing Chromium failed. Run: npx playwright install chromium (in node/siteground)');
+		context = await launch();
+	}
 	const page = context.pages()[0] || (await context.newPage());
 
 	// One pass over the page after every load (and every second: the login app is a SPA), see autoLogin.

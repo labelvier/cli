@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# inc/ai.sh: Claude Code setup (ai check / update / claude install|uninstall / basecamp).
+# inc/ai.sh: Claude Code setup (ai check / update / claude install|uninstall / mistral install|uninstall / basecamp).
 #
 # Two things shape these tests:
 # - The sandbox PATH is cut down to the stubs plus the system dirs, so the
@@ -19,6 +19,9 @@ setup() {
   type -P jq >/dev/null 2>&1 || skip "jq is not installed (ai.sh needs it for settings.json)"
 
   CLAUDE_DIR="$HOME/.claude"
+  # The developer's own VIBE_HOME must never leak into the sandbox.
+  unset VIBE_HOME
+  VIBE_DIR="$HOME/.vibe"
   ENV_FILE="$CLAUDE_DIR/.env"
   TPL_DIR="$CLI_ROOT/templates/claude"
   HOOK="$CLAUDE_DIR/hooks/basecamp-toon.sh"
@@ -911,4 +914,323 @@ EOF
   assert_output_contains "Want the CLI to update itself automatically once a day? -> no"
   assert_output_contains "turn it on later with: labelvier core update --enable-auto"
   refute_stub_called '^launchctl'
+}
+
+# --- ai mistral --------------------------------------------------------------
+
+# The block version ai.sh should write: layout 1, then the inlined template stamps.
+vibe_block_version() {
+  local version="1" name
+  for name in GLOBAL WORDPRESS ANGULAR BACKEND; do
+    version="$version-$(template_version "$TPL_DIR/labelvier/$name.md.tpl")"
+  done
+  echo "$version"
+}
+
+# rtk, npm and an npx whose `skills add` drops the caveman skill into
+# $VIBE_HOME/skills (as the real skills CLI does with -g -a mistral-vibe).
+stub_vibe_toolchain() {
+  stub rtk
+  stub npm
+  stub npx '
+vibe="${VIBE_HOME:-$HOME/.vibe}"
+case "$3" in
+  add) mkdir -p "$vibe/skills/caveman"; printf "%s\n" "---" "name: caveman" "---" "" "Respond terse like smart caveman." "Never ADD word to sound caveman." > "$vibe/skills/caveman/SKILL.md" ;;
+  remove) rm -rf "$vibe/skills/caveman" ;;
+esac'
+}
+
+# A Claude Code timesheet skill for the Vibe link to point at.
+make_claude_skill() {
+  mkdir -p "$1"
+  echo "---" > "$1/SKILL.md"
+}
+
+@test "ai mistral without a subcommand prints the nested help" {
+  run_ai mistral
+  [ "$status" -eq 0 ]
+  assert_output_contains "labelvier ai mistral"
+  assert_output_contains "install - Writes the labelvier block into $VIBE_DIR/AGENTS.md"
+  assert_output_contains "uninstall - Removes the labelvier block"
+}
+
+@test "ai mistral install --help prints the description and does not install" {
+  run_ai mistral install --help < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "install - Writes the labelvier block"
+  [ ! -e "$VIBE_DIR" ]
+}
+
+@test "ai mistral nope reports an unknown command and fails" {
+  run_ai mistral nope
+  [ "$status" -eq 1 ]
+  assert_output_contains "✗ Unknown command: nope"
+}
+
+@test "ai mistral install inlines the templates into AGENTS.md and installs LARAVEL.md" {
+  stub_vibe_toolchain
+  mkdir -p "$VIBE_DIR"
+  printf '# my own notes\n' > "$VIBE_DIR/AGENTS.md"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Added the labelvier block (version $(vibe_block_version)) to $VIBE_DIR/AGENTS.md"
+  refute_output_contains "Mistral Vibe was not found"
+
+  local agents="$VIBE_DIR/AGENTS.md"
+  [ "$(head -n 1 "$agents")" = "# my own notes" ]
+  grep -qxF "<!-- labelvier-ai:start version=$(vibe_block_version) -->" "$agents"
+  grep -qxF '<!-- labelvier-ai:end -->' "$agents"
+  grep -qxF '# Global instructions' "$agents"
+  grep -qxF '# WordPress development' "$agents"
+  grep -qxF '# Angular Development' "$agents"
+  grep -qxF '# Backend development' "$agents"
+  # Vibe has no @import: content is inlined, without stamps or refs.
+  [ "$(grep -c 'labelvier-ai-version' "$agents")" -eq 0 ]
+  [ "$(grep -c '^@labelvier/' "$agents")" -eq 0 ]
+  # BACKEND.md points at the Vibe copy of LARAVEL.md, not the Claude one.
+  grep -qF '`~/.vibe/labelvier/LARAVEL.md`' "$agents"
+  [ "$(grep -c '\.claude/' "$agents")" -eq 0 ]
+
+  cmp -s "$TPL_DIR/labelvier/LARAVEL.md.tpl" "$VIBE_DIR/labelvier/LARAVEL.md"
+  [ "$(file_mode "$VIBE_DIR/labelvier/LARAVEL.md")" = "600" ]
+}
+
+@test "ai mistral install is idempotent and does not grow AGENTS.md" {
+  stub_vibe_toolchain
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Mistral Vibe was not found"
+  assert_output_contains "Created $VIBE_DIR/AGENTS.md (empty)"
+  cp "$VIBE_DIR/AGENTS.md" "$TEST_TMP/first"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "✓ labelvier block in $VIBE_DIR/AGENTS.md is up to date"
+  assert_output_contains "Up to date, skipped: $VIBE_DIR/labelvier/LARAVEL.md"
+
+  run_ai mistral install --force < /dev/null
+  [ "$status" -eq 0 ]
+  cmp -s "$TEST_TMP/first" "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'labelvier-ai:start' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+}
+
+@test "ai mistral install replaces an outdated block and keeps personal content" {
+  stub_vibe_toolchain
+  mkdir -p "$VIBE_DIR"
+  cat > "$VIBE_DIR/AGENTS.md" <<'EOT'
+# mine
+<!-- labelvier-ai:start version=0-0 -->
+old content
+<!-- labelvier-ai:end -->
+keep this line too
+EOT
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Updated the labelvier block in $VIBE_DIR/AGENTS.md (version 0-0 → $(vibe_block_version))"
+  grep -qxF '# mine' "$VIBE_DIR/AGENTS.md"
+  grep -qxF 'keep this line too' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'old content' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  [ "$(grep -c 'labelvier-ai:start' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+  [ -f "$VIBE_DIR/AGENTS.md.bak" ]
+}
+
+@test "ai mistral install honours VIBE_HOME" {
+  stub_vibe_toolchain
+  export VIBE_HOME="$TEST_TMP/custom-vibe"
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  [ -f "$VIBE_HOME/AGENTS.md" ]
+  [ -f "$VIBE_HOME/labelvier/LARAVEL.md" ]
+  [ ! -e "$VIBE_DIR" ]
+}
+
+@test "ai mistral uninstall aborts without a yes" {
+  stub_vibe_toolchain
+  run_ai mistral install < /dev/null
+  run_ai mistral uninstall <<< "n"
+  [ "$status" -eq 1 ]
+  assert_output_contains "Aborted."
+  grep -q 'labelvier-ai:start' "$VIBE_DIR/AGENTS.md"
+}
+
+@test "ai mistral uninstall removes the block and LARAVEL.md, not AGENTS.md" {
+  stub_vibe_toolchain
+  mkdir -p "$VIBE_DIR"
+  printf '# my own notes\n' > "$VIBE_DIR/AGENTS.md"
+  run_ai mistral install < /dev/null
+
+  run_ai mistral uninstall <<< "y"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Removed the labelvier block from $VIBE_DIR/AGENTS.md"
+  [ "$(cat "$VIBE_DIR/AGENTS.md")" = "# my own notes" ]
+  [ ! -e "$VIBE_DIR/labelvier" ]
+}
+
+@test "ai check skips Mistral Vibe when it is not on this machine" {
+  run_ai check
+  assert_output_contains "- Mistral Vibe (optional, not installed)"
+  refute_output_contains "ai mistral install"
+}
+
+@test "ai check flags a missing or outdated Vibe block once Vibe is present" {
+  stub vibe
+  stub_vibe_toolchain
+  run_ai check
+  assert_output_contains "✗ labelvier block in $VIBE_DIR/AGENTS.md (missing, run: labelvier ai mistral install)"
+  assert_output_contains "✗ $VIBE_DIR/labelvier/LARAVEL.md (missing, run: labelvier ai mistral install)"
+
+  run_ai mistral install < /dev/null
+  run_ai check
+  assert_output_contains "✓ labelvier block in $VIBE_DIR/AGENTS.md (version $(vibe_block_version))"
+  assert_output_contains "✓ $VIBE_DIR/labelvier/LARAVEL.md (version"
+
+  sed "s/version=$(vibe_block_version)/version=0-0/" "$VIBE_DIR/AGENTS.md" > "$TEST_TMP/agents"
+  cp "$TEST_TMP/agents" "$VIBE_DIR/AGENTS.md"
+  run_ai check
+  assert_output_contains "(outdated: installed 0-0, available $(vibe_block_version); run: labelvier ai mistral install)"
+}
+
+@test "ai mistral install links the skills, wires rtk and installs caveman" {
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  make_claude_skill "$HOME/.agents/skills/basecamp"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$VIBE_DIR/skills/timesheet")" = "$CLAUDE_DIR/skills/timesheet" ]
+  [ "$(readlink "$VIBE_DIR/skills/basecamp")" = "$HOME/.agents/skills/basecamp" ]
+  # The dashboard skill is optional and not installed for Claude: no link, no complaint.
+  [ ! -e "$VIBE_DIR/skills/label-vier-dashboard-api" ]
+  refute_output_contains "Skipped the label-vier-dashboard-api skill"
+  assert_stub_called '^rtk init -g --agent vibe --auto-patch$'
+  assert_stub_called "^npx -y skills add JuliusBrussee/caveman --skill \\* -a mistral-vibe -g --yes$"
+  assert_output_contains "Installed caveman skills for Vibe"
+  assert_output_contains "Activated caveman for every Vibe session"
+  [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+  # The full SKILL.md ruleset, without its frontmatter.
+  grep -qxF 'Respond terse like smart caveman.' "$VIBE_DIR/AGENTS.md"
+  grep -qxF 'Never ADD word to sound caveman.' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c '^name: caveman$' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  [ "$(sed -n '/caveman-begin/{n;p;}' "$VIBE_DIR/AGENTS.md")" = "Respond terse like smart caveman." ]
+
+  : > "$STUB_LOG"
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "✓ timesheet skill already linked"
+  assert_output_contains "✓ caveman skills for Vibe already installed"
+  assert_output_contains "✓ caveman always on in $VIBE_DIR/AGENTS.md"
+  refute_stub_called '^npx'
+  [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+}
+
+@test "ai mistral install refreshes an outdated caveman block and keeps personal content" {
+  stub_vibe_toolchain
+  mkdir -p "$VIBE_DIR/skills/caveman"
+  printf '%s\n' "---" "name: caveman" "---" "New caveman rule." > "$VIBE_DIR/skills/caveman/SKILL.md"
+  cat > "$VIBE_DIR/AGENTS.md" <<'EOT'
+# mine
+<!-- caveman-begin -->
+old caveman rule
+<!-- caveman-end -->
+keep me
+EOT
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Activated caveman for every Vibe session"
+  grep -qxF '# mine' "$VIBE_DIR/AGENTS.md"
+  grep -qxF 'keep me' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'old caveman rule' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  grep -qxF 'New caveman rule.' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c '^<!-- caveman-begin -->$' "$VIBE_DIR/AGENTS.md")" -eq 1 ]
+
+  # A caveman update changes SKILL.md: the next install follows it.
+  printf '%s\n' "---" "name: caveman" "---" "Newer caveman rule." > "$VIBE_DIR/skills/caveman/SKILL.md"
+  run_ai mistral install < /dev/null
+  grep -qxF 'Newer caveman rule.' "$VIBE_DIR/AGENTS.md"
+  [ "$(grep -c 'New caveman rule.' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+}
+
+@test "ai mistral install asks for ai claude install when the timesheet skill is missing" {
+  stub_vibe_toolchain
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Skipped the timesheet skill"
+  assert_output_contains "labelvier ai claude install first"
+  [ ! -e "$VIBE_DIR/skills/timesheet" ]
+}
+
+@test "ai mistral install never replaces a real skill directory" {
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  mkdir -p "$VIBE_DIR/skills/timesheet"
+  echo "mine" > "$VIBE_DIR/skills/timesheet/SKILL.md"
+
+  run_ai mistral install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "already exists and is not a link"
+  [ ! -L "$VIBE_DIR/skills/timesheet" ]
+  grep -qx "mine" "$VIBE_DIR/skills/timesheet/SKILL.md"
+}
+
+@test "ai mistral install without rtk skips it and --skip-caveman skips caveman" {
+  stub_vibe_toolchain
+  unstub rtk
+  run_ai mistral install --skip-caveman < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Skipped rtk: it is not installed."
+  assert_output_contains "Skipped caveman (--skip-caveman)."
+  refute_stub_called '^npx'
+  [ "$(grep -c 'caveman-begin' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+}
+
+@test "ai mistral uninstall removes the links, rtk's Vibe hook and only the caveman skills" {
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  run_ai mistral install < /dev/null
+  mkdir -p "$HOME/.agents"
+  cat > "$HOME/.agents/.skill-lock.json" <<'EOT'
+{"skills":{"caveman":{"source":"JuliusBrussee/caveman"},"cavecrew":{"source":"JuliusBrussee/caveman"},"other":{"source":"someone/else"}}}
+EOT
+  : > "$STUB_LOG"
+
+  run_ai mistral uninstall <<< "y"
+  [ "$status" -eq 0 ]
+  [ ! -e "$VIBE_DIR/skills/timesheet" ]
+  # The Claude Code copy the link pointed at stays.
+  [ -f "$CLAUDE_DIR/skills/timesheet/SKILL.md" ]
+  assert_stub_called '^npx -y skills remove caveman cavecrew -a mistral-vibe -g --yes$'
+  assert_output_contains "Removed the caveman always-on block"
+  [ "$(grep -c 'caveman-begin' "$VIBE_DIR/AGENTS.md")" -eq 0 ]
+  refute_stub_called 'other'
+  assert_stub_called '^rtk init -g --agent vibe --uninstall --auto-patch$'
+}
+
+@test "ai check is green for a complete Vibe setup" {
+  stub vibe
+  stub_vibe_toolchain
+  make_claude_skill "$CLAUDE_DIR/skills/timesheet"
+  run_ai mistral install < /dev/null
+
+  run_ai check
+  assert_output_contains "✓ $VIBE_DIR/skills/timesheet (timesheet skill for Vibe)"
+  assert_output_contains "- $VIBE_DIR/skills/basecamp (basecamp skill for Vibe, optional, not installed)"
+  assert_output_contains "✓ rtk wired into Vibe"
+  assert_output_contains "✓ caveman skills for Vibe (always on)"
+  refute_output_contains "ai mistral install"
+
+  # Skill present, but the always-on block gone: flagged.
+  sed '/caveman-begin/,/caveman-end/d' "$VIBE_DIR/AGENTS.md" > "$TEST_TMP/agents"
+  cp "$TEST_TMP/agents" "$VIBE_DIR/AGENTS.md"
+  run_ai check
+  assert_output_contains "✗ caveman not always on in $VIBE_DIR/AGENTS.md"
+}
+
+@test "ai check flags rtk that is not wired into Vibe" {
+  stub vibe
+  stub rtk 'case "$*" in *"--agent vibe --dry-run"*) echo "[dry-run] would patch Vibe hooks.toml" ;; esac'
+  run_ai check
+  assert_output_contains "✗ rtk not fully wired into Vibe (run: labelvier ai mistral install)"
 }

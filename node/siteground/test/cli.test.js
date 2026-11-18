@@ -194,8 +194,8 @@ test('accounts: plans with site count and disk usage (spinner lines on stderr)',
 	assert.equal(r.code, 0, r.stderr);
 	assert.equal(r.stderr, '… Getting hosting plans…\n✔ 2 hosting plans\n');
 	assert.equal(r.stdout, [
-		'Develop - Hamerkop       1 sites  10/40 GB (25%), 30 GB free         GoGeek  Amsterdam',
-		'Basis - Albatros         1 sites  30/40 GB (75%), 10 GB free         GrowBig  Amsterdam',
+		'Develop - Hamerkop       1 sites  10/40 GB (25%), 30 GB free         GoGeek  Amsterdam  35.214.252.94',
+		'Basis - Albatros         1 sites  30/40 GB (75%), 10 GB free         GrowBig  Amsterdam  35.214.165.2',
 		'',
 	].join('\n'));
 	assert.deepEqual(requested().sort(), [
@@ -231,14 +231,14 @@ test('sites: list, filtered on --account, --json', async () => {
 	const all = await run(['sites'], { env: loggedIn() });
 	assert.equal(all.code, 0, all.stderr);
 	assert.equal(all.stdout, [
-		'SmczellITUpKZz09  analytics.labelvier.dev                  wordpress  active         Develop - Hamerkop',
-		'TXpBd05EZz09  yoni.care                                wordpress  active         Basis - Albatros',
+		'SmczellITUpKZz09  analytics.labelvier.dev                  35.214.252.94    wordpress  active         Develop - Hamerkop',
+		'TXpBd05EZz09  yoni.care                                35.214.165.2     wordpress  active         Basis - Albatros',
 		'',
 	].join('\n'));
 	const filtered = await run(['sites', '--account', 'albatros'], { env: loggedIn() });
-	assert.equal(filtered.stdout, 'TXpBd05EZz09  yoni.care                                wordpress  active         Basis - Albatros\n');
+	assert.equal(filtered.stdout, 'TXpBd05EZz09  yoni.care                                35.214.165.2     wordpress  active         Basis - Albatros\n');
 	const json = await run(['sites', '--json', '--account', 'TFFEeVkzOEZJQT09'], { env: loggedIn() });
-	assert.deepEqual(JSON.parse(json.stdout).map((s) => s.domain), ['analytics.labelvier.dev']);
+	assert.deepEqual(JSON.parse(json.stdout).map((s) => [s.domain, s.ip]), [['analytics.labelvier.dev', '35.214.252.94']]);
 	const none = await run(['sites', '--account', 'nope'], { env: loggedIn() });
 	assert.equal(none.code, 1);
 	assert.match(none.stderr, /matched 0 accounts/);
@@ -399,4 +399,25 @@ test('create-site --demo --dry-run: server details hidden, demo plan name shown'
 	assert.doesNotMatch(r.stdout + r.stderr, /Hamerkop|35\.214|sgvps/);
 	assert.match(r.stderr, /✔ new\.labelvier\.dev points to the server\n/);
 	rmSync(sandbox, { recursive: true, force: true });
+});
+
+test('site:login: prints the one-time admin link when stdout is not a terminal, also from a URL', async () => {
+	const r = await run(['site:login', 'https://www.analytics.labelvier.dev/wp-admin/'], { env: loggedIn() });
+	assert.equal(r.code, 0, r.stderr);
+	assert.equal(r.stdout, 'http://analytics.labelvier.dev/wp_auto_login_abc.php\n');
+	assert.match(r.stderr, /✔ 1 app\(s\) with an admin login/);
+	assert.doesNotMatch(r.stderr, /wp_auto_login/, 'the link never shows up in the progress output');
+	assert.doesNotMatch(r.stderr, /Could not pick the admin/);
+	assert.deepEqual(requested().filter((c) => c.includes('/wordpress') || c.includes('/file')), [
+		'GET /wordpress',
+		'PUT /wordpress/3?auto_login=1',
+		'GET /file?filename=%2Fanalytics.labelvier.dev%2Fpublic_html%2Fwp_auto_login_abc.php',
+		'POST /file?filename=%2Fanalytics.labelvier.dev%2Fpublic_html%2Fwp_auto_login_abc.php',
+	]);
+	// --admin-domain any: SiteGround's own link, the script on the site is not touched
+	const any = await run(['site:login', 'analytics.labelvier.dev', '--admin-domain', 'any'], { env: loggedIn() });
+	assert.equal(any.code, 0, any.stderr);
+	assert.equal(requested().filter((c) => c.includes('/file')).length, 2, 'no extra /file calls with --admin-domain any');
+	const missing = await run(['site:login'], { env: loggedIn() });
+	assert.equal(missing.stderr, 'Error: Domain is required, e.g. labelvier siteground site:info example.com\n');
 });

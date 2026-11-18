@@ -22,6 +22,7 @@ labelvier siteground create-site --domain x.labelvier.dev --account Hamerkop --a
 labelvier siteground site:info x.labelvier.dev
 labelvier siteground site:ssl x.labelvier.dev        # after DNS points to the server
 labelvier siteground site:memcached|site:ssh-key|site:ssh|site:db x.labelvier.dev
+labelvier siteground site:login x.labelvier.dev [--print] [--admin-domain labelvier.nl|any]   # domain or URL; admin panel (WordPress) via a one-time auto-login link, as the first @labelvier.nl admin when there is one
 labelvier siteground site:cron x.labelvier.dev [--add "<command>" --at "* * * * *" | --remove <id>]
 labelvier siteground site:backup x.labelvier.dev [--create [--name "<label>"]]   # list backups / make an on-demand one
 labelvier siteground account:stats Albatros [--days 31 --top 15 --sort cpu|exec]   # which site eats CPU / executions
@@ -167,9 +168,14 @@ Writes return `task_id`; when the HTTP status is `202`, poll `GET /task/{id}` un
 | SSH key generate | `POST /ssh-key` `{"comment","password"}` | SiteGround generates the pair (not used) |
 | MySQL | `POST /db-mysql_db` `{"label"}`; `POST /db-mysql_user` `{"label","password"}`; `POST /db-mysql_grant` `{"db_id","dbuser_id","grants":{"all":1}}` | names are generated (`db…`, `u…`) |
 | Cron | `GET /cron`; `POST /cron` `{"cmd","min","hour","day","mon","dow"}`; `PUT /cron/{id}` (same body); `DELETE /cron/{id}` | crontab fields as strings; the UI sends dow `7` as `0`. Only route to cron on SiteGround: SSH has no `crontab`. Notification email: `GET/POST /cron-notify` (not used). GET + payload taken from the bundle; POST/DELETE not yet verified live |
+| WordPress installs | `GET /wordpress` | `id`, `app` (`wordpress`/`woocommerce`), `app_url`, `admin_url`, `path`, `is_staging`, plugins/themes |
+| WP auto-login | `PUT /wordpress/{id}?auto_login=1` body `{}` | → `data.autologin_url` = one-time `http://<domain>/wp_auto_login_<hash>.php` (treat as secret). "Log in to admin panel" in Site Tools |
+| File manager | `GET /dir?id=/example.com/public_html` (list: `n` name, `t` d/f, `p` perms); `GET /file?filename=<path>` (raw file, not JSON); `POST /file?filename=<path>` multipart field `file` (save) | paths start with the site folder (`/<domain_name>/<docroot>/…`). Used by `site:login` to patch the auto-login script |
 | Backups | `GET /backup` → `[{id, ts_start (unix s), instant_backup (1 manual / 0 system), instant_label}]`; `POST /backup` `{"instant_label"}` (required in the UI form; capped by `features.max_user_backups` in `GET /endpoint`); `DELETE /backup/{id}` (manual only, not used) | Taken from the Site Tools bundle, **not verified live**. Hourly tracks: `GET /backup?track=<id>` (`/backup-track`, premium) and restore via `/backup-restore*`: not used. `site:backup --create` without `--name` uses `cli-YYYY-MM-DD-HHMM` (local time, like the list); it polls the task for up to 30 min (`SG_TASK_ATTEMPTS` / `SG_TASK_INTERVAL_MS` override this, used by tests) and on a time-out reports that the backup is still running instead of failing |
 | PHP versions | `GET /php-version` | `[{id: 83, version: "PHP 8.3.35", default?, recommended?, mod_php}]` |
-| PHP version (main domain) | `PUT /uservice/{apacheId}` `{"settings":{"php_version":83}}`; `{"settings":{}}` = managed | apache uservice from `GET /uservice`. Other domains: `PUT /domain/{id}` `{"php_version":83}` (0 = managed), not used |
+| PHP version (main domain) | Ultrafast PHP (mod_php): `PUT /uservice/{apacheId}` `{"settings":{"php_version":83}}`, `{"settings":{}}` = managed. Standard PHP to Ultrafast: `POST /uservice` `{"type":"apache"}` (back: `DELETE /uservice/apache`) | apache uservice from `GET /uservice`; none = standard PHP, version then is `php_version` on the main domain in `GET /domain` (`PUT /domain/{id}` `{"php_version":83}`, 0 = managed; not used). `site:php` always switches to Ultrafast |
+
+`wp_auto_login_<hash>.php` (written by the PUT above, deletes itself on first run, ignored after 30 min) logs in as `get_users(['role'=>'administrator'])[0]`: no API parameter picks another user (`GET /wordpress-user?id=` only lists login names, for the change-password dialog). `site:login` therefore rewrites that line through the File Manager API before the link is opened (`preferAdminDomain` in `actions.js`): first administrator whose email ends in `@labelvier.nl` (`--admin-domain`, `any` = untouched), falling back to SiteGround's pick with a warning when reading/writing fails or the script changed shape.
 
 Other resources in the bundle: backup-restore*, dns-*, email*, ftp, location-* (redirects, protect, IP block),
 php-variable/extension, wordpress (incl. staging), webstats, errorlogs/accesslogs.

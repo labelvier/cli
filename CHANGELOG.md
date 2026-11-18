@@ -9,8 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `siteground site:backup <domain>` lists the Site Tools backups (system and manual); `--create [--name "<label>"]` makes an on-demand backup and waits until it is done (up to 30 minutes; if it is still running after that, the command says so and you should not run `--create` again). Times and the default label use local time. Endpoints are derived from the Site Tools bundle and tested against the fake API; not yet verified live.
+
+## [1.6.2] - 2026-11-16
+
+### Changed
+- `labelvier setup tools` asks right away whether to clean up wp-takeoff leftovers ([Y/n]), like it does for a missing tool. Without a terminal it only checks. The separate wp-takeoff section in `labelvier setup` is gone; the tools step covers it.
+
+## [1.6.1] - 2026-11-16
+
+### Fixed
+- Clicking the auto-update notification now leads to the wp-takeoff cleanup. `labelvier setup tools` fails when wp-takeoff leftovers exist, so the notification opens `labelvier setup`, and setup now starts with the cleanup. This also works for installs that update from 1.5.0 or 1.6.0.
+
+### Changed
+- After a manual update the wp-takeoff cleanup runs right away, before the question to run `labelvier setup`. Setup then skips the cleanup.
+
+## [1.6.0] - 2026-11-16
+
+### Added
+- `labelvier core cleanup`: finds leftovers of the old wp-takeoff CLI. Aliases that still call `wp-takeoff` (such as `wt`) in `.bashrc`, `.zshrc`, `.bash_profile` or `.zprofile` can be removed or changed to `labelvier`. The old `~/.wp-takeoff` checkout (also when it is a symlink) can be removed, together with the PATH line that added it. A checkout with uncommitted changes is never removed automatically.
+- The wp-takeoff check runs with the 12-hour update check and in `labelvier setup`.
+
+## [1.5.0] - 2026-11-12
+
+### Added
+- `labelvier ai mistral install|uninstall`: rolls the Label Vier GLOBAL/WORDPRESS/ANGULAR/BACKEND instructions out to Mistral Vibe as a managed block in `~/.vibe/AGENTS.md` (respects `VIBE_HOME`), with LARAVEL.md loaded on demand.
+- `labelvier ai mistral install` also links the timesheet, dashboard and basecamp skills into `~/.vibe/skills`, wires rtk into Vibe and installs the caveman skills for Vibe (`--skip-caveman` to leave it out).
+- Caveman is always on in Vibe: `ai mistral install` writes the full caveman ruleset (from the installed `SKILL.md`) into `~/.vibe/AGENTS.md` as a `<!-- caveman-begin/end -->` block, because Vibe does not auto-activate skills.
+- `labelvier ai check` reports the Mistral Vibe config when Vibe is installed.
+- `labelvier siteground sites` and `labelvier siteground accounts` show the hosting server IP next to each site/account.
+
+## [1.4.1] - 2026-11-11
+
+### Changed
+
+- `WORDPRESS.md` (AI config, stamp 3) gets a Testing section: functional Playwright tests for interactive and critical changes, smoke and axe checks on touched templates, PHPUnit for business logic, no default screenshot tests. Subagents with a narrower scope list the tests they need instead of writing them.
+
+## [1.4.0] - 2026-11-05
+
+### Added
+
+- `l4 --version` (and `-v`) prints the installed version.
+- `l4 changelog` opens the changelog in a pager, like `man`, with colour and bold markdown.
+
+## [1.3.1] - 2026-11-05
+
+### Changed
+
+- WORDPRESS.md template: prefer Action Scheduler over WP-Cron for cron jobs (template version 2).
+
+### Documentation
+
+- AGENTS.md: bump the `labelvier-ai-version` stamp whenever an AI config template changes.
+
+## [1.3.0] - 2026-11-04
+
+### Added
+- `siteground site:login <domain|url>` opens the WordPress admin panel in the browser with a one-time login link (`--print` prints the link instead). SiteGround always logs in as the first administrator and has no option to choose; `site:login` therefore patches the login script on the site through the File Manager API, so the first administrator with an `@labelvier.nl` address is used when there is one. `--admin-domain <domain>` changes the domain, `--admin-domain any` keeps SiteGround's choice. When the script cannot be read or changed, it warns and uses the unchanged link.
+- `siteground site:info` shows the storage a site uses, with its share of the plan limit.
 - `LARAVEL.md` global Claude config: the default Label Vier Laravel stack (latest Laravel, Livewire + Flux UI free, MariaDB, Sail, Pest, Playwright, Deployer) and its conventions, distilled from the existing Laravel projects. New projects and dependencies always start on the latest stable versions. Deploys go through GitOps, set up with `labelvier gitops setup`.
 - `BACKEND.md`: a short router that is always loaded and tells Claude to read `LARAVEL.md` only for Laravel work, so other sessions don't spend tokens on it. `ai claude install` installs both and wires `BACKEND.md` into `~/.claude/CLAUDE.md`. The managed snippet moves to version 2, so `ai check` flags existing installs as outdated until the next install.
+
+### Changed
+- `core update` shows a friendlier, clickable update notification.
+- CI runs on Node 24 and only on pull requests and pushes to `develop` and `master`. Playwright is updated to 1.64.1.
+
+### Fixed
+- A SiteGround session that is expired or rejected (for example `sessionexpired` on the token refresh), or missing, starts the browser login in a terminal and carries on, instead of failing with an error. Piped runs and sessions from `SG_REFRESH_TOKEN` still fail with a hint. Chromium for the login is installed on demand.
+- `siteground site:php` switches sites on standard PHP to Ultrafast PHP before setting the version.
 
 ## [1.2.1] - 2026-10-23
 

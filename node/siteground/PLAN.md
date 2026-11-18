@@ -29,6 +29,9 @@
       `analytics.labelvier.dev`; adding and deleting not yet verified live.
 - [x] Backups: `site:backup` lists and creates on-demand backups (`--create [--name]`). Endpoints from the bundle,
       tested against the fake API only; not yet verified live (needs an approval per command).
+- [x] `site:login <domain|url>`: wp-admin via the Site Tools one-time auto-login link (`--print` prints it).
+      Verified live on `chat.labelvier.dev` (2026-10-28).
+- [ ] `site:login` for Laravel: add an entry to `LOGIN_APPS` (src/actions.js) once we know how to get a login link.
 - [ ] More Site Tools options when needed: staging, redirects, email.
 - [ ] `delete-site` (endpoints known: `GET /sites/{id}/delete`, `DELETE /sites/{id}`), only with explicit confirm.
 - [ ] Tests for the payload builders (no network).

@@ -75,6 +75,10 @@ Running `labelvier` (or `l4`) with no arguments lists all available
 commands. Running any command without arguments lists all available
 subcommands for it — e.g. `labelvier core` lists everything under `core`.
 
+`l4 --version` (or `-v`) prints the installed version. `l4 changelog` opens
+the changelog in a pager (like `man`; `q` quits, `$PAGER` is honoured). Piped
+output is plain text.
+
 ### Install the WordPress starter kit
 
 Run this from the folder where all your projects live:
