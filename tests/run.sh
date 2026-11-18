@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run the whole test suite: syntax check, bats (bash) and node:test (node/siteground).
+# Run the whole test suite: syntax check, bats (bash) and node:test (every node/<tool> with a test/ dir).
 #
 # Usage: tests/run.sh [bats|node|syntax] [-- <extra bats args>]
 # No argument runs everything. Needs bats-core (brew install bats-core) and node 20+.
@@ -56,12 +56,22 @@ run_bats() {
 }
 
 run_node() {
-  section "node:test (node/siteground)"
   if ! command -v node >/dev/null 2>&1; then
     echo "${red}✗${reset} node not found"
     return 1
   fi
-  (cd "$ROOT/node/siteground" && node --test "$@" "test/*.test.js")
+  local dir failed=0
+  for dir in "$ROOT"/node/*/; do
+    dir="${dir%/}"
+    [ -d "$dir/test" ] || continue
+    section "node:test (node/$(basename "$dir"))"
+    # uptime-kuma imports socket.io-client; install it the first time, like the wrapper does.
+    if grep -q '"dependencies"' "$dir/package.json" && [ ! -d "$dir/node_modules" ]; then
+      npm --prefix "$dir" ci --silent --no-audit --no-fund >/dev/null || { failed=1; continue; }
+    fi
+    (cd "$dir" && node --test "$@" "test/*.test.js") || failed=1
+  done
+  return "$failed"
 }
 
 case "$what" in

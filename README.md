@@ -109,3 +109,28 @@ the form in by itself; without the secret you still type the 2FA code. Without
 setup, `login` just opens the browser for you. A reCAPTCHA or a missing value
 is left for you in the browser window. `logout` removes the session and browser
 profile; `logout --forget` also the stored credentials.
+
+### Uptime Kuma
+
+`labelvier uptime-kuma` manages the monitors on
+[status.labelvier.nl](https://status.labelvier.nl) through the same Socket.IO
+API as its web interface. It is a Node CLI in `node/uptime-kuma` and replaces
+the `uptime-kuma` script in the uptime-kuma Docker project.
+
+```sh
+labelvier uptime-kuma login                          # once; stores a token, not the password
+labelvier uptime-kuma list --domain example.com      # domain incl. subdomains and www
+labelvier uptime-kuma pause --id 12,13               # writes list the monitors and ask first
+labelvier uptime-kuma delete --domain old-site.nl
+labelvier uptime-kuma set-interval 300 --all --yes
+labelvier uptime-kuma                                # all commands and filters
+```
+
+`login` takes the CLI user (`USERNAME`/`PASSWORD`) from
+`~/Sites/uptime-kuma/.env` when you have that checkout (`--from-env <file>` for
+another file), and asks otherwise. Only those two keys are read: the rest of that
+file is server configuration such as the database root password. The login is
+swapped for a token in `~/.config/labelvier/uptime-kuma/.env` (chmod 600,
+override the directory with `KUMA_STATE_DIR`). A password change on the server
+invalidates the token; run `login` again. For CI, pass `UPTIME_KUMA_TOKEN` or
+`UPTIME_KUMA_USERNAME` + `UPTIME_KUMA_PASSWORD` (and `UPTIME_KUMA_URL`).
