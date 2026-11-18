@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { saveSession, saveLoginEnv, SESSION_FILE, ENV_FILE, decodeJwt, loadLoginEnv } from './session.js';
 import { totp } from './totp.js';
-import { confirm, ask, askSecret } from './prompt.js';
+import { confirm, ask, askSecret } from '../../lib/prompt.js';
 
 const USERNAME_SELECTOR = 'input[name="username"], input[type="email"], input[autocomplete="username"]';
 const OTP_SELECTOR = 'input[autocomplete="one-time-code"], input[name*="code" i], input[name*="otp" i], input[name*="token" i], input[name*="2fa" i], input[inputmode="numeric"]';
