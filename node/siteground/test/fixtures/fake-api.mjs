@@ -38,6 +38,8 @@ const uapi = {
 const siteTools = {
 	'GET /wordpress': [{ id: 3, app: 'wordpress', app_url: 'https://analytics.labelvier.dev/', path: '/', domain_name: 'analytics.labelvier.dev', docroot: 'public_html' }],
 	'PUT /wordpress/3?auto_login=1': { autologin_url: 'http://analytics.labelvier.dev/wp_auto_login_abc.php' },
+	'GET /db-mysql_user': [{ id: 4, label: 'wp', name: 'uabc123' }],
+	'PUT /db-mysql_user/4': {},
 	'GET /php-version': [{ id: 82, version: 'PHP 8.2.29', mod_php: true }, { id: 83, version: 'PHP 8.3.35', default: true, recommended: true, mod_php: true }],
 };
 

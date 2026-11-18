@@ -220,6 +220,11 @@ export class SiteToolsClient {
 		return this.post('/db-mysql_user', { label, password });
 	}
 
+	/** Set a new password for an existing database user (same call as "Change password" in Site Tools). */
+	setDbUserPassword(dbUserId, password) {
+		return this.put(`/db-mysql_user/${dbUserId}`, { password });
+	}
+
 	grantAll(dbId, dbUserId) {
 		return this.post('/db-mysql_grant', { db_id: dbId, dbuser_id: dbUserId, grants: { all: 1 } });
 	}
