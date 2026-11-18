@@ -570,7 +570,7 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		const missing = (await st.domains()).filter((d) => d.domain_type === 'alias' && !d.cert_id);
 		if (!missing.length) return;
 		const names = missing.map((d) => d.name).join(', ');
-		const withAliases = values.aliases ?? (interactive && (await confirm(`Also install SSL on parked domain(s) ${names}?`)));
+		const withAliases = values.aliases ?? (interactive && (await confirm(`Also install SSL on parked domain(s) ${names}?`, { defaultValue: false })));
 		if (!withAliases) {
 			if (values.aliases === undefined) console.log(`Parked domains without SSL: ${names} (add --aliases to include them)`);
 			return;
