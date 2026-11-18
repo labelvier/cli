@@ -46,12 +46,14 @@ const siteTools = {
 	'PUT /domain-all/1': {},
 	'PUT /domain-all/2': {},
 	'PUT /domain-all/3': {},
+	'GET /wordpress': [{ id: 3, app: 'wordpress', app_url: 'https://analytics.labelvier.dev/', path: '/', domain_name: 'analytics.labelvier.dev', docroot: 'public_html' }],
+	'PUT /wordpress/3?auto_login=1': { autologin_url: 'http://analytics.labelvier.dev/wp_auto_login_abc.php' },
 	'GET /php-version': [{ id: 82, version: 'PHP 8.2.29', mod_php: true }, { id: 83, version: 'PHP 8.3.35', default: true, recommended: true, mod_php: true }],
 };
 
 globalThis.fetch = async (url, init = {}) => {
 	const method = init.method || 'GET';
-	if (process.env.SG_TEST_FETCH_LOG) appendFileSync(process.env.SG_TEST_FETCH_LOG, `${JSON.stringify({ method, url, body: init.body ? JSON.parse(init.body) : undefined })}\n`);
+	if (process.env.SG_TEST_FETCH_LOG) appendFileSync(process.env.SG_TEST_FETCH_LOG, `${JSON.stringify({ method, url, body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body ? '<form>' : undefined })}\n`);
 	let table = uapi;
 	let key = `${method} ${url.replace('https://uapi.siteground.com/v1', '')}`;
 	if (url.startsWith(`https://${API_URL}/api-sgcp/v00`)) {
@@ -62,6 +64,13 @@ globalThis.fetch = async (url, init = {}) => {
 		const { domain, alias_to } = JSON.parse(init.body);
 		domains.push({ id: domains.length + 1, name: domain, main: 0, domain_type: 'alias', alias_to, cert_id: null, settings: { https_enforce: 0 } });
 		return new Response(JSON.stringify({ status: 200, message: 'OK', data: {} }), { status: 200, headers: { 'content-type': 'application/json' } });
+	}
+	// File manager: the login script as SiteGround writes it (raw, not JSON), saves are accepted.
+	if (key === 'GET /file?filename=%2Fanalytics.labelvier.dev%2Fpublic_html%2Fwp_auto_login_abc.php') {
+		return new Response('<?php\n\t\t$admins = get_users(array(\'role\'=>\'administrator\'));\n\t\t$user_id = $admins[0]->ID;\n', { status: 200 });
+	}
+	if (key === 'POST /file?filename=%2Fanalytics.labelvier.dev%2Fpublic_html%2Fwp_auto_login_abc.php') {
+		return new Response(JSON.stringify({ status: 200, message: 'OK' }), { status: 200, headers: { 'content-type': 'application/json' } });
 	}
 	if (!(key in table)) throw new Error(`fake-api: no canned answer for ${key}`);
 	return new Response(JSON.stringify({ status: 200, message: 'OK', data: table[key] }), { status: 200, headers: { 'content-type': 'application/json' } });

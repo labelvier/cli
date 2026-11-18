@@ -1,7 +1,8 @@
 import { readFile, writeFile, chmod, mkdir, rm } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { readEnvFile, writeEnvFile } from '../../lib/env.js';
 
 // Secrets live outside the code checkout so `labelvier core update` (git pull) never touches them.
 export const STATE_DIR = process.env.SG_STATE_DIR || path.join(homedir(), '.config', 'labelvier', 'siteground');
@@ -14,19 +15,7 @@ export const ENV_FILE = path.join(STATE_DIR, '.env');
  * left to the human in the browser window.
  */
 export function loadLoginEnv() {
-	const fromFile = {};
-	if (existsSync(ENV_FILE)) {
-		for (const raw of readFileSync(ENV_FILE, 'utf8').split('\n')) {
-			const line = raw.trim();
-			if (!line || line.startsWith('#')) continue;
-			const eq = line.indexOf('=');
-			if (eq === -1) continue;
-			const key = line.slice(0, eq).trim();
-			let value = line.slice(eq + 1).trim();
-			if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
-			fromFile[key] = value;
-		}
-	}
+	const fromFile = readEnvFile(ENV_FILE);
 	const get = (key) => process.env[key] || fromFile[key] || null;
 	return {
 		email: get('SG_LOGIN_EMAIL'),
@@ -37,14 +26,11 @@ export function loadLoginEnv() {
 
 /** Write STATE_DIR/.env (chmod 600). Keys with a null/empty value are left out. */
 export async function saveLoginEnv({ email, password, totpSecret }) {
-	const lines = ['# Automatic login for `labelvier siteground login`. Change with `siteground setup`, remove with `logout --forget`.'];
-	const add = (key, value) => value && lines.push(`${key}=${value}`);
-	add('SG_LOGIN_EMAIL', email);
-	add('SG_LOGIN_PASSWORD', password);
-	add('SG_TOTP_SECRET', totpSecret);
-	await mkdir(STATE_DIR, { recursive: true, mode: 0o700 });
-	await writeFile(ENV_FILE, lines.join('\n') + '\n');
-	await chmod(ENV_FILE, 0o600);
+	await writeEnvFile(ENV_FILE, 'Automatic login for `labelvier siteground login`. Change with `siteground setup`, remove with `logout --forget`.', {
+		SG_LOGIN_EMAIL: email,
+		SG_LOGIN_PASSWORD: password,
+		SG_TOTP_SECRET: totpSecret,
+	});
 }
 
 /**

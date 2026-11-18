@@ -20,7 +20,7 @@ setup() (
   }
 
   # @function all
-  # @description Walk through the whole setup: required tools, notifications, then the AI check and install. Runs when no subcommand is given.
+  # @description Walk through the whole setup: required tools (and old wp-takeoff leftovers), notifications, then the AI check and install. Runs when no subcommand is given.
   function all() {
     echo -e "${__bold}Label Vier CLI setup${__reset}"
     echo "Checks the tools the CLI needs and offers to install what is missing. Nothing is installed without your yes."
@@ -43,7 +43,7 @@ setup() (
   }
 
   # @function tools
-  # @description Check the required tools (Homebrew, git, jq, nvm, Node, Docker, Composer) and offer to install missing ones.
+  # @description Check the required tools (Homebrew, git, jq, nvm, Node, Docker, Composer) and old wp-takeoff leftovers, and offer to install missing tools.
   function tools() {
     local missing=""
 
@@ -59,6 +59,8 @@ setup() (
     _require_node || missing="$missing node"
     _require_docker || missing="$missing docker"
     _brew_tool composer "needed by the zed commands" composer || missing="$missing composer"
+
+    _require_no_legacy || missing="$missing wp-takeoff-leftovers"
 
     echo
     if [ -z "$missing" ]; then
@@ -101,6 +103,30 @@ setup() (
       echo -e "${__red}✗${__reset} $cmd is still not on your PATH. Open a new shell and run 'labelvier setup tools' again."
       return 1
     fi
+  }
+
+  # Leftovers of the old wp-takeoff CLI count as a problem too: the daily
+  # auto-update runs `setup tools` and sends a notification that opens
+  # `labelvier setup` when it fails. Asks to clean them up, like a missing
+  # tool. Skipped (passes) when the update flow just ran the cleanup itself.
+  function _require_no_legacy() {
+    [ -n "${LABELVIER_SKIP_CLEANUP:-}" ] && return 0
+    if ! core _has_legacy_leftovers; then
+      echo -e "${__green}✓${__reset} no old wp-takeoff CLI leftovers"
+      return 0
+    fi
+
+    echo -e "${__red}✗${__reset} The old wp-takeoff CLI left an alias or install behind."
+    if ! _confirm "  Clean it up now?"; then
+      echo "  Skipped. Run it later with: labelvier core cleanup"
+      return 1
+    fi
+    core cleanup
+    if core _has_legacy_leftovers; then
+      echo -e "${__red}✗${__reset} Some wp-takeoff leftovers are still there. Run: labelvier core cleanup"
+      return 1
+    fi
+    echo -e "${__green}✓${__reset} wp-takeoff leftovers cleaned up"
   }
 
   # On macOS /usr/bin/git is only a stub until the Xcode Command Line Tools

@@ -1,0 +1,13 @@
+{
+  "name": "labelvier-node-lib",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Helpers shared by the Node CLIs in node/<tool> (prompts, .env files). No dependencies.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
