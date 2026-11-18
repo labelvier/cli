@@ -1,0 +1,17 @@
+{
+  "name": "uptime-kuma-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Manage Label Vier's Uptime Kuma monitors over its Socket.IO API",
+  "type": "module",
+  "scripts": {
+    "kuma": "node src/cli.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
+  }
+}

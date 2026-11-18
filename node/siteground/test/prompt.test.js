@@ -3,7 +3,7 @@ import { test, describe, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 
-// src/prompt.js computes `interactive` at import time from process.stdin/stdout.isTTY.
+// node/lib/prompt.js computes `interactive` at import time from process.stdin/stdout.isTTY.
 // Under node --test both are pipes: that is the non-interactive module. The interactive one is
 // imported a second time (query string) after swapping process.stdin for a fake TTY.
 
@@ -11,7 +11,7 @@ describe('without a terminal', () => {
 	let prompt;
 	before(async () => {
 		assert.equal(process.stdin.isTTY, undefined, 'the runner pipes stdin');
-		prompt = await import('../src/prompt.js?notty');
+		prompt = await import('../../lib/prompt.js?notty');
 	});
 
 	test('interactive is false (a real boolean, even though stdin.isTTY is undefined on a pipe)', () => {
@@ -46,7 +46,7 @@ describe('with a fake terminal', () => {
 		});
 		Object.defineProperty(process, 'stdin', { value: input, configurable: true, enumerable: true });
 		out = fakeStream('stdout'); // the readline interface keeps a reference to it: swap once, reset per test
-		prompt = await import('../src/prompt.js?tty');
+		prompt = await import('../../lib/prompt.js?tty');
 	});
 	after(() => {
 		prompt.closePrompt();

@@ -16,7 +16,7 @@ function jwtExpiry(token, what) {
 	if (typeof payload.exp !== 'number') throw new Error(`${what} is not a valid JWT (no "exp" claim)`);
 	return new Date(payload.exp * 1000);
 }
-import { ask, confirm, select, closePrompt, interactive } from './prompt.js';
+import { ask, confirm, select, closePrompt, interactive } from '../../lib/prompt.js';
 import { task, suspendSpinner } from './spinner.js';
 import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
 import {
