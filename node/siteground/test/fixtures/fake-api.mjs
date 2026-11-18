@@ -36,6 +36,13 @@ const uapi = {
 	'POST /auth/refresh-client-token': { client_token: jwt({ exp: now + 3600, tokenType: 'access' }) },
 };
 const siteTools = {
+	'GET /backup': [
+		{ id: 11, ts_start: 1767225600, instant_backup: 0, instant_label: '' },
+		{ id: 12, ts_start: 1767312000, instant_backup: 1, instant_label: 'voor-release' },
+	],
+	'GET /task/BK1': { options: { completed: 1 }, response: { err_code: '0' } },
+	'GET /task/BKSLOW': { options: { completed: 0 } },
+	'GET /task/BKFAIL': { options: { completed: 1 }, response: { err_code: 17, err_message: 'No free backup slots' } },
 	'GET /wordpress': [{ id: 3, app: 'wordpress', app_url: 'https://analytics.labelvier.dev/', path: '/', domain_name: 'analytics.labelvier.dev', docroot: 'public_html' }],
 	'PUT /wordpress/3?auto_login=1': { autologin_url: 'http://analytics.labelvier.dev/wp_auto_login_abc.php' },
 	'GET /db-mysql_user': [{ id: 4, label: 'wp', name: 'uabc123' }],
@@ -51,6 +58,31 @@ globalThis.fetch = async (url, init = {}) => {
 	if (url.startsWith(`https://${API_URL}/api-sgcp/v00`)) {
 		table = siteTools;
 		key = `${method} ${url.replace(`https://${API_URL}/api-sgcp/v00`, '')}`;
+	}
+	// SG_TEST_NETWORK_ERROR="<METHOD> <path>" makes that request fail like fetch does without a connection (TypeError "fetch failed").
+	if (process.env.SG_TEST_NETWORK_ERROR === key) {
+		throw new TypeError('fetch failed', { cause: Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }) });
+	}
+	// Test knobs: SG_TEST_BACKUP_LIST_STATUS makes GET /backup fail with that HTTP status, SG_TEST_THROW_EMPTY throws an error without a message.
+	if (key === 'GET /backup' && process.env.SG_TEST_THROW_EMPTY) throw new Error('');
+	if (key === 'GET /backup' && process.env.SG_TEST_BACKUP_LIST_STATUS) {
+		const status = Number(process.env.SG_TEST_BACKUP_LIST_STATUS);
+		return new Response(JSON.stringify({ status, message: 'Backup service unavailable' }), { status, headers: { 'content-type': 'application/json' } });
+	}
+	// SG_TEST_TASK_THROW makes the status poll GET /task/BK1 throw a plain Error, like a failed session refresh.
+	if (key === 'GET /task/BK1' && process.env.SG_TEST_TASK_THROW) throw new Error(process.env.SG_TEST_TASK_THROW);
+	// SG_TEST_TASK_STATUS makes the status poll GET /task/BK1 fail with that HTTP status (the backup itself was accepted).
+	if (key === 'GET /task/BK1' && process.env.SG_TEST_TASK_STATUS) {
+		const status = Number(process.env.SG_TEST_TASK_STATUS);
+		return new Response(JSON.stringify({ status, message: 'Task service unavailable' }), { status, headers: { 'content-type': 'application/json' } });
+	}
+	// On-demand backup: a 202 with a task id (label "fail" makes the task fail, "slow" never finishes), like the real API.
+	if (key === 'POST /backup') {
+		const label = JSON.parse(init.body).instant_label;
+		if (label === 'apierror') return new Response(JSON.stringify({ status: 500, message: 'Internal error' }), { status: 500, headers: { 'content-type': 'application/json' } });
+		if (label === 'denied') return new Response(JSON.stringify({ status: 403 }), { status: 403, headers: { 'content-type': 'application/json' } });
+		const taskId = label === 'fail' ? 'BKFAIL' : label === 'slow' ? 'BKSLOW' : 'BK1';
+		return new Response(JSON.stringify({ status: 202, task_id: taskId }), { status: 202, headers: { 'content-type': 'application/json' } });
 	}
 	// File manager: the login script as SiteGround writes it (raw, not JSON), saves are accepted.
 	if (key === 'GET /file?filename=%2Fanalytics.labelvier.dev%2Fpublic_html%2Fwp_auto_login_abc.php') {

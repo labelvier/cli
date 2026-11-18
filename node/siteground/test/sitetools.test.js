@@ -1,7 +1,7 @@
 import { jsonResponse, jwt, now } from './helpers.js'; // first: sets HOME/SG_STATE_DIR, guards fetch
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { SiteToolsClient, SiteToolsError } from '../src/sitetools.js';
+import { SiteToolsClient, SiteToolsError, TaskTimeoutError } from '../src/sitetools.js';
 
 const API_URL = 'c1103939.sgvps.net';
 const BASE = `https://${API_URL}/api-sgcp/v00`;
@@ -265,6 +265,23 @@ test('Cron: create/update/delete payloads, day-of-week 7 is sent as 0', async (t
 	assert.equal(calls[2].body, undefined);
 });
 
+test('Backups: backups() lists GET /backup, createBackup() posts instant_label', async (t) => {
+	const list = [{ id: 1, ts_start: 1767225600, instant_backup: 1, instant_label: 'x' }];
+	const { st, calls } = client(t, { 'GET /backup': list, 'POST /backup': {} });
+	assert.deepEqual(await st.backups(), list);
+	await st.createBackup({ name: 'voor-release' });
+	assert.deepEqual(calls.map((c) => [c.method, c.endpoint, c.body]), [['GET', '/backup', undefined], ['POST', '/backup', { instant_label: 'voor-release' }]]);
+});
+
+test('Backups: createBackup() keeps polling past the default attempts and throws TaskTimeoutError when it runs out', async (t) => {
+	const { st, calls } = client(t, {
+		'POST /backup': () => jsonResponse({ status: 202, task_id: 'T9' }, 202),
+		'GET /task/T9': { options: { completed: 0 } },
+	});
+	await assert.rejects(st.createBackup({ name: 'x', wait: { attempts: 3, intervalMs: 1 } }), (err) => err instanceof TaskTimeoutError && err.taskId === 'T9');
+	assert.equal(calls.filter((c) => c.endpoint === '/task/T9').length, 3);
+});
+
 test('WordPress: wordpressApps lists /wordpress, wpAutoLoginUrl PUTs auto_login=1 and returns the link', async (t) => {
 	const { st, calls } = client(t, {
 		'GET /wordpress': [{ id: 2, app: 'wordpress' }],
@@ -308,4 +325,12 @@ test('get() unwraps data; the list helpers hit their resources', async (t) => {
 	assert.deepEqual(await st.cronJobs(), ['/cron']);
 	assert.deepEqual(await st.phpVersions(), ['/php-version']);
 	assert.equal(calls.length, 7);
+});
+
+test('SiteToolsError: detail is always a string and task marks polled-task failures', () => {
+	const empty = new SiteToolsError(403, { status: 403 }, 'POST /backup');
+	assert.equal(typeof empty.detail, 'string');
+	assert.equal(empty.task, false);
+	assert.equal(new SiteToolsError(500, null, 'GET /x').detail, 'error code 500');
+	assert.equal(new SiteToolsError(17, { err_message: 'full' }, 'task T1', { task: true }).task, true);
 });

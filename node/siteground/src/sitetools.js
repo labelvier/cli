@@ -1,11 +1,29 @@
 import { decodeJwt } from './session.js';
 
 export class SiteToolsError extends Error {
-	constructor(status, body, url) {
-		const msg = body?.message || body?.err_message || JSON.stringify(body)?.slice(0, 300);
-		super(`${status} ${url}: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+	/** `task: true` when the error is the outcome of a polled task (waitForTask), not of a plain request. */
+	constructor(status, body, url, { task = false } = {}) {
+		// A body that is only a status envelope ({ status: 403 }) says nothing: fall back on the error code.
+		const informative = body != null && typeof body === 'object' && Object.keys(body).some((k) => k !== 'status');
+		const msg = body?.message || body?.err_message || (informative || (body != null && typeof body !== 'object') ? JSON.stringify(body)?.slice(0, 300) : '');
+		const text = typeof msg === 'string' ? msg : JSON.stringify(msg);
+		const detail = text || `error code ${status}`;
+		super(`${status} ${url}: ${detail}`);
+		this.detail = detail;
+		this.url = url;
+		this.task = task;
+		/** `polling: true` when asking for the task's status failed (set by waitForTask); the task itself may still be running. */
+		this.polling = false;
 		this.status = status;
 		this.body = body;
+	}
+}
+
+/** A task was still running when we stopped waiting. It may well finish on its own. */
+export class TaskTimeoutError extends Error {
+	constructor(taskId) {
+		super(`Task ${taskId} did not finish in time`);
+		this.taskId = taskId;
 	}
 }
 
@@ -41,7 +59,7 @@ export class SiteToolsClient {
 		}
 	}
 
-	async request(method, endpoint, { body, params = {} } = {}, retry = true) {
+	async request(method, endpoint, { body, params = {}, wait } = {}, retry = true) {
 		await this.auth();
 		const qs = new URLSearchParams(params).toString();
 		const url = `https://${this.apiUrl}/api-sgcp/v00${endpoint}${qs ? `?${qs}` : ''}`;
@@ -56,10 +74,10 @@ export class SiteToolsClient {
 		});
 		if (res.status === 401 && retry) {
 			this.siteToken = null;
-			return this.request(method, endpoint, { body, params }, false);
+			return this.request(method, endpoint, { body, params, wait }, false);
 		}
 		const json = await res.json().catch(() => null);
-		if (res.status === 202 || json?.status === 202) return this.waitForTask(json?.task_id ?? json?.data?.task_id, json);
+		if (res.status === 202 || json?.status === 202) return this.waitForTask(json?.task_id ?? json?.data?.task_id, json, wait);
 		if (!res.ok || json?.status >= 400) throw new SiteToolsError(json?.status || res.status, json, `${method} ${endpoint}`);
 		return json;
 	}
@@ -68,22 +86,33 @@ export class SiteToolsClient {
 		if (!taskId) return initial;
 		for (let i = 0; i < attempts; i++) {
 			await new Promise((r) => setTimeout(r, intervalMs));
-			const { data: task } = await this.request('GET', `/task/${taskId}`);
+			let task;
+			try {
+				({ data: task } = await this.request('GET', `/task/${taskId}`));
+			} catch (err) {
+				// The task was accepted, so it may well be running: callers must not read this as "not started".
+				// That holds for every failure here, also a network error (fetch failed) that is no SiteToolsError.
+				if (err && typeof err === 'object') {
+					err.polling = true;
+					err.taskId = taskId;
+				}
+				throw err;
+			}
 			if (task?.options?.completed === 0) continue;
 			if (task?.response && parseInt(task.response.err_code, 10) !== 0) {
-				throw new SiteToolsError(task.response.err_code, task.response, `task ${taskId}`);
+				throw new SiteToolsError(task.response.err_code, task.response, `task ${taskId}`, { task: true });
 			}
 			return task;
 		}
-		throw new Error(`Task ${taskId} did not finish in time`);
+		throw new TaskTimeoutError(taskId);
 	}
 
 	get(endpoint, params) {
 		return this.request('GET', endpoint, { params }).then((r) => r.data);
 	}
 
-	post(endpoint, body) {
-		return this.request('POST', endpoint, { body });
+	post(endpoint, body, { wait } = {}) {
+		return this.request('POST', endpoint, { body, wait });
 	}
 
 	put(endpoint, body) {
@@ -294,6 +323,22 @@ export class SiteToolsClient {
 
 	deleteCronJob(id) {
 		return this.del(`/cron/${id}`);
+	}
+
+	// --- Backups -----------------------------------------------------------
+
+	/**
+	 * Backups: [{ id, ts_start (unix seconds), instant_backup (1 = manual, 0 = system), instant_label }].
+	 * Derived from the Site Tools bundle; not verified live.
+	 */
+	backups() {
+		return this.get('/backup');
+	}
+
+	/** On-demand backup. The UI form has one required field, `instant_label`; the number of manual backups is capped by the plan. */
+	createBackup({ name, wait = { attempts: 600 } }) {
+		// A full backup of a big site takes longer than the default 5 minutes; wait up to 30 minutes.
+		return this.post('/backup', { instant_label: name }, { wait });
 	}
 }
 

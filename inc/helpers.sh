@@ -327,8 +327,11 @@ function _prepare_node_cli() {
     return 0
   fi
   echo "Installing $label CLI dependencies…"
-  npm --prefix "$dir" ci --silent --no-audit --no-fund >/dev/null || {
+  local npm_output
+  npm_output=$(npm --prefix "$dir" ci --silent --no-audit --no-fund 2>&1) || {
     echo -e "${__red}✗${__reset} npm ci failed in ${__bold}$dir${__reset}."
+    [ -n "$npm_output" ] && echo "$npm_output" | tail -n 15
+    echo "Check your network and Node/npm versions, then run the command again."
     return 1
   }
 }
