@@ -11,6 +11,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `l4 release finish` respects the project's tag prefix: a project that tags `v1.2.3` no longer gets a bare `1.2.3` tag. The prefix comes from `gitflow.prefix.versiontag` when set (an empty value means no prefix), otherwise from the most recently created version tag. A prefix already in the branch name (`release/v1.2.3`) is kept as is.
 
+## [1.8.0] - 2026-11-18
+
+### Added
+- `labelvier uptime-kuma`: manage the monitors on status.labelvier.nl from the terminal. It replaces the `uptime-kuma` script in the uptime-kuma Docker project, which needed a Python venv and only supported Uptime Kuma 1.x (the server runs 2.3.2).
+  - `list`, `add <url>`, `pause`, `resume`, `delete` and `update`, plus `set-interval`, `set-timeout` and `set-method`.
+  - Pick monitors with `--domain` (includes subdomains and www), `--id`, `--filter`, `--name`, `--tag` or `--all`.
+  - Writes first list the monitors they will change and ask for confirmation; `--yes` skips the question.
+  - `add` uses our usual settings (every 5 minutes, HEAD, 3 retries, default notifications) and asks first when the domain already has a monitor.
+- `labelvier uptime-kuma login` reads the shared login from `~/Sites/uptime-kuma/.env` and stores only a token in `~/.config/labelvier/uptime-kuma` (chmod 600), never the password. Without a working token every command explains where the login is and offers to log in right away.
+- The `CLI.md` instructions for AI agents describe `uptime-kuma` (version 2). Run `labelvier ai update` to get them.
+
+### Changed
+- siteground and uptime-kuma share their terminal prompts, `.env` handling and wrapper checks (`node/lib`, `_prepare_node_cli`). siteground works as before.
+
+### Fixed
+- The siteground demo mode sometimes made a 9-character database name, which made a test fail at random.
+
+## [1.7.0] - 2026-11-18
+
+### Added
+- `CLI.md` instruction file for AI agents: what the `labelvier` commands do, the SiteGround workflows (SSH keys, cron, site setup) and which commands need confirmation first. `labelvier ai claude install` adds it to the CLAUDE.md snippet (version 3), `labelvier ai mistral install` inlines it in the Vibe block. Run `labelvier ai update` to get it.
+
+## [1.6.2] - 2026-11-16
+
+### Changed
+- `labelvier setup tools` asks right away whether to clean up wp-takeoff leftovers ([Y/n]), like it does for a missing tool. Without a terminal it only checks. The separate wp-takeoff section in `labelvier setup` is gone; the tools step covers it.
+
+## [1.6.1] - 2026-11-16
+
+### Fixed
+- Clicking the auto-update notification now leads to the wp-takeoff cleanup. `labelvier setup tools` fails when wp-takeoff leftovers exist, so the notification opens `labelvier setup`, and setup now starts with the cleanup. This also works for installs that update from 1.5.0 or 1.6.0.
+
+### Changed
+- After a manual update the wp-takeoff cleanup runs right away, before the question to run `labelvier setup`. Setup then skips the cleanup.
+
+## [1.6.0] - 2026-11-16
+
+### Added
+- `labelvier core cleanup`: finds leftovers of the old wp-takeoff CLI. Aliases that still call `wp-takeoff` (such as `wt`) in `.bashrc`, `.zshrc`, `.bash_profile` or `.zprofile` can be removed or changed to `labelvier`. The old `~/.wp-takeoff` checkout (also when it is a symlink) can be removed, together with the PATH line that added it. A checkout with uncommitted changes is never removed automatically.
+- The wp-takeoff check runs with the 12-hour update check and in `labelvier setup`.
+
+## [1.5.0] - 2026-11-12
+
+### Added
+- `labelvier ai mistral install|uninstall`: rolls the Label Vier GLOBAL/WORDPRESS/ANGULAR/BACKEND instructions out to Mistral Vibe as a managed block in `~/.vibe/AGENTS.md` (respects `VIBE_HOME`), with LARAVEL.md loaded on demand.
+- `labelvier ai mistral install` also links the timesheet, dashboard and basecamp skills into `~/.vibe/skills`, wires rtk into Vibe and installs the caveman skills for Vibe (`--skip-caveman` to leave it out).
+- Caveman is always on in Vibe: `ai mistral install` writes the full caveman ruleset (from the installed `SKILL.md`) into `~/.vibe/AGENTS.md` as a `<!-- caveman-begin/end -->` block, because Vibe does not auto-activate skills.
+- `labelvier ai check` reports the Mistral Vibe config when Vibe is installed.
+- `labelvier siteground sites` and `labelvier siteground accounts` show the hosting server IP next to each site/account.
+
+## [1.4.1] - 2026-11-11
+
+### Changed
+
+- `WORDPRESS.md` (AI config, stamp 3) gets a Testing section: functional Playwright tests for interactive and critical changes, smoke and axe checks on touched templates, PHPUnit for business logic, no default screenshot tests. Subagents with a narrower scope list the tests they need instead of writing them.
+
 ## [1.4.0] - 2026-11-05
 
 ### Added

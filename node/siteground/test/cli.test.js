@@ -194,8 +194,8 @@ test('accounts: plans with site count and disk usage (spinner lines on stderr)',
 	assert.equal(r.code, 0, r.stderr);
 	assert.equal(r.stderr, '… Getting hosting plans…\n✔ 2 hosting plans\n');
 	assert.equal(r.stdout, [
-		'Develop - Hamerkop       1 sites  10/40 GB (25%), 30 GB free         GoGeek  Amsterdam',
-		'Basis - Albatros         1 sites  30/40 GB (75%), 10 GB free         GrowBig  Amsterdam',
+		'Develop - Hamerkop       1 sites  10/40 GB (25%), 30 GB free         GoGeek  Amsterdam  35.214.252.94',
+		'Basis - Albatros         1 sites  30/40 GB (75%), 10 GB free         GrowBig  Amsterdam  35.214.165.2',
 		'',
 	].join('\n'));
 	assert.deepEqual(requested().sort(), [
@@ -231,14 +231,14 @@ test('sites: list, filtered on --account, --json', async () => {
 	const all = await run(['sites'], { env: loggedIn() });
 	assert.equal(all.code, 0, all.stderr);
 	assert.equal(all.stdout, [
-		'SmczellITUpKZz09  analytics.labelvier.dev                  wordpress  active         Develop - Hamerkop',
-		'TXpBd05EZz09  yoni.care                                wordpress  active         Basis - Albatros',
+		'SmczellITUpKZz09  analytics.labelvier.dev                  35.214.252.94    wordpress  active         Develop - Hamerkop',
+		'TXpBd05EZz09  yoni.care                                35.214.165.2     wordpress  active         Basis - Albatros',
 		'',
 	].join('\n'));
 	const filtered = await run(['sites', '--account', 'albatros'], { env: loggedIn() });
-	assert.equal(filtered.stdout, 'TXpBd05EZz09  yoni.care                                wordpress  active         Basis - Albatros\n');
+	assert.equal(filtered.stdout, 'TXpBd05EZz09  yoni.care                                35.214.165.2     wordpress  active         Basis - Albatros\n');
 	const json = await run(['sites', '--json', '--account', 'TFFEeVkzOEZJQT09'], { env: loggedIn() });
-	assert.deepEqual(JSON.parse(json.stdout).map((s) => s.domain), ['analytics.labelvier.dev']);
+	assert.deepEqual(JSON.parse(json.stdout).map((s) => [s.domain, s.ip]), [['analytics.labelvier.dev', '35.214.252.94']]);
 	const none = await run(['sites', '--account', 'nope'], { env: loggedIn() });
 	assert.equal(none.code, 1);
 	assert.match(none.stderr, /matched 0 accounts/);
