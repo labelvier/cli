@@ -32,6 +32,9 @@ export class KumaClient {
 			this.monitorList = list;
 			for (const resolve of this.waiters.splice(0)) resolve(list);
 		});
+		this.socket.on('notificationList', (list) => {
+			this.notificationList = list;
+		});
 		this.socket.on('info', (info) => {
 			if (info?.version) this.version = info.version;
 		});
@@ -91,6 +94,16 @@ export class KumaClient {
 				resolve(list);
 			});
 		});
+	}
+
+	/** Ids of the notifications marked "Default enabled", the ones the web form ticks for a new monitor. */
+	defaultNotificationIds() {
+		return (this.notificationList || []).filter((n) => n.isDefault).map((n) => n.id);
+	}
+
+	/** Create a monitor. Returns the new id. */
+	async add(monitor) {
+		return (await this.callOk('add', monitor)).monitorID;
 	}
 
 	async getMonitor(id) {

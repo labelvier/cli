@@ -120,6 +120,7 @@ the `uptime-kuma` script in the uptime-kuma Docker project.
 ```sh
 labelvier uptime-kuma login                          # once; stores a token, not the password
 labelvier uptime-kuma list --domain example.com      # domain incl. subdomains and www
+labelvier uptime-kuma add https://example.com        # HTTP monitor: 300s, HEAD, default notifications
 labelvier uptime-kuma pause --id 12,13               # writes list the monitors and ask first
 labelvier uptime-kuma delete --domain old-site.nl
 labelvier uptime-kuma set-interval 300 --all --yes

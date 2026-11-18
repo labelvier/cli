@@ -2,7 +2,8 @@
 import { parseArgs } from 'node:util';
 import { existsSync } from 'node:fs';
 import { KumaClient } from './client.js';
-import { selectMonitors, monitorHost } from './filter.js';
+import { selectMonitors, monitorHost, normalizeDomain } from './filter.js';
+import { monitorUrl, newHttpMonitor, DEFAULTS } from './monitor.js';
 import { loadConfig, saveConfig, clearConfig, credentialsFromProjectEnv, ENV_FILE, PROJECT_ENV_FILE, DEFAULT_URL } from './config.js';
 import { ask, askSecret, confirm, closePrompt, interactive } from './prompt.js';
 
@@ -16,6 +17,8 @@ Session
 
 Monitors
   list [filter] [--json] List monitors (all when no filter is given)
+  add <url> [--name <name>] [--interval <s>] [--timeout <s>] [--retries <n>] [--method <M>] [--paused]
+                         Add an HTTP monitor (defaults: ${DEFAULTS.interval}s, ${DEFAULTS.method}, ${DEFAULTS.maxretries} retries, default notifications)
   pause <filter>         Pause monitors
   resume <filter>        Resume monitors
   delete <filter>        Delete monitors (always asks, or --yes)
@@ -58,6 +61,7 @@ const OPTIONS = {
 	url: { type: 'string' },
 	username: { type: 'string' },
 	'from-env': { type: 'string' },
+	paused: { type: 'boolean' },
 	help: { type: 'boolean', short: 'h' },
 };
 
@@ -92,6 +96,13 @@ export function buildChanges(values) {
 	return changes;
 }
 
+/** Settings for a new monitor from the add options; defaults for what is not given. */
+export function buildNewMonitor(values) {
+	const url = monitorUrl(values.target);
+	const settings = values.interval || values.timeout || values.retries || values.method ? buildChanges(values) : {};
+	return newHttpMonitor({ url, name: values.name, ...settings, active: !values.paused });
+}
+
 /** Parse argv into { command, values }. The set-* shortcuts take their value as first positional. */
 export function parseCommand(argv) {
 	const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true });
@@ -103,6 +114,7 @@ export function parseCommand(argv) {
 		values[shortcut] = value;
 		return { command: 'update', values };
 	}
+	if (command === 'add') return { command, values: { ...values, target: value } };
 	if (value !== undefined) throw new Error(`Unexpected argument: ${value}`);
 	return { command, values };
 }
@@ -199,6 +211,34 @@ async function status() {
 	return 0;
 }
 
+async function add(values) {
+	if (values.name !== undefined && !values.name.trim()) throw new Error('--name cannot be empty');
+	const monitor = buildNewMonitor({ ...values, name: values.name?.trim() });
+	const client = await connected(loadConfig());
+	try {
+		const host = normalizeDomain(monitor.url);
+		const existing = Object.values(await client.monitors()).filter((m) => m.url === monitor.url || normalizeDomain(monitorHost(m)) === host);
+		if (existing.length) {
+			printMonitors(existing);
+			const question = `${existing.length} monitor(s) already watch ${host}. Add another one?`;
+			if (!values.yes) {
+				if (!interactive) throw new Error(`${question} Pass --yes to add it anyway.`);
+				if (!(await confirm(question, { defaultValue: false }))) {
+					console.log('Cancelled.');
+					return 1;
+				}
+			}
+		}
+		monitor.notificationIDList = Object.fromEntries(client.defaultNotificationIds().map((id) => [id, true]));
+		const id = await client.add(monitor);
+		const notifications = Object.keys(monitor.notificationIDList).length;
+		console.log(`✔ Added monitor ${id}: ${monitor.name} (${monitor.url}), every ${monitor.interval}s, ${monitor.method}, ${monitor.active ? 'active' : 'paused'}, ${notifications} default notification(s)`);
+		return 0;
+	} finally {
+		client.close();
+	}
+}
+
 const ACTIONS = {
 	pause: { verb: 'Pause', done: 'Paused', run: (c, m) => c.pause(m.id), skip: (m) => !m.active && 'already paused' },
 	resume: { verb: 'Resume', done: 'Resumed', run: (c, m) => c.resume(m.id), skip: (m) => m.active && 'already active' },
@@ -286,6 +326,8 @@ export async function main(argv) {
 				return 0;
 			case 'status':
 				return await status();
+			case 'add':
+				return await add(values);
 			case 'list':
 			case 'pause':
 			case 'resume':

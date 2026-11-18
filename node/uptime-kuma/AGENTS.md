@@ -12,6 +12,7 @@ supports Uptime Kuma 1.x.
 ## Code
 
 - [src/client.js](src/client.js): Socket.IO client. One dependency: `socket.io-client`.
+- [src/monitor.js](src/monitor.js): URL normalizing and the payload for a new HTTP monitor.
 - [src/filter.js](src/filter.js): picks monitors (`--domain`, `--filter`, `--id`, `--name`, `--tag`, `--all`). Pure, unit-tested.
 - [src/config.js](src/config.js): dotenv parser, stored login, the project `.env` import.
 - [src/cli.js](src/cli.js): argument parsing, commands, confirmation.
@@ -27,6 +28,8 @@ Uptime Kuma has no REST API for monitors. The web app talks Socket.IO; the handl
 | `login` | `{ username, password, token }` (`token` = 2FA code) | `{ ok, token }` or `{ tokenRequired: true }` |
 | `loginByToken` | JWT | `{ ok }`; `authInvalidToken` after a password change |
 | `monitorList` | pushed by the server after a login | object `id -> monitor` |
+| `add` | monitor object as the web form sends it | `{ ok, monitorID }` |
+| `notificationList` | pushed after a login | array; `isDefault` marks the ones a new monitor gets |
 | `getMonitor` | id | `{ ok, monitor }` (full object) |
 | `editMonitor` | full monitor object | `{ ok }`; `accepted_statuscodes` must be strings |
 | `pauseMonitor` / `resumeMonitor` | id | `{ ok }` |
@@ -52,5 +55,6 @@ the same way the edit form does. `--retries` maps to `maxretries` (the old scrip
 ## Tests
 
 `npm test` here, or `tests/run.sh node` from the repo root (runs `npm ci` first). The client tests use a
-fake socket; nothing touches the network. Writes (`pause`, `resume`, `delete`, `update`) are not covered
-against the live server: they change production monitors.
+fake socket; nothing touches the network. On 2026-11-18 `add`, `pause`, `resume` and `delete` were checked live with a throwaway monitor for
+apple.com (id 253, deleted again), and `update` with a no-op on monitor 1. Use such a throwaway monitor
+again for live checks, never existing client monitors.

@@ -21,7 +21,7 @@ Read that help before you guess flags. Missing arguments are asked for interacti
 | `deploy production [--yes]` | Deploy from master/main or `release/*`, log who deployed, purge the cache |
 | `deploy log [amount]` | Production deploy history of the project |
 | `siteground …` | SiteGround hosting through its API (see below) |
-| `uptime-kuma list\|pause\|resume\|delete\|update` | Monitors on status.labelvier.nl (see below) |
+| `uptime-kuma list\|add\|pause\|resume\|delete\|update` | Monitors on status.labelvier.nl (see below) |
 | `cron deploy <ssh-host>` | Upload `run_cron_jobs.sh` to a SiteGround server and set `DISABLE_WP_CRON` |
 | `ssh alias\|list\|search\|remove` | Manage Host aliases in `~/.ssh/config` |
 | `storage summary <host>` | Disk usage on a server; `convert-to-webp <host>` for uploads; `cleanup` for leftover dumps |
@@ -60,9 +60,10 @@ No SSH alias yet? Run `labelvier siteground site:ssh-key <domain>` first.
 
 - Login: `uptime-kuma status` shows if the stored token works. `uptime-kuma login` reads the login from `~/Sites/uptime-kuma/.env` when that checkout exists, otherwise it asks. It stores a token, never the password.
 - Pick monitors with one filter: `--domain <a.nl,b.nl>` (includes subdomains and www), `--id <1,2>`, `--filter <text>`, `--name <regex>`, `--tag <name>` or `--all`.
+- `add <url> [--name <name>]` creates an HTTP monitor (300s, HEAD, 3 retries, default notifications) and asks first when the domain is already monitored.
 - `list [filter] [--json]`, `pause`, `resume`, `delete`, `update --interval/--timeout/--retries/--method`. Writes show the matched monitors and ask first; `--yes` skips that.
 - A site that left our hosting: `uptime-kuma list --domain <domain>`, then `delete --domain <domain>`.
 
 ## Safety
 
-Many commands change remote servers, git branches or paid hosting. Never run them just to test or explore. Ask the user first for: `deploy`, `release finish`, `create-site`, `site:*` writes, `site:cron --add/--remove`, `cron deploy`, `migrate`, `storage cleanup`, `storage convert-to-webp` and `uptime-kuma pause/resume/delete/update`. Reading commands (`--help`, `accounts`, `sites`, `site:info`, `site:cron` without flags, `deploy log`, `ssh list`, `uptime-kuma list/status`) are safe.
+Many commands change remote servers, git branches or paid hosting. Never run them just to test or explore. Ask the user first for: `deploy`, `release finish`, `create-site`, `site:*` writes, `site:cron --add/--remove`, `cron deploy`, `migrate`, `storage cleanup`, `storage convert-to-webp` and `uptime-kuma add/pause/resume/delete/update`. Reading commands (`--help`, `accounts`, `sites`, `site:info`, `site:cron` without flags, `deploy log`, `ssh list`, `uptime-kuma list/status`) are safe.

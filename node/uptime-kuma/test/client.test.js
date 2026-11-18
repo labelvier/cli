@@ -60,3 +60,10 @@ test('delete never deletes group children', async () => {
 	await c.delete(9);
 	assert.deepEqual(socket.sent.at(-1), ['deleteMonitor', 9, false]);
 });
+
+test('add returns the new id; default notifications come from the pushed list', async () => {
+	const { c, socket } = await client({ add: { ok: true, monitorID: 42 } });
+	EventEmitter.prototype.emit.call(socket, 'notificationList', [{ id: 1, isDefault: true }, { id: 2, isDefault: false }]);
+	assert.deepEqual(c.defaultNotificationIds(), [1]);
+	assert.equal(await c.add({ name: 'x' }), 42);
+});
