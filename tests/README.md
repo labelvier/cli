@@ -7,7 +7,7 @@ Ubuntu and macOS (`.github/workflows/test.yml`).
 | --- | --- | --- | --- |
 | syntax | `tests/run.sh syntax` | `bash -n` | every bash file parses |
 | bash | `tests/bats/*.bats` | [bats-core](https://bats-core.readthedocs.io) (`brew install bats-core`) | entry script, dispatch, every `inc/*.sh` command collection, `scripts/*.sh` |
-| node | `node/siteground/test/*.test.js` | `node --test` (node 20+, no dependencies) | the SiteGround CLI: totp, session/env, client, sitetools, actions, cli, demo |
+| node | `node/*/test/*.test.js` | `node --test` (node 20+) | the Node CLIs and `node/lib` (env): siteground (totp, session/env, client, sitetools, actions, cli, demo) and uptime-kuma (filter, config, client, cli; `npm ci` runs first for socket.io-client) |
 
 ## Rules
 

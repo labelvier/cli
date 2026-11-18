@@ -12,35 +12,13 @@ siteground() (
   # Runs the command. Everything is forwarded to the Node CLI, which has its own subcommands
   # and help (`labelvier siteground` without arguments prints it).
   function main() {
-    if [ ! -f "$sg_dir/package.json" ]; then
-      echo -e "${__red}✗${__reset} SiteGround CLI not found in ${__bold}$sg_dir${__reset}. Check SG_CLI_DIR."
-      exit 1
-    fi
-    _require_npm || exit 1
-    if ! node -e 'process.exit(+process.versions.node.split(".")[0] < 20 ? 1 : 0)'; then
-      echo -e "${__red}✗${__reset} SiteGround CLI needs node 20 or newer, found $(node --version). Run: nvm install --lts"
-      exit 1
-    fi
-
-    _install_dependencies || exit 1
+    _prepare_node_cli "SiteGround" "$sg_dir" SG_CLI_DIR || exit 1
     _migrate_state
     if [ "$1" == "login" ]; then
       _install_chromium || exit 1
     fi
 
     SG_STATE_DIR="$state_dir" node "$sg_dir/src/cli.js" "$@"
-  }
-
-  # Installs node_modules on first use and again when package-lock.json changed (after `core update`).
-  function _install_dependencies() {
-    if [ -f "$sg_dir/node_modules/.package-lock.json" ] && [ ! "$sg_dir/package-lock.json" -nt "$sg_dir/node_modules/.package-lock.json" ]; then
-      return 0
-    fi
-    echo "Installing SiteGround CLI dependencies…"
-    npm --prefix "$sg_dir" ci --silent --no-audit --no-fund >/dev/null || {
-      echo -e "${__red}✗${__reset} npm ci failed in ${__bold}$sg_dir${__reset}."
-      return 1
-    }
   }
 
   # Playwright's Chromium is only needed for the browser login; the install is a no-op once present.

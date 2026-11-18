@@ -16,13 +16,17 @@ function jwtExpiry(token, what) {
 	if (typeof payload.exp !== 'number') throw new Error(`${what} is not a valid JWT (no "exp" claim)`);
 	return new Date(payload.exp * 1000);
 }
-import { ask, confirm, select, closePrompt, interactive } from './prompt.js';
-import { task } from './spinner.js';
+import { ask, confirm, select, closePrompt, interactive } from '../../lib/prompt.js';
+import { task, suspendSpinner } from './spinner.js';
 import { demo, enableDemo, fakeActions, pause, withDemoPlans } from './demo.js';
 import {
 	accountsOverview,
 	describeAccount,
+	describeSite,
 	findSite,
+	withServerIps,
+	siteDiskUsage,
+	describeDiskUsage,
 	siteUsage,
 	rankSites,
 	dnsPointsTo,
@@ -45,6 +49,10 @@ import {
 	parseCronSchedule,
 	cronSchedule,
 	addCronJob,
+	domainFromUrl,
+	loginApps,
+	adminLoginUrl,
+	openInBrowser,
 } from './actions.js';
 
 const HELP = `Usage: labelvier siteground <command> [options]
@@ -59,8 +67,8 @@ Session
                                  login credentials (.env)
 
 Overview
-  accounts                       Hosting plans with site count and disk usage
-  sites [--account <name|id>]    Websites, optionally filtered on plan
+  accounts                       Hosting plans with site count, disk usage and server IP
+  sites [--account <name|id>]    Websites with server IP, optionally filtered on plan
 
 Usage (find the site behind a CPU spike or an autoscale)
   account:stats <name|id> [--days 31] [--top 15] [--sort cpu|exec]
@@ -77,7 +85,7 @@ Create (asks for everything that is missing when run in a terminal)
               [--ssh-alias <name>|--no-ssh-alias] [--db <label>|--no-db] [--yes] [--dry-run]
 
 Site Tools (existing site)
-  site:info <domain>                         Domains, SSL, Memcached, SSH, databases
+  site:info <domain>                         Domains, SSL, PHP, Memcached, SSH, storage, databases
   site:memcached <domain> [--off]            Enable (or disable) Memcached
   site:php <domain> [--php <8.3|managed>]    Show or set the PHP version
   site:ssl <domain> [--no-https]             Let's Encrypt when DNS points to the server, force HTTPS
@@ -85,6 +93,11 @@ Site Tools (existing site)
                                              Authorize a public key (default ~/.ssh/id_ed25519.pub)
                                              and add a Host alias to ~/.ssh/config (via labelvier ssh alias)
   site:ssh <domain>                          Print the ssh command
+  site:login <domain|url> [--print] [--admin-domain <domain|any>]
+                                             Log in to the admin panel (WordPress) in the browser with a
+                                             one-time link; --print prints the link instead of opening it.
+                                             Logs in as the first admin @labelvier.nl (or @<domain>), else
+                                             as SiteGround's pick; "any" skips that
   site:db <domain> [--db <label>]            Create MySQL database + user with all privileges
   site:cron <domain>                         List cron jobs
   site:cron <domain> --add "<command>" [--at "<min hour day mon dow>"]
@@ -121,6 +134,8 @@ const { positionals, values } = parseArgs({
 		days: { type: 'string' },
 		top: { type: 'string' },
 		sort: { type: 'string' },
+		print: { type: 'boolean' }, // site:login: print the link instead of opening it
+		'admin-domain': { type: 'string' }, // site:login: prefer the first admin with this email domain
 		forget: { type: 'boolean' }, // logout: also remove the stored credentials
 		help: { type: 'boolean', short: 'h' },
 	},
@@ -254,12 +269,14 @@ const commands = {
 
 	async sites(sg) {
 		let sites = await task('Getting websites…', () => sg.sites(), { done: (s) => `${s.length} websites` });
+		const accounts = await sg.accounts();
 		if (values.account) {
-			const account = await sg.findAccount(values.account);
+			const account = await sg.findAccount(values.account, accounts);
 			sites = sites.filter((s) => s.account_id === account.id);
 		}
+		sites = withServerIps(sites, accounts);
 		if (values.json) return console.log(JSON.stringify(sites, null, 2));
-		for (const s of sites) console.log(`${s.id}  ${s.domain.padEnd(40)} ${s.cms.padEnd(10)} ${s.status.padEnd(14)} ${s.account_name}`);
+		for (const s of sites) console.log(describeSite(s));
 	},
 
 	async 'account:stats'(sg, [nameOrId = values.account]) {
@@ -489,8 +506,8 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 
 	async 'site:info'(sg, [domain]) {
 		const { site, account, st } = await siteToolsFor(sg, domain);
-		const [domains, certs, memcached, keys, dbs, ssh, phpVersions, php] = await task('Getting Site Tools details…', () =>
-			Promise.all([st.domains(), st.certificates(), st.memcached(), st.sshKeys(), st.databases(), sshCommand(st), st.phpVersions(), st.phpVersion()]),
+		const [domains, certs, memcached, keys, dbs, ssh, phpVersions, php, disk] = await task('Getting Site Tools details…', () =>
+			Promise.all([st.domains(), st.certificates(), st.memcached(), st.sshKeys(), st.databases(), sshCommand(st), st.phpVersions(), st.phpVersion(), siteDiskUsage(sg, site).catch(() => null)]),
 		);
 		console.log(`${site.domain} (${site.id}) on ${account.name} / ${account.server.ip}, status ${site.status}`);
 		for (const d of domains) {
@@ -501,6 +518,7 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 		console.log(`  PHP        ${phpLabel(phpVersions, php)}`);
 		console.log(`  Memcached  ${memcached ? 'on' : 'off'}`);
 		console.log(`  SSH        ${ssh}  (${keys.length} key(s): ${keys.map((k) => k.comment).join(', ') || '-'})`);
+		console.log(`  Storage    ${describeDiskUsage(disk)}`);
 		console.log(`  Databases  ${dbs.map((d) => `${d.name} "${d.label}"`).join(', ') || '-'}`);
 	},
 
@@ -513,15 +531,15 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 
 	async 'site:php'(sg, [domain]) {
 		const { st } = await siteToolsFor(sg, domain);
-		const [versions, current] = await task('Getting PHP versions…', () => Promise.all([st.phpVersions(), st.phpVersion()]), {
-			done: ([v, c]) => `Current: ${phpLabel(v, c)}`,
+		const [versions, current, apache] = await task('Getting PHP versions…', () => Promise.all([st.phpVersions(), st.phpVersion(), st.apacheService()]), {
+			done: ([v, c, a]) => `Current: ${phpLabel(v, c)}${a ? '' : ' (standard PHP; setting a version switches to Ultrafast PHP)'}`,
 		});
 		let target;
 		if (values.php !== undefined) target = parsePhpVersion(values.php, versions);
 		else if (interactive) {
 			target = await askPhp(versions);
 		} else return;
-		if (target === current) return console.log('Unchanged.');
+		if (apache && target === current) return console.log('Unchanged.');
 		await task(`Setting ${phpLabel(versions, target)}…`, () => setPhpVersion(st, target), { done: (m) => m });
 	},
 
@@ -548,6 +566,24 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 	async 'site:ssh'(sg, [domain]) {
 		const { st } = await siteToolsFor(sg, domain);
 		console.log(await task('Getting SSH details…', () => sshCommand(st), { done: 'SSH details fetched' }));
+	},
+
+	/** Log in to the admin panel of a site; takes a domain or a URL on it (https://www.x.nl/wp-admin). */
+	async 'site:login'(sg, [input]) {
+		const domain = input && domainFromUrl(input);
+		const { st } = await siteToolsFor(sg, domain);
+		const apps = await task('Getting installed apps…', () => loginApps(st, domain), { done: (a) => `${a.length} app(s) with an admin login` });
+		if (!apps.length) throw new Error(`No WordPress install found on ${domain}`);
+		const app = apps.length > 1 && interactive
+			? await select('Log in to:', apps.map((a) => ({ label: `${a.app_url}${a.is_staging ? '  (staging)' : ''}`, value: a })))
+			: apps[0];
+		const warnings = [];
+		const url = await task(`Creating login link for ${app.app_url}…`, () => adminLoginUrl(st, app, { adminDomain: values['admin-domain'], onWarn: (m) => warnings.push(m) }), { done: 'Login link created (one-time)' });
+		for (const w of warnings) console.error(`\x1b[33m!\x1b[0m Could not pick the admin: ${w}. The link logs in as SiteGround's default admin.`);
+		// The link is a login: only on stdout when asked for or piped, never in the spinner text.
+		if (values.print || !process.stdout.isTTY) return console.log(url);
+		if (await openInBrowser(url)) return console.log(`Opened the admin panel of ${app.app_url} in the browser.`);
+		console.log(`Could not open a browser. One-time login link:\n${url}`);
 	},
 
 	async 'site:db'(sg, [domain]) {
@@ -596,7 +632,12 @@ if (!cmd || !commands[cmd] || values.help) {
 
 try {
 	const needsClient = !['setup', 'login', 'logout', 'session:import', 'session:status'].includes(cmd);
-	await commands[cmd](needsClient ? await SiteGroundClient.fromSavedSession() : undefined, args);
+	// In a terminal a dead session starts the browser login instead of failing; piped/CI runs fail with a hint.
+	const relogin = interactive ? (reason) => suspendSpinner(async () => {
+		if (reason) console.error(`\n${reason} Logging in again…`);
+		await interactiveLogin();
+	}) : null;
+	await commands[cmd](needsClient ? await SiteGroundClient.fromSavedSession({ relogin }) : undefined, args);
 } catch (err) {
 	console.error(`Error: ${err.message}`);
 	process.exitCode = 1;
