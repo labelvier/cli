@@ -12,6 +12,8 @@ export class SiteToolsError extends Error {
 		this.detail = detail;
 		this.url = url;
 		this.task = task;
+		/** `polling: true` when asking for the task's status failed (set by waitForTask); the task itself may still be running. */
+		this.polling = false;
 		this.status = status;
 		this.body = body;
 	}
@@ -84,7 +86,17 @@ export class SiteToolsClient {
 		if (!taskId) return initial;
 		for (let i = 0; i < attempts; i++) {
 			await new Promise((r) => setTimeout(r, intervalMs));
-			const { data: task } = await this.request('GET', `/task/${taskId}`);
+			let task;
+			try {
+				({ data: task } = await this.request('GET', `/task/${taskId}`));
+			} catch (err) {
+				// The task was accepted, so it may well be running: callers must not read this as "not started".
+				if (err instanceof SiteToolsError) {
+					err.polling = true;
+					err.taskId = taskId;
+				}
+				throw err;
+			}
 			if (task?.options?.completed === 0) continue;
 			if (task?.response && parseInt(task.response.err_code, 10) !== 0) {
 				throw new SiteToolsError(task.response.err_code, task.response, `task ${taskId}`, { task: true });

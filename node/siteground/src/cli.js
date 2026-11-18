@@ -661,6 +661,9 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 			try {
 				await task(`Creating backup "${name}"…`, () => st.createBackup({ name, wait }), { done: `Backup "${name}" created` });
 			} catch (err) {
+				if (err instanceof SiteToolsError && err.polling) {
+					throw new Error(`Backup "${name}" was started, but its status could not be fetched (HTTP ${err.status}: ${err.detail}). Check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
+				}
 				if (err instanceof SiteToolsError && err.task) {
 					throw new Error(`SiteGround could not create backup "${name}" (${err.detail}). No backup was made; try again, and check "site:backup ${domain}" first if you are unsure.`);
 				}

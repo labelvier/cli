@@ -63,6 +63,11 @@ globalThis.fetch = async (url, init = {}) => {
 		const status = Number(process.env.SG_TEST_BACKUP_LIST_STATUS);
 		return new Response(JSON.stringify({ status, message: 'Backup service unavailable' }), { status, headers: { 'content-type': 'application/json' } });
 	}
+	// SG_TEST_TASK_STATUS makes the status poll GET /task/BK1 fail with that HTTP status (the backup itself was accepted).
+	if (key === 'GET /task/BK1' && process.env.SG_TEST_TASK_STATUS) {
+		const status = Number(process.env.SG_TEST_TASK_STATUS);
+		return new Response(JSON.stringify({ status, message: 'Task service unavailable' }), { status, headers: { 'content-type': 'application/json' } });
+	}
 	// On-demand backup: a 202 with a task id (label "fail" makes the task fail, "slow" never finishes), like the real API.
 	if (key === 'POST /backup') {
 		const label = JSON.parse(init.body).instant_label;

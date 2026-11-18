@@ -37,8 +37,11 @@ siteground() (
       return 0
     fi
     echo "Installing SiteGround CLI dependencies…"
-    npm --prefix "$sg_dir" ci --silent --no-audit --no-fund >/dev/null || {
+    local npm_output
+    npm_output=$(npm --prefix "$sg_dir" ci --silent --no-audit --no-fund 2>&1) || {
       echo -e "${__red}✗${__reset} npm ci failed in ${__bold}$sg_dir${__reset}."
+      [ -n "$npm_output" ] && echo "$npm_output" | tail -n 15
+      echo "Check your network and Node/npm versions, then run the command again."
       return 1
     }
   }

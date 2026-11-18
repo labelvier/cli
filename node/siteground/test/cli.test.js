@@ -316,6 +316,16 @@ test('site:backup --create: a failed task is reported and the list is not shown'
 	assert.ok(!requested().includes('GET /backup'));
 });
 
+test('site:backup --create: a failing status poll is not reported as "no backup made"', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_TASK_STATUS: '500', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(HTTP 500: Task service unavailable\)/);
+	assert.match(r.stderr, /do not run --create again/);
+	assert.doesNotMatch(r.stderr, /Could not create a backup|No backup was made|Try again/);
+	assert.equal(r.stdout, '');
+	assert.equal(requested().filter((x) => x === 'POST /backup').length, 1);
+});
+
 test('site:backup --create: a task that keeps running is reported as still running, not as failed', async () => {
 	const env = { ...loggedIn(), SG_TASK_ATTEMPTS: '2', SG_TASK_INTERVAL_MS: '1' };
 	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'slow'], { env });
