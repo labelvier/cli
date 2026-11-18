@@ -348,7 +348,7 @@ test('site:backup --create: a failing API call names the domain, status and next
 test('site:backup --create: a 403 without message falls back on the error code and points to login', async () => {
 	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'denied'], { env: loggedIn() });
 	assert.equal(r.code, 1);
-	assert.match(r.stderr, /Error: Could not create a backup for analytics\.labelvier\.dev \(HTTP 403: error code 403\)\. .*siteground login/);
+	assert.match(r.stderr, /Error: Could not create a backup for analytics\.labelvier\.dev \(HTTP 403: error code 403\)\. .*"labelvier siteground login"/);
 	assert.doesNotMatch(r.stderr, /undefined/);
 });
 
@@ -359,7 +359,37 @@ test('site:backup: a failing list call names the domain, status and next step', 
 	assert.equal(r.stdout, '');
 	const denied = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_BACKUP_LIST_STATUS: '403' } });
 	assert.equal(denied.code, 1);
-	assert.match(denied.stderr, /HTTP 403.*siteground login/);
+	assert.match(denied.stderr, /HTTP 403.*"labelvier siteground login"/);
+});
+
+test('site:backup --create: a network error while polling warns that the backup may be running', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_NETWORK_ERROR: 'GET /task/BK1', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(network error: fetch failed, ENOTFOUND\)/);
+	assert.match(r.stderr, /Check with "site:backup analytics\.labelvier\.dev" and do not run --create again/);
+	assert.equal(r.stdout, '');
+	assert.equal(requested().filter((x) => x === 'POST /backup').length, 1);
+});
+
+test('site:backup --create: a network error on the create call names the domain and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'net'], { env: { ...loggedIn(), SG_TEST_NETWORK_ERROR: 'POST /backup' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /^Error: Could not reach SiteGround to create a backup for analytics\.labelvier\.dev \(network error: fetch failed, ENOTFOUND\)\. Check your connection/m);
+	assert.equal(r.stdout, '');
+});
+
+test('site:backup: a network error on the list call names the domain and next step', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev'], { env: { ...loggedIn(), SG_TEST_NETWORK_ERROR: 'GET /backup' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /^Error: Could not reach SiteGround to list backups for analytics\.labelvier\.dev \(network error: fetch failed, ENOTFOUND\)/m);
+	assert.doesNotMatch(r.stderr, /^Error: fetch failed$/m);
+});
+
+test('site:backup --create: an expired session while polling points to login', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_TASK_STATUS: '403', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(HTTP 403: Task service unavailable\)\. .*"labelvier siteground login" first\./);
+	assert.match(r.stderr, /do not run --create again/);
 });
 
 test('an error without a message never prints an empty "Error: "', async () => {

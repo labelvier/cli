@@ -91,7 +91,8 @@ export class SiteToolsClient {
 				({ data: task } = await this.request('GET', `/task/${taskId}`));
 			} catch (err) {
 				// The task was accepted, so it may well be running: callers must not read this as "not started".
-				if (err instanceof SiteToolsError) {
+				// That holds for every failure here, also a network error (fetch failed) that is no SiteToolsError.
+				if (err && typeof err === 'object') {
 					err.polling = true;
 					err.taskId = taskId;
 				}

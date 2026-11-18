@@ -57,6 +57,10 @@ globalThis.fetch = async (url, init = {}) => {
 		table = siteTools;
 		key = `${method} ${url.replace(`https://${API_URL}/api-sgcp/v00`, '')}`;
 	}
+	// SG_TEST_NETWORK_ERROR="<METHOD> <path>" makes that request fail like fetch does without a connection (TypeError "fetch failed").
+	if (process.env.SG_TEST_NETWORK_ERROR === key) {
+		throw new TypeError('fetch failed', { cause: Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }) });
+	}
 	// Test knobs: SG_TEST_BACKUP_LIST_STATUS makes GET /backup fail with that HTTP status, SG_TEST_THROW_EMPTY throws an error without a message.
 	if (key === 'GET /backup' && process.env.SG_TEST_THROW_EMPTY) throw new Error('');
 	if (key === 'GET /backup' && process.env.SG_TEST_BACKUP_LIST_STATUS) {
