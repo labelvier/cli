@@ -58,7 +58,7 @@ No SSH alias yet? Run `labelvier siteground site:ssh-key <domain>` first.
 
 `labelvier uptime-kuma` manages the monitors on status.labelvier.nl. Use it instead of the web interface.
 
-- Login: `uptime-kuma status` shows if the stored token works. `uptime-kuma login` reads the login from `~/Sites/uptime-kuma/.env` when that checkout exists, otherwise it asks. It stores a token, never the password.
+- Login: `uptime-kuma session:status` shows if the stored token works. `uptime-kuma login` reads the login from `~/Sites/uptime-kuma/.env` when that checkout exists, otherwise it asks. It stores a token, never the password. Without a terminal and no token the commands fail with an explanation: ask the user to run `labelvier uptime-kuma login`.
 - Pick monitors with one filter: `--domain <a.nl,b.nl>` (includes subdomains and www), `--id <1,2>`, `--filter <text>`, `--name <regex>`, `--tag <name>` or `--all`.
 - `add <url> [--name <name>]` creates an HTTP monitor (300s, HEAD, 3 retries, default notifications) and asks first when the domain is already monitored.
 - `list [filter] [--json]`, `pause`, `resume`, `delete`, `update --interval/--timeout/--retries/--method`. Writes show the matched monitors and ask first; `--yes` skips that.
@@ -66,4 +66,4 @@ No SSH alias yet? Run `labelvier siteground site:ssh-key <domain>` first.
 
 ## Safety
 
-Many commands change remote servers, git branches or paid hosting. Never run them just to test or explore. Ask the user first for: `deploy`, `release finish`, `create-site`, `site:*` writes, `site:cron --add/--remove`, `cron deploy`, `migrate`, `storage cleanup`, `storage convert-to-webp` and `uptime-kuma add/pause/resume/delete/update`. Reading commands (`--help`, `accounts`, `sites`, `site:info`, `site:cron` without flags, `deploy log`, `ssh list`, `uptime-kuma list/status`) are safe.
+Many commands change remote servers, git branches or paid hosting. Never run them just to test or explore. Ask the user first for: `deploy`, `release finish`, `create-site`, `site:*` writes, `site:cron --add/--remove`, `cron deploy`, `migrate`, `storage cleanup`, `storage convert-to-webp` and `uptime-kuma add/pause/resume/delete/update`. Reading commands (`--help`, `accounts`, `sites`, `site:info`, `site:cron` without flags, `deploy log`, `ssh list`, `uptime-kuma list/session:status`) are safe.

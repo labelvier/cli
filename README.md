@@ -133,5 +133,7 @@ another file), and asks otherwise. Only those two keys are read: the rest of tha
 file is server configuration such as the database root password. The login is
 swapped for a token in `~/.config/labelvier/uptime-kuma/.env` (chmod 600,
 override the directory with `KUMA_STATE_DIR`). A password change on the server
-invalidates the token; run `login` again. For CI, pass `UPTIME_KUMA_TOKEN` or
-`UPTIME_KUMA_USERNAME` + `UPTIME_KUMA_PASSWORD` (and `UPTIME_KUMA_URL`).
+invalidates the token. Without a (working) token every command explains where
+the login is and offers to log in right away. For CI, pass `KUMA_TOKEN` or
+`KUMA_USERNAME` + `KUMA_PASSWORD` (and `KUMA_URL`): the same keys as in the
+stored file, like `SG_LOGIN_*` for siteground.

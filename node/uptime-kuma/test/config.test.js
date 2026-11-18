@@ -3,14 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseEnv, loadConfig, saveConfig, credentialsFromProjectEnv, DEFAULT_URL } from '../src/config.js';
+import { loadConfig, saveConfig, credentialsFromProjectEnv, DEFAULT_URL } from '../src/config.js';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'kuma-test-'));
-
-test('parseEnv handles comments, quotes, export and CRLF without expanding', () => {
-	const env = parseEnv('# c\r\nA=1\r\nexport B="two words"\nC=\'$HOME\'\nD=x # note\nbroken line\n');
-	assert.deepEqual(env, { A: '1', B: 'two words', C: '$HOME', D: 'x' });
-});
 
 test('credentialsFromProjectEnv reads only the login keys from the Docker project .env', () => {
 	const file = path.join(dir, 'project.env');
@@ -18,15 +13,19 @@ test('credentialsFromProjectEnv reads only the login keys from the Docker projec
 	assert.deepEqual(credentialsFromProjectEnv(file), { username: 'labelvier', password: 'p@ss word', url: '' });
 });
 
-test('loadConfig: environment wins over the stored file, default URL otherwise', () => {
+test('loadConfig: KUMA_* from the environment win over the same keys in the file', () => {
 	const file = path.join(dir, 'state.env');
 	writeFileSync(file, 'KUMA_URL=https://stored.example/\nKUMA_USERNAME=stored\nKUMA_TOKEN=t1\n');
 	assert.deepEqual(loadConfig({}, file), { url: 'https://stored.example', username: 'stored', password: '', token: 't1' });
-	assert.equal(loadConfig({ UPTIME_KUMA_TOKEN: 't2' }, file).token, 't2');
+	assert.equal(loadConfig({ KUMA_TOKEN: 't2' }, file).token, 't2');
 	assert.equal(loadConfig({}, path.join(dir, 'missing.env')).url, DEFAULT_URL);
 });
 
-test('loadConfig ignores plain USERNAME / PASSWORD from the environment', () => {
+test('loadConfig: password only from the environment, plain USERNAME / PASSWORD ignored', () => {
+	const file = path.join(dir, 'pw.env');
+	writeFileSync(file, 'KUMA_PASSWORD=from-file\n');
+	assert.equal(loadConfig({}, file).password, '');
+	assert.equal(loadConfig({ KUMA_PASSWORD: 'env' }, file).password, 'env');
 	const config = loadConfig({ USERNAME: 'mulder', PASSWORD: 'x' }, path.join(dir, 'missing.env'));
 	assert.equal(config.username, '');
 	assert.equal(config.password, '');

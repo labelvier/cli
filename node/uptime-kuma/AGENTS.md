@@ -14,9 +14,10 @@ supports Uptime Kuma 1.x.
 - [src/client.js](src/client.js): Socket.IO client. One dependency: `socket.io-client`.
 - [src/monitor.js](src/monitor.js): URL normalizing and the payload for a new HTTP monitor.
 - [src/filter.js](src/filter.js): picks monitors (`--domain`, `--filter`, `--id`, `--name`, `--tag`, `--all`). Pure, unit-tested.
-- [src/config.js](src/config.js): dotenv parser, stored login, the project `.env` import.
+- [src/config.js](src/config.js): stored login (`KUMA_*`), the project `.env` import.
 - [src/cli.js](src/cli.js): argument parsing, commands, confirmation.
-- [src/prompt.js](src/prompt.js): copy of `node/siteground/src/prompt.js`.
+- Shared with siteground, in [../lib](../lib): `prompt.js` (terminal questions) and `env.js` (read/write `.env` files).
+- The wrapper `inc/uptime-kuma.sh` uses `_prepare_node_cli` from `inc/helpers.sh`, like `inc/siteground.sh`.
 
 ## API
 
@@ -42,12 +43,16 @@ the same way the edit form does. `--retries` maps to `maxretries` (the old scrip
 ## Login and secrets
 
 - `login` takes the CLI user from `~/Sites/uptime-kuma/.env` (keys `USERNAME`/`PASSWORD`, or
-  `KUMA_USERNAME`/`KUMA_PASSWORD`), from `--from-env <file>`, from `UPTIME_KUMA_USERNAME` +
-  `UPTIME_KUMA_PASSWORD`, or asks. Only those keys are read: that `.env` is the Docker project's
+  `KUMA_USERNAME`/`KUMA_PASSWORD`), from `--from-env <file>`, from `KUMA_USERNAME` +
+  `KUMA_PASSWORD` in the environment, or asks. Only those keys are read: that `.env` is the Docker project's
   and also holds `DB_ROOT_PASSWORD`.
 - The password is swapped for the JWT from `login`. Only `KUMA_URL`, `KUMA_USERNAME` and `KUMA_TOKEN`
   are written, to `$KUMA_STATE_DIR/.env` (default `~/.config/labelvier/uptime-kuma/.env`, chmod 600).
-- Environment wins over the file: `UPTIME_KUMA_URL`, `UPTIME_KUMA_TOKEN`.
+- Environment wins over the file, with the same keys: `KUMA_URL`, `KUMA_USERNAME`, `KUMA_TOKEN` (like
+  `SG_LOGIN_*` for siteground). `KUMA_PASSWORD` only from the environment; it is never stored.
+- No login, or a token the server rejects (`authInvalidToken`): in a terminal every command explains where
+  the login is and offers `login` on the spot; without a terminal it fails with that explanation.
+- `session:status` (named like `siteground session:status`) shows server, user and whether the login works.
 - Never read plain `USERNAME` from the environment: zsh treats it as the logged-in user and ignores
   an assignment to it, so `export USERNAME=labelvier` silently keeps your own name.
 - Never print, commit or paste the token.

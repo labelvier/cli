@@ -5,7 +5,7 @@ import { KumaClient } from './client.js';
 import { selectMonitors, monitorHost, normalizeDomain } from './filter.js';
 import { monitorUrl, newHttpMonitor, DEFAULTS } from './monitor.js';
 import { loadConfig, saveConfig, clearConfig, credentialsFromProjectEnv, ENV_FILE, PROJECT_ENV_FILE, DEFAULT_URL } from './config.js';
-import { ask, askSecret, confirm, closePrompt, interactive } from './prompt.js';
+import { ask, askSecret, confirm, closePrompt, interactive } from '../../lib/prompt.js';
 
 const HELP = `Usage: labelvier uptime-kuma <command> [filter] [options]
 
@@ -13,7 +13,7 @@ Session
   login [--url <url>] [--username <name>] [--from-env <file>]
                          Log in once and store a token (no password) in ~/.config/labelvier/uptime-kuma
   logout                 Remove the stored token
-  status                 Show the server, user and whether the token still works
+  session:status         Show the server, user and whether the token still works
 
 Monitors
   list [filter] [--json] List monitors (all when no filter is given)
@@ -40,8 +40,16 @@ Options
   --yes, -y              Skip the confirmation for writes
   --json                 Machine-readable output for list
 
-Environment: UPTIME_KUMA_URL, UPTIME_KUMA_TOKEN, or UPTIME_KUMA_USERNAME + UPTIME_KUMA_PASSWORD
-override the stored login (for CI). Default server: ${DEFAULT_URL}.`;
+Environment: KUMA_URL, KUMA_TOKEN, or KUMA_USERNAME + KUMA_PASSWORD override the stored
+login (for CI). Default server: ${DEFAULT_URL}.`;
+
+const HOW_TO_LOGIN = `The CLI logs in with the shared Uptime Kuma user of ${DEFAULT_URL}, not your own account.
+Where to find it:
+  - USERNAME and PASSWORD in the .env of the uptime-kuma Docker project
+    (git@bitbucket.org:labelvier/uptime-kuma.git). With that checkout in ~/Sites/uptime-kuma,
+    "labelvier uptime-kuma login" reads them by itself; another file: --from-env <file>.
+  - No checkout: ask a colleague for the login and type it when asked.
+The password is swapped for a token: only the token is stored, in ${ENV_FILE}.`;
 
 const OPTIONS = {
 	all: { type: 'boolean' },
@@ -131,28 +139,51 @@ function printMonitors(monitors) {
 	for (const m of monitors) console.log(row(m));
 }
 
+/** True when the config holds something to log in with. */
+function hasLogin(config) {
+	return Boolean(config.token || (config.username && config.password));
+}
+
+/**
+ * Explain how to get the login and, in a terminal, offer to log in right away.
+ * Returns the fresh config, or throws with the explanation when there is no terminal or the answer is no.
+ */
+async function offerLogin(problem) {
+	const message = `${problem}\n\n${HOW_TO_LOGIN}`;
+	if (!interactive) throw new Error(`${message}\n\nRun "labelvier uptime-kuma login" in a terminal.`);
+	console.log(`${message}\n`);
+	if (!(await confirm('Log in now?', { defaultValue: true }))) throw new Error('Not logged in.');
+	await login({ explained: true });
+	return loadConfig();
+}
+
 async function connected(config) {
-	if (!config.token && !(config.username && config.password)) {
-		throw new Error('Not logged in. Run "labelvier uptime-kuma login" first.');
-	}
+	if (!hasLogin(config)) config = await offerLogin(`Not logged in to ${config.url}.`);
 	const client = new KumaClient(config.url);
 	await client.connect();
-	if (config.token) await client.loginByToken(config.token);
-	else await client.login(config.username, config.password);
-	return client;
+	try {
+		if (config.token) await client.loginByToken(config.token);
+		else await client.login(config.username, config.password);
+		return client;
+	} catch (err) {
+		client.close();
+		if (err.code !== 'authInvalidToken' || process.env.KUMA_TOKEN) throw err;
+		return connected(await offerLogin(`The stored token for ${config.url} no longer works (password changed?).`));
+	}
 }
 
 async function login(values) {
 	const stored = loadConfig();
 	let source = '';
-	let { username = '', password = '' } = {};
-	let url = values.url || process.env.UPTIME_KUMA_URL || '';
+	let username = '';
+	let password = '';
+	let url = values.url || process.env.KUMA_URL || '';
 
 	const envFile = values['from-env'] || (existsSync(PROJECT_ENV_FILE) ? PROJECT_ENV_FILE : '');
-	if (process.env.UPTIME_KUMA_USERNAME && process.env.UPTIME_KUMA_PASSWORD) {
-		username = process.env.UPTIME_KUMA_USERNAME;
-		password = process.env.UPTIME_KUMA_PASSWORD;
-		source = 'UPTIME_KUMA_USERNAME / UPTIME_KUMA_PASSWORD';
+	if (process.env.KUMA_USERNAME && process.env.KUMA_PASSWORD) {
+		username = process.env.KUMA_USERNAME;
+		password = process.env.KUMA_PASSWORD;
+		source = 'KUMA_USERNAME / KUMA_PASSWORD';
 	} else if (envFile) {
 		if (!existsSync(envFile)) throw new Error(`${envFile} does not exist`);
 		const found = credentialsFromProjectEnv(envFile);
@@ -171,8 +202,9 @@ async function login(values) {
 	}
 
 	url = (url || stored.url || DEFAULT_URL).replace(/\/+$/, '');
+	if (!source && interactive && !values.username && !values.explained) console.log(`Log in to ${url}. ${HOW_TO_LOGIN.split('\n')[0]}`);
 	if (!username) username = await ask('Uptime Kuma username', { defaultValue: stored.username || undefined, flag: '--username' });
-	if (!password) password = await askSecret(`Password for ${username}`, { flag: 'a password (UPTIME_KUMA_PASSWORD or --from-env)' });
+	if (!password) password = await askSecret(`Password for ${username}`, { flag: 'a password (KUMA_PASSWORD or --from-env)' });
 	if (source) console.log(`Using the login of ${username} from ${source}`);
 
 	const client = new KumaClient(url);
@@ -193,18 +225,21 @@ async function login(values) {
 	}
 }
 
-async function status() {
+async function sessionStatus() {
 	const config = loadConfig();
 	console.log(`Server:   ${config.url}`);
 	console.log(`User:     ${config.username || '(unknown)'}`);
-	console.log(`Login:    ${process.env.UPTIME_KUMA_TOKEN ? 'UPTIME_KUMA_TOKEN' : config.token ? ENV_FILE : config.password ? 'UPTIME_KUMA_USERNAME / UPTIME_KUMA_PASSWORD' : 'none, run "labelvier uptime-kuma login"'}`);
-	if (!config.token && !config.password) return 1;
+	console.log(`Login:    ${process.env.KUMA_TOKEN ? 'KUMA_TOKEN' : config.token ? ENV_FILE : config.password ? 'KUMA_USERNAME / KUMA_PASSWORD' : 'none'}`);
+	if (!hasLogin(config)) {
+		console.log(`\n${HOW_TO_LOGIN}\n\nLog in with: labelvier uptime-kuma login`);
+		return 1;
+	}
 	const client = await connected(config);
 	try {
 		const monitors = Object.values(await client.monitors());
 		console.log(`Version:  ${client.version || 'unknown'}`);
 		console.log(`Monitors: ${monitors.length} (${monitors.filter((m) => m.active).length} active)`);
-		console.log('✔ Token works');
+		console.log('✔ Login works');
 	} finally {
 		client.close();
 	}
@@ -324,8 +359,8 @@ export async function main(argv) {
 				await clearConfig();
 				console.log(`✔ Removed ${ENV_FILE}`);
 				return 0;
-			case 'status':
-				return await status();
+			case 'session:status':
+				return await sessionStatus();
 			case 'add':
 				return await add(values);
 			case 'list':

@@ -7,10 +7,10 @@ Label Vier CLI — pure-bash command tool (`labelvier`, shorthand `l4`; the old 
 - `labelvier` — entry point (real file). `l4` and `wp-takeoff` are symlinks to it — one source of truth, dispatched on by `$(basename "$0")`. Sources every `inc/*.sh`, then `main "$@"` runs `$1` as a function.
 - `inc/*.sh` — one command collection per file. Filename == function name (`inc/release.sh` → `release()`).
 - `inc/core.sh` — install/update/alias/generate machinery.
-- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`, `_require_brew`, `_confirm`, `_load_nvm`, `_require_nvm`, `_require_node`, `_require_npm`).
+- `inc/helpers.sh` — shared `_`-prefixed helpers (`_echo_documentation`, `_echo_function_description`, `_dispatch`, `_flag_is_present`, `_is_semantic_version`, `_needs_active_wptakeoff_project`, `_require_brew`, `_confirm`, `_load_nvm`, `_require_nvm`, `_require_node`, `_require_npm`, `_prepare_node_cli`).
 - `templates/example.sh.tpl` — scaffold template (`labelvier core generate`).
 - `templates/` — files deployed to servers (cron runner, etc.) plus the scaffold template above.
-- `node/<tool>/` — Node CLIs that bash can't reasonably do (e.g. `node/siteground`, browser login via Playwright; `node/uptime-kuma`, Socket.IO). Each has its own `package.json`/lockfile and `AGENTS.md`; the `inc/<tool>.sh` wrapper checks node, runs `npm ci` when the lockfile changed, and forwards all args. `node_modules` is gitignored; secrets go to `~/.config/labelvier/<tool>`, never into the checkout.
+- `node/<tool>/` — Node CLIs that bash can't reasonably do (e.g. `node/siteground`, browser login via Playwright; `node/uptime-kuma`, Socket.IO). Each has its own `package.json`/lockfile and `AGENTS.md`; the `inc/<tool>.sh` wrapper calls `_prepare_node_cli` (code present, node 20+, `npm ci` when the lockfile changed) and forwards all args. Code both tools need lives in `node/lib/` (`prompt.js`, `env.js`; no dependencies), imported as `../../lib/…`: don't copy it into a tool. Session commands follow siteground: `login`, `logout`, `session:status`; env overrides use the same keys as the tool's `.env` in the state dir. `node_modules` is gitignored; secrets go to `~/.config/labelvier/<tool>`, never into the checkout.
 - `package.json` — only holds `version`.
 
 ## How commands work

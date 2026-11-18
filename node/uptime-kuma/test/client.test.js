@@ -67,3 +67,8 @@ test('add returns the new id; default notifications come from the pushed list', 
 	assert.deepEqual(c.defaultNotificationIds(), [1]);
 	assert.equal(await c.add({ name: 'x' }), 42);
 });
+
+test('a failed call carries the server message as err.code', async () => {
+	const { c } = await client({ loginByToken: { ok: false, msg: 'authInvalidToken' } });
+	await assert.rejects(c.loginByToken('old'), (err) => err.code === 'authInvalidToken');
+});

@@ -64,7 +64,11 @@ export class KumaClient {
 
 	async callOk(event, ...args) {
 		const response = await this.call(event, ...args);
-		if (!response?.ok) throw new Error(`${event} failed: ${message(response)}`);
+		if (!response?.ok) {
+			const err = new Error(`${event} failed: ${message(response)}`);
+			err.code = response?.msg;
+			throw err;
+		}
 		return response;
 	}
 
