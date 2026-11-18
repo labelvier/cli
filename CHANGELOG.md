@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-18
+
+### Added
+- `CLI.md` instruction file for AI agents: what the `labelvier` commands do, the SiteGround workflows (SSH keys, cron, site setup) and which commands need confirmation first. `labelvier ai claude install` adds it to the CLAUDE.md snippet (version 3), `labelvier ai mistral install` inlines it in the Vibe block. Run `labelvier ai update` to get it.
+
 ## [1.6.2] - 2026-11-16
 
 ### Changed
