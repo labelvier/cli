@@ -67,6 +67,8 @@ globalThis.fetch = async (url, init = {}) => {
 		const status = Number(process.env.SG_TEST_BACKUP_LIST_STATUS);
 		return new Response(JSON.stringify({ status, message: 'Backup service unavailable' }), { status, headers: { 'content-type': 'application/json' } });
 	}
+	// SG_TEST_TASK_THROW makes the status poll GET /task/BK1 throw a plain Error, like a failed session refresh.
+	if (key === 'GET /task/BK1' && process.env.SG_TEST_TASK_THROW) throw new Error(process.env.SG_TEST_TASK_THROW);
 	// SG_TEST_TASK_STATUS makes the status poll GET /task/BK1 fail with that HTTP status (the backup itself was accepted).
 	if (key === 'GET /task/BK1' && process.env.SG_TEST_TASK_STATUS) {
 		const status = Number(process.env.SG_TEST_TASK_STATUS);

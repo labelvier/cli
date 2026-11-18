@@ -374,8 +374,15 @@ test('site:backup --create: a network error while polling warns that the backup 
 test('site:backup --create: a network error on the create call names the domain and next step', async () => {
 	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'net'], { env: { ...loggedIn(), SG_TEST_NETWORK_ERROR: 'POST /backup' } });
 	assert.equal(r.code, 1);
-	assert.match(r.stderr, /^Error: Could not reach SiteGround to create a backup for analytics\.labelvier\.dev \(network error: fetch failed, ENOTFOUND\)\. Check your connection/m);
+	assert.match(r.stderr, /^Error: Could not reach SiteGround to create a backup for analytics\.labelvier\.dev \(network error: fetch failed, ENOTFOUND\)\. The backup may have been started anyway: check "site:backup analytics\.labelvier\.dev" before you run --create again\./m);
 	assert.equal(r.stdout, '');
+});
+
+test('site:backup --create: any other error while polling still warns that the backup may be running', async () => {
+	const r = await run(['site:backup', 'analytics.labelvier.dev', '--create', '--name', 'poll'], { env: { ...loggedIn(), SG_TEST_TASK_THROW: 'Refresh token expired', SG_TASK_INTERVAL_MS: '1' } });
+	assert.equal(r.code, 1);
+	assert.match(r.stderr, /Backup "poll" was started, but its status could not be fetched \(Refresh token expired\)\./);
+	assert.match(r.stderr, /do not run --create again/);
 });
 
 test('site:backup: a network error on the list call names the domain and next step', async () => {

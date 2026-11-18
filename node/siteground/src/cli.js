@@ -234,6 +234,7 @@ function isNetworkError(err) {
 /** The cause of a failed request in a few words: the HTTP status and SiteGround's message, or the network error. */
 function backupCause(err) {
 	if (err instanceof SiteToolsError) return `HTTP ${err.status}: ${err.detail}`;
+	if (!isNetworkError(err)) return errorMessage(err);
 	const code = err?.cause?.code || err?.cause?.message;
 	return `network error: ${err.message}${code ? `, ${code}` : ''}`;
 }
@@ -678,7 +679,8 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 			try {
 				await task(`Creating backup "${name}"…`, () => st.createBackup({ name, wait }), { done: `Backup "${name}" created` });
 			} catch (err) {
-				if (err?.polling && (err instanceof SiteToolsError || isNetworkError(err))) {
+				// Any failure while polling (HTTP, network, a session that could not be refreshed): the backup was accepted.
+				if (err?.polling) {
 					const login = isAuthError(err) ? ` ${LOGIN_HINT} first.` : '';
 					throw new Error(`Backup "${name}" was started, but its status could not be fetched (${backupCause(err)}).${login} Check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
 				}
@@ -688,7 +690,11 @@ Database    ${dbLabel || (app ? 'created by installer' : 'no')}
 				if (err instanceof TaskTimeoutError) {
 					throw new Error(`Backup "${name}" is still running (task ${err.taskId}). It was not stopped: check with "site:backup ${domain}" and do not run --create again, that would use up another manual backup slot.`);
 				}
-				if (err instanceof SiteToolsError || isNetworkError(err)) throw backupApiError('create a backup', domain, err);
+				// No answer to the create call: SiteGround may have queued the backup anyway.
+				if (isNetworkError(err)) {
+					throw new Error(`Could not reach SiteGround to create a backup for ${domain} (${backupCause(err)}). The backup may have been started anyway: check "site:backup ${domain}" before you run --create again.`);
+				}
+				if (err instanceof SiteToolsError) throw backupApiError('create a backup', domain, err);
 				throw err;
 			}
 		}
