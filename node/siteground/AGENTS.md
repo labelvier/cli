@@ -59,7 +59,9 @@ Never commit, paste or log these.
 
 Code: [src/client.js](src/client.js) (client area API), [src/sitetools.js](src/sitetools.js)
 (Site Tools API), [src/actions.js](src/actions.js) (reusable steps), [src/cli.js](src/cli.js),
-[src/prompt.js](src/prompt.js), [src/login.js](src/login.js).
+[src/login.js](src/login.js). Shared with uptime-kuma: [../lib/prompt.js](../lib/prompt.js) and
+[../lib/env.js](../lib/env.js) (the `.env` parser behind `loadLoginEnv`/`saveLoginEnv`); the wrapper uses
+`_prepare_node_cli` from `inc/helpers.sh`.
 
 Test site: `sgdummy.labelvier.dev` on Develop - Hamerkop was used for experiments and has been
 removed again (2026-10-14). Create a new dummy when needed.

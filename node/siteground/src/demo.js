@@ -150,7 +150,8 @@ export const fakeActions = {
 		await pause(1200);
 		progress.text = 'Granting privileges…';
 		await pause(900);
-		const rnd = () => Math.random().toString(36).slice(2, 12);
+		// toString(36) can be short (trailing zeros are dropped): pad so the name always has 10 characters.
+		const rnd = () => Math.random().toString(36).slice(2).padEnd(10, '0').slice(0, 10);
 		return { label, name: `db${rnd()}`, user: `u${rnd()}`, password: '••••••••••••', host: 'localhost' };
 	},
 };

@@ -306,3 +306,32 @@ function _require_npm() {
   _require_brew
   _require_nvm && _require_node && type -P npm >/dev/null 2>&1
 }
+
+# Gets a Node CLI in node/<tool> ready to run: the code is there, npm and node 20+
+# are available, and node_modules matches package-lock.json (npm ci on first use
+# and after `core update` changed the lockfile). Shared by the siteground and
+# uptime-kuma wrappers; they only add their own steps and run src/cli.js.
+# Usage: _prepare_node_cli <label> <dir> <name of the dir override variable>
+function _prepare_node_cli() {
+  local label="$1" dir="$2" dir_var="$3"
+  if [ ! -f "$dir/package.json" ]; then
+    echo -e "${__red}✗${__reset} $label CLI not found in ${__bold}$dir${__reset}. Check $dir_var."
+    return 1
+  fi
+  _require_npm || return 1
+  if ! node -e 'process.exit(+process.versions.node.split(".")[0] < 20 ? 1 : 0)'; then
+    echo -e "${__red}✗${__reset} $label CLI needs node 20 or newer, found $(node --version). Run: nvm install --lts"
+    return 1
+  fi
+  if [ -f "$dir/node_modules/.package-lock.json" ] && [ ! "$dir/package-lock.json" -nt "$dir/node_modules/.package-lock.json" ]; then
+    return 0
+  fi
+  echo "Installing $label CLI dependencies…"
+  local npm_output
+  npm_output=$(npm --prefix "$dir" ci --silent --no-audit --no-fund 2>&1) || {
+    echo -e "${__red}✗${__reset} npm ci failed in ${__bold}$dir${__reset}."
+    [ -n "$npm_output" ] && echo "$npm_output" | tail -n 15
+    echo "Check your network and Node/npm versions, then run the command again."
+    return 1
+  }
+}
