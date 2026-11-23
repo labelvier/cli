@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-11-23
+
+### Added
+- `labelvier gitops deployer` writes the SiteGround `deploy.php` for a Laravel project (Deployer `recipe/laravel.php`) and offers `composer require --dev deployer/deployer`. It never overwrites an existing `deploy.php`. The app `.env` stays on the server, never in GitHub.
+
+### Changed
+- `gitops status` suggests `gitops deployer` when `deploy.php` is missing, and `gitops status` and `gitops setup` warn when an existing `deploy.php` does not require `recipe/laravel.php`.
+- The `CLI.md` (version 4) and `LARAVEL.md` (version 2) instructions for AI agents mention `gitops deployer`. Run `labelvier ai update` to get them.
+
 ## [1.9.1] - 2026-11-18
 
 ### Changed

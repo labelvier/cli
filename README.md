@@ -95,6 +95,7 @@ by GitHub Actions. Run it from the project:
 
 ```sh
 labelvier gitops setup     # wizard: project files, server, deploy key, public_html symlink, GitHub secrets, first deploy
+labelvier gitops deployer  # only deploy.php: the SiteGround Deployer config with recipe/laravel.php, for a project that has none
 labelvier gitops tests     # run the local tests in GitHub Actions too: before each deploy and/or on every opened or updated PR
 labelvier gitops status    # what is in place, whether the workflows are live on origin, and the state of the tests
 ```

@@ -229,6 +229,51 @@ wizard_answers() {
   assert_output_contains "secret DEPLOY_STAGING_SSH_KEY missing"
 }
 
+@test "gitops status suggests gitops deployer when deploy.php is missing" {
+  run_cli gitops status
+  assert_output_contains "labelvier gitops deployer"
+}
+
+@test "gitops status warns when deploy.php does not use the Laravel recipe" {
+  printf '<?php\nnamespace Deployer;\n// see recipe/laravel.php\nrequire "recipe/common.php";\n' > deploy.php
+  run_cli gitops status
+  assert_output_contains "deploy.php does not require recipe/laravel.php"
+}
+
+@test "gitops status accepts a deploy.php with the Laravel recipe" {
+  printf "<?php\nnamespace Deployer;\n\nrequire 'recipe/laravel.php';\n" > deploy.php
+  run_cli gitops status
+  assert_output_contains "deploy.php uses recipe/laravel.php"
+  refute_output_contains "does not require recipe/laravel.php"
+}
+
+@test "gitops deployer writes the SiteGround deploy.php and requires deployer" {
+  run_cli gitops deployer <<< "y"
+  [ "$status" -eq 0 ]
+  grep -q "require 'recipe/laravel.php';" deploy.php
+  grep -q "set('application', 'shop')" deploy.php
+  ! grep -qE "__(APP|REPO_URL)__" deploy.php
+  assert_output_contains "deploy.php uses recipe/laravel.php"
+  assert_stub_called '^composer require --dev deployer/deployer'
+  refute_stub_called '^ssh'
+  refute_stub_called '^gh secret'
+}
+
+@test "gitops deployer leaves an existing deploy.php alone" {
+  echo "// mine" > deploy.php
+  run_cli gitops deployer <<< "n"
+  [ "$(cat deploy.php)" = "// mine" ]
+  assert_output_contains "already exists, left alone"
+  assert_output_contains "does not require recipe/laravel.php"
+}
+
+@test "gitops deployer outside a Laravel project writes nothing" {
+  echo '{"require":{}}' > composer.json
+  run_cli gitops deployer
+  [ "$status" -eq 1 ]
+  [ ! -f deploy.php ]
+}
+
 # Project that needs PHP 8.3 on a server whose default php is 8.1.
 php_too_old() {
   echo '{"require":{"php":"^8.3","laravel/framework":"^12.0"}}' > composer.json

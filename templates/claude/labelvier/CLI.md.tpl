@@ -1,4 +1,4 @@
-<!-- labelvier-ai-version: 3 -->
+<!-- labelvier-ai-version: 4 -->
 # Label Vier CLI
 
 `labelvier` (shorthand `l4`) is the team's command tool. It is installed on every developer machine. Use it before you script something yourself or click through a hosting panel: releases, deploys, SiteGround sites and backups, GitOps for Laravel, cron, SSH aliases and storage are covered.
@@ -20,7 +20,7 @@ Read that help before you guess flags. Missing arguments are asked for interacti
 | `deploy staging [--all-features]` | Merge the current branch into `staging`, deploy, purge the SiteGround cache |
 | `deploy production [--yes]` | Deploy from master/main or `release/*`, log who deployed, purge the cache |
 | `deploy log [amount]` | Production deploy history of the project |
-| `gitops setup\|tests\|status` | GitOps for a Laravel project on SiteGround: merges into `develop` deploy to staging through GitHub Actions and Deployer (see below) |
+| `gitops setup\|deployer\|tests\|status` | GitOps for a Laravel project on SiteGround: merges into `develop` deploy to staging through GitHub Actions and Deployer (see below) |
 | `siteground …` | SiteGround hosting through its API (see below) |
 | `uptime-kuma list\|add\|pause\|resume\|delete\|update` | Monitors on status.labelvier.nl (see below) |
 | `cron deploy <ssh-host>` | Upload `run_cron_jobs.sh` to a SiteGround server and set `DISABLE_WP_CRON` |
@@ -63,6 +63,7 @@ No SSH alias yet? Run `labelvier siteground site:ssh-key <domain>` first.
 
 `labelvier gitops setup` is a wizard, run from the root of a Laravel project, that makes every merge into `develop` deploy to a SiteGround staging site: GitHub Actions merges into `staging` and deploys with Deployer. It writes `deploy.php` and the workflows, creates a deploy key, prepares the server (shared `.env` and storage, `public_html` symlink), sets the GitHub environment and secrets and runs the first deploy. Every step that changes the server, GitHub or SiteGround asks first and defaults to no, so it needs a terminal: ask the user to run it.
 
+- `gitops deployer` writes only `deploy.php` (SiteGround, `recipe/laravel.php`) and requires `deployer/deployer`; it never overwrites. Suggest it for a Laravel project without `deploy.php`, or when `gitops status` warns the recipe is missing. The app `.env` stays on the server, never in GitHub.
 - `gitops tests` adds the tests workflow (on every PR and before each staging deploy).
 - `gitops status` shows what is in place: project files, deploy key, GitHub environment, secrets and branch.
 
