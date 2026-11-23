@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-11-23
+
 ### Added
 - `labelvier gitops deployer` writes the SiteGround `deploy.php` for a Laravel project (Deployer `recipe/laravel.php`) and offers `composer require --dev deployer/deployer`. It never overwrites an existing `deploy.php`. The app `.env` stays on the server, never in GitHub.
 
