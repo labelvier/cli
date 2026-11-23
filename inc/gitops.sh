@@ -77,13 +77,32 @@ gitops() (
     _publish
   }
 
+  # @function deployer
+  # @description Write a SiteGround deploy.php for this Laravel project (Deployer recipe/laravel.php) and require deployer/deployer; never overwrites.
+  function deployer() {
+    local _steps_total=1
+    _step 1 "deploy.php"
+    _preflight || return 1
+    _render "$templates_dir/deploy.php.tpl" deploy.php
+    _check_recipe
+    _require_deployer || return 1
+    echo
+    echo "The app .env stays on the server (shared/.env), never in GitHub."
+    echo "Next: labelvier gitops setup for the deploy key, server, GitHub secrets and the workflow."
+  }
+
   # @function status
   # @description Show what is in place for GitOps: project files, deploy key, GitHub environment, secrets and branch.
   function status() {
     _preflight || return 1
     echo
     git fetch -q origin 2>/dev/null
-    _check_file deploy.php
+    if [ -f deploy.php ]; then
+      _ok deploy.php
+      _check_recipe
+    else
+      _warn "deploy.php missing: labelvier gitops deployer writes one for Laravel on SiteGround"
+    fi
     _check_file .github/workflows/deploy-$stage.yml
     _check_live deploy.php
     _check_live ".github/workflows/deploy-$stage.yml"
@@ -169,6 +188,15 @@ gitops() (
   function _ok() { echo -e "  ${__green}✓${__reset} $1"; }
   function _warn() { echo -e "  ${__red}!${__reset} $1"; }
   function _fail() { echo -e "  ${__red}✗${__reset} $1"; }
+  # A deploy.php the wizard did not write may lack the Laravel tasks (migrate, storage:link, caches).
+  function _check_recipe() {
+    [ -f deploy.php ] || return 0
+    if grep -qE "^[[:space:]]*require(_once)?[[:space:](]*['\"]recipe/laravel\.php['\"]" deploy.php; then
+      _ok "deploy.php uses recipe/laravel.php"
+    else
+      _warn "deploy.php does not require recipe/laravel.php: no migrate, storage:link or caches on deploy. Move it aside and run labelvier gitops deployer for the SiteGround one."
+    fi
+  }
   function _check_file() {
     if [ -f "$1" ]; then _ok "$1"; else _warn "$1 missing"; fi
   }
@@ -251,7 +279,11 @@ gitops() (
       _render "$templates_dir/deploy.php.tpl" deploy.php
       _render "$templates_dir/deploy-staging.yml.tpl" ".github/workflows/deploy-$stage.yml"
     fi
+    _check_recipe
+    _require_deployer
+  }
 
+  function _require_deployer() {
     if grep -q '"deployer/deployer"' composer.json; then
       _ok "deployer/deployer already required"
     elif _yes "Run 'composer require --dev deployer/deployer' now?"; then

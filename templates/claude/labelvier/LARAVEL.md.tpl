@@ -1,4 +1,4 @@
-<!-- labelvier-ai-version: 1 -->
+<!-- labelvier-ai-version: 2 -->
 # Laravel development
 
 Applies when `composer.json` requires `laravel/framework`. The project's own `AGENTS.md`, `CLAUDE.md` and `PLAN.md` win over this file: read them first.
@@ -92,7 +92,7 @@ Playwright runs on the host, against the app URL. Mail in dev lands in Mailpit (
 We deploy with GitOps: Git is the source of truth and merging is deploying.
 
 - A push to `develop` (every merged PR) starts a GitHub Actions workflow: it runs the test suite, merges `develop` into `staging` when the tests pass, then deploys with Deployer (`deploy.php`, `recipe/laravel.php`) to SiteGround. A failing test stops the deploy.
-- **Initial setup:** when a project is to go live (staging or production) and has no GitOps yet, set it up with `labelvier gitops setup`, not by hand. It creates the deploy key, server folders, `public_html` symlink, GitHub environment and secrets, and runs the first deploy. `labelvier gitops tests` adds the test step, `labelvier gitops status` shows what is in place. Don't hand-write the workflow or `deploy.php` instead.
+- **Initial setup:** when a project is to go live (staging or production) and has no GitOps yet, set it up with `labelvier gitops setup`, not by hand. It creates the deploy key, server folders, `public_html` symlink, GitHub environment and secrets, and runs the first deploy. `labelvier gitops tests` adds the test step, `labelvier gitops status` shows what is in place. Don't hand-write the workflow or `deploy.php` instead. A Laravel project without `deploy.php` gets the SiteGround one with `labelvier gitops deployer`. The app `.env` lives on the server (`shared/.env`), never in GitHub.
 - No app secrets in CI. GitHub only knows the SSH key and the target; the app `.env` lives on the server. That's why tests use the committed `.env.testing`.
 - `labelvier deploy staging` still works for a manual deploy.
 - `artisan:queue:restart` must run after the symlink swap, or workers keep running old code.
