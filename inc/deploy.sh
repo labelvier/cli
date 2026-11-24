@@ -15,10 +15,13 @@ deploy() (
   }
 
   # @function staging
-  # @description merges the current branch to staging branch and deploys the staging branch  to the staging environment, then purges the SiteGround cache. Use --all-features to deploy all feature/ branches to staging, --skip-purge to keep the cache.
+  # @description merges the current branch to staging branch and deploys the staging branch  to the staging environment, then purges the SiteGround cache. With a GitOps workflow on staging, GitHub Actions deploys the push. Use --all-features to deploy all feature/ branches to staging, --skip-purge to keep the cache.
   function staging() {
     # get current branch
     local current_branch=$(git branch --list | grep \* | sed 's/\* //g')
+    # GitOps project (`labelvier gitops setup`): the push to staging starts the deploy in GitHub Actions.
+    local gitops=""
+    _gitops_deploys_staging && gitops=1
 
     # on exit: stay on staging if there's a merge conflict so the user can resolve it,
     # otherwise always switch back to the original branch
@@ -30,7 +33,7 @@ deploy() (
 
     # check if npm run deploy-staging script exists before doing anything, if --skip-deploy-staging-check is present, anywhere in the arguments, skip this check
     # if ! npm pkg get scripts | grep -q "deploy-staging"; and [[ ! " $* " == *" --skip-deploy-staging-check "* ]]; then
-    if [[ ! " $* " == *" --skip-deploy-staging-check "* ]] && ! npm pkg get scripts | grep -q "deploy-staging"; then
+    if [ -z "$gitops" ] && [[ ! " $* " == *" --skip-deploy-staging-check "* ]] && ! npm pkg get scripts | grep -q "deploy-staging"; then
       echo "npm script 'deploy-staging' not found, aborting deploy"
       echo "override by using --skip-deploy-staging-check the flag"
       exit 1
@@ -91,13 +94,23 @@ deploy() (
     # force-with-lease: safe force push since we always rebuild staging from origin
     git push --force-with-lease origin staging || { echo "git push failed, aborting deploy"; exit 1; }
 
-    # deploy to staging
-    npm run deploy-staging || { echo "npm run deploy-staging failed, aborting deploy"; exit 1; }
+    if [ -n "$gitops" ]; then
+      # The deploy runs in GitHub Actions now; purging here would run before it is done.
+      echo -e "${__green}Pushed staging: GitHub Actions deploys it.${__reset} Follow it with: gh run watch"
+    else
+      # deploy to staging
+      npm run deploy-staging || { echo "npm run deploy-staging failed, aborting deploy"; exit 1; }
 
-    _flag_is_present "skip-purge" "$@" || _purge_siteground_cache "STAGING"
+      _flag_is_present "skip-purge" "$@" || _purge_siteground_cache "STAGING"
+    fi
 
     # return to original branch
     git checkout "$current_branch" || { echo "git checkout $current_branch failed, please check the state of your repository and try again"; exit 1; }
+  }
+
+  # Succeeds when .github/workflows/deploy-staging.yml deploys on a push to the staging branch.
+  function _gitops_deploys_staging() {
+    grep -Eqs '^[[:space:]]*branches:.*[[ ,]staging[] ,]' .github/workflows/deploy-staging.yml
   }
 
   # @function production

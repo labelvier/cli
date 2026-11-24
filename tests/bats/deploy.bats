@@ -126,6 +126,34 @@ STAGING_PURGE="ssh -p 18765 -o ConnectTimeout=10 stage@staging.example.com cd '/
 
 # --- staging ----------------------------------------------------------------
 
+@test "staging in a GitOps project pushes staging and leaves the deploy to GitHub Actions" {
+  stub npm 'case "$1" in pkg) echo "{}" ;; esac'; stub ssh
+  make_deploy_repo
+  full_env
+  mkdir -p .github/workflows
+  printf 'on:\n  push:\n    branches: [develop, staging]\n' > .github/workflows/deploy-staging.yml
+  git add .github && git commit -q -m "gitops"
+
+  run_cli deploy staging
+  [ "$status" -eq 0 ]
+  assert_output_contains "GitHub Actions deploys it"
+  refute_stub_called "^npm"
+  refute_stub_called "^ssh"
+  git rev-parse --verify -q origin/staging >/dev/null
+}
+
+@test "staging still needs the npm script when the workflow only runs on develop" {
+  stub npm 'case "$1" in pkg) echo "{}" ;; esac'
+  make_deploy_repo
+  mkdir -p .github/workflows
+  printf 'on:\n  push:\n    branches: [develop]\n' > .github/workflows/deploy-staging.yml
+  git add .github && git commit -q -m "gitops"
+
+  run_cli deploy staging
+  [ "$status" -eq 1 ]
+  assert_output_contains "npm script 'deploy-staging' not found"
+}
+
 @test "staging aborts when the deploy-staging npm script is missing" {
   stub npm 'case "$1" in pkg) echo "{}" ;; esac'
   stub ssh

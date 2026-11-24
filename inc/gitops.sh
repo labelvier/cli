@@ -600,9 +600,31 @@ gitops() (
       fi
     fi
 
-    if ! _remote "test -f $deploy_path/shared/public/.htaccess"; then
-      _warn "No shared/public/.htaccess: the release will use the repo one without SiteGround's PHP handler line."
+    _seed_htaccess
+  }
+
+  # shared/public/.htaccess needs SiteGround's PHP handler line and Laravel's rewrite rules. Deployer creates an
+  # empty file when it is missing, and then every URL but / is a 404. Never overwrites a file with content.
+  function _seed_htaccess() {
+    local target="$deploy_path/shared/public/.htaccess" handler version rules="public/.htaccess" source="public/.htaccess"
+    if _remote "test -s $target"; then
+      _ok "shared/public/.htaccess exists on the server"
+      return 0
     fi
+    # The old web root carries SiteGround's line; otherwise build it from the PHP version the site runs.
+    handler=$(_remote "grep -m 1 '^AddHandler' $public_path/.htaccess 2>/dev/null")
+    if [ -z "$handler" ]; then
+      version="${php_version:-$(_site_php)}"
+      [ -n "$version" ] && handler="AddHandler application/x-httpd-php$(echo "$version" | tr -d .) .php .php5 .php4 .php3"
+    fi
+    [ -f "$rules" ] || { rules="$templates_dir/htaccess.tpl"; source="the Laravel default"; }
+    if { [ -n "$handler" ] && printf '%s\n\n' "$handler"; grep -v '^AddHandler' "$rules"; } | _remote "cat > $target"; then
+      _ok "Wrote shared/public/.htaccess: ${handler:-no PHP handler line}, rules from $source"
+      [ -z "$handler" ] && _warn "Add SiteGround's AddHandler line for the site's PHP version to $target."
+    else
+      _warn "Could not write $target: create it before the first deploy, or every URL but / is a 404."
+    fi
+    return 0
   }
 
   # public_html must be a symlink to current/public; an existing directory is moved aside or removed.

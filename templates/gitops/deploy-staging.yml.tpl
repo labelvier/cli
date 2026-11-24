@@ -1,10 +1,12 @@
 name: Deploy to staging
 
 # GitOps: every PR merged into __BASE_BRANCH__ (a push to it) is merged into the
-# staging branch, which is then deployed to staging with Deployer.
+# staging branch, which is then deployed to staging with Deployer. A push to staging
+# itself (`labelvier deploy staging`) is deployed as is. The push this workflow makes
+# uses GITHUB_TOKEN, which starts no new run, so there is no loop.
 on:
   push:
-    branches: [__BASE_BRANCH__]
+    branches: [__BASE_BRANCH__, staging]
   workflow_dispatch:
 
 # Deploys run one at a time; a newer merge waits for the running deploy.
@@ -31,12 +33,19 @@ jobs:
           fetch-depth: 0
 
       - name: Merge __BASE_BRANCH__ into staging
+        if: github.ref_name != 'staging'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout staging
-          git merge --no-ff "$GITHUB_SHA" -m "chore: merge __BASE_BRANCH__ into staging"
-          git push origin staging
+          # Start from the latest staging and retry once when someone pushed to it in the meantime.
+          for attempt in 1 2; do
+            git fetch origin staging
+            git checkout -B staging origin/staging
+            git merge --no-ff "$GITHUB_SHA" -m "chore: merge __BASE_BRANCH__ into staging"
+            git push origin staging && exit 0
+            echo "Push to staging was rejected (attempt $attempt)."
+          done
+          exit 1
 
       - uses: shivammathur/setup-php@v2
         with:
