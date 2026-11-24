@@ -82,7 +82,12 @@ wizard_answers() {
   grep -q "set('application', 'shop')" deploy.php
   ! grep -q "bin/php" deploy.php
   grep -q "git@github.com:acme/shop.git" deploy.php
-  grep -q "branches: \[develop\]" .github/workflows/deploy-staging.yml
+  grep -q "branches: \[develop, staging\]" .github/workflows/deploy-staging.yml
+  grep -q "if: github.ref_name != 'staging'" .github/workflows/deploy-staging.yml
+  grep -q "git checkout -B staging origin/staging" .github/workflows/deploy-staging.yml
+  grep -q "before('deploy:shared', 'deploy:htaccess')" deploy.php
+  grep -q "after('deploy:shared', 'deploy:storage_dirs')" deploy.php
+  ! grep -q "exclude=/public/.htaccess" deploy.php
   grep -q "php-version: '8.4'" .github/workflows/deploy-staging.yml
   grep -q "node-version: 24" .github/workflows/deploy-staging.yml
   ! grep -rqE "__(APP|REPO_URL|PHP_BIN|PHP_VERSION|BASE_BRANCH)__" deploy.php .github/workflows/deploy-staging.yml
@@ -150,6 +155,46 @@ wizard_answers() {
   assert_stub_called "^gh secret set DEPLOY_STAGING_PORT --env staging --repo acme/shop --body 18765"
   assert_stub_called "^gh secret set DEPLOY_STAGING_PATH --env staging --repo acme/shop --body ~/www/example.com"
   assert_stub_called "^gh secret set DEPLOY_STAGING_SSH_KEY --env staging --repo acme/shop"
+}
+
+# Server without shared/public/.htaccess (or an empty one): ssh records what the wizard writes to it.
+stub_server_without_htaccess() {
+  stub ssh 'case "$*" in
+    *"php -v"*) printf "PHP 8.4.2 (cli)\n" ;;
+    *"grep -qF"*) exit 1 ;;
+    *"test -s"*) exit 1 ;;
+    *"grep -m 1"*) [ -s "$TEST_TMP/old-handler" ] && cat "$TEST_TMP/old-handler" ;;
+    *"cat > "*) cat > "$TEST_TMP/htaccess" ;;
+    *"[ -L "*) echo dir ;;
+    *"cd ~/www/example.com"*) echo .env ;;
+  esac'
+}
+
+@test "gitops setup writes shared .htaccess with the old web root handler and the project rules" {
+  stub_server_without_htaccess
+  echo "AddHandler application/x-httpd-php83 .php .php5 .php4 .php3" > "$TEST_TMP/old-handler"
+  mkdir -p public && printf 'AddHandler old\nRewriteEngine On\n' > public/.htaccess
+  run_cli gitops setup <<< "$(wizard_answers 1)"
+  [ "$status" -eq 0 ]
+  assert_stub_called "cat > ~/www/example.com/shared/public/.htaccess"
+  [ "$(sed -n 1p "$TEST_TMP/htaccess")" = "AddHandler application/x-httpd-php83 .php .php5 .php4 .php3" ]
+  grep -q "RewriteEngine On" "$TEST_TMP/htaccess"
+  [ "$(grep -c '^AddHandler' "$TEST_TMP/htaccess")" = "1" ]
+}
+
+@test "gitops setup builds the handler from the site PHP and uses the Laravel rules without public/.htaccess" {
+  stub_server_without_htaccess
+  run_cli gitops setup <<< "$(wizard_answers 1)"
+  [ "$status" -eq 0 ]
+  [ "$(sed -n 1p "$TEST_TMP/htaccess")" = "AddHandler application/x-httpd-php84 .php .php5 .php4 .php3" ]
+  grep -q "RewriteRule ^ index.php \[L\]" "$TEST_TMP/htaccess"
+  assert_output_contains "rules from the Laravel default"
+}
+
+@test "gitops setup leaves an existing shared .htaccess alone" {
+  run_cli gitops setup <<< "$(wizard_answers 1)"
+  assert_output_contains "shared/public/.htaccess exists on the server"
+  refute_stub_called "cat > "
 }
 
 @test "gitops setup never prints the private key or sends an .env to GitHub" {

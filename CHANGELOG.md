@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.3] - 2026-11-24
+
+### Fixed
+- `gitops setup` writes `shared/public/.htaccess` when it is missing or empty: SiteGround's `AddHandler` line (taken from the old `public_html/.htaccess`, or built from the site's PHP version) above the project's `public/.htaccess` or the Laravel default. Before, Deployer created an empty file and every URL but `/` gave a 404. A file with content is never overwritten.
+- The generated `deploy.php` seeds an empty `shared/public/.htaccess` from the release (`deploy:htaccess`) and creates `storage/framework/*`, `storage/logs`, `storage/app/public` and `bootstrap/cache` on an empty server before composer runs (`deploy:storage_dirs`).
+- The generated staging workflow merges into the latest `origin/staging` and retries once when the push is rejected, so a push to `staging` during a deploy no longer fails the run.
+
+### Changed
+- The generated staging workflow also runs on a push to `staging`, so `labelvier deploy staging` deploys through GitHub Actions. The push the workflow makes itself starts no new run.
+- `deploy staging` in a project whose `deploy-staging.yml` runs on `staging` only pushes: it does not need a `deploy-staging` npm script and leaves the deploy (and cache) to GitHub Actions. Existing GitOps projects keep their old workflow and `deploy.php`: update those by hand.
+- The `CLI.md` instructions for AI agents (version 5) describe this. Run `labelvier ai update` to get them.
+
 ## [1.9.2] - 2026-11-23
 
 ### Added

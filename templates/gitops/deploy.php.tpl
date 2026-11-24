@@ -57,7 +57,7 @@ set('writable_mode', 'chmod');
 // `/usr/local/bin/composer` is a bash wrapper on SiteGround; run the phar with the default PHP.
 set('bin/composer', 'php -d memory_limit=-1 /usr/local/bin/composer.phar');
 
-// public/.htaccess carries the host's PHP handler line, so it lives on the server.
+// public/.htaccess carries the host's PHP handler line, so it lives on the server (see deploy:htaccess).
 add('shared_files', ['public/.htaccess']);
 
 host('staging')
@@ -106,7 +106,6 @@ task('deploy:update_code', function () {
             '--exclude=/docs/',
             '--exclude=/bootstrap/cache/*.php',
             '--exclude=/database/*.sqlite',
-            '--exclude=/public/.htaccess',
             '--filter=:- .gitignore',
         ],
     ]);
@@ -120,7 +119,36 @@ task('deploy:public_html', function () {
     run("ln -sfn {{deploy_path}}/current/public $public");
 })->desc('Symlink public_html to the current release public/');
 
+// Deployer creates an empty shared file when it is missing, and an empty .htaccess turns every URL but / into a 404.
+// Seed it once from the release's public/.htaccess, with SiteGround's handler line for the server's default PHP on top.
+task('deploy:htaccess', function () {
+    $shared = '{{deploy_path}}/shared/public/.htaccess';
+    if (test("[ -s $shared ]")) {
+        return;
+    }
+    if (! test('[ -f {{release_path}}/public/.htaccess ]')) {
+        warning('No public/.htaccess in the release: create shared/public/.htaccess on the server.');
+
+        return;
+    }
+    $php = run("php -r 'echo PHP_MAJOR_VERSION . PHP_MINOR_VERSION;'");
+    run('mkdir -p {{deploy_path}}/shared/public');
+    run("{ echo 'AddHandler application/x-httpd-php$php .php .php5 .php4 .php3'; echo; "
+        . "grep -v '^AddHandler' {{release_path}}/public/.htaccess; } > $shared");
+    writeln("Wrote shared/public/.htaccess for PHP $php");
+})->desc('Seed shared/public/.htaccess with the SiteGround PHP handler');
+
+// storage/ is not uploaded, so shared/storage only has what Deployer creates. composer runs
+// `artisan package:discover`, which needs storage/framework and bootstrap/cache.
+task('deploy:storage_dirs', function () {
+    $storage = '{{deploy_path}}/shared/storage';
+    run("mkdir -p $storage/app/public $storage/framework/cache/data $storage/framework/sessions "
+        . "$storage/framework/views $storage/logs {{release_path}}/bootstrap/cache");
+})->desc('Create the storage and bootstrap/cache directories');
+
 before('deploy:update_code', 'deploy:assets');
+before('deploy:shared', 'deploy:htaccess');
+after('deploy:shared', 'deploy:storage_dirs');
 after('deploy:symlink', 'deploy:public_html');
 after('deploy:publish', 'artisan:queue:restart');
 after('deploy:failed', 'deploy:unlock');
