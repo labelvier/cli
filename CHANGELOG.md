@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `ai claude install` offers the optional GTM/GA4 skill (`gtm`): read-only scripts for Google Tag Manager containers and GA4 page views, via the `lv-reporting` service account. It is asked first (skipped without a terminal), installed in `~/.claude/skills/gtm` with its own Python venv (a missing `python3` or a failed `pip` only gives a hint), refreshed when outdated and overwritten only with `--force`. The service account key is not shipped: it belongs in `~/.config/labelvier/lv-reporting.json` (or `GTM_SERVICE_ACCOUNT_FILE`). `ai check` reports the skill, `ai claude uninstall` removes it (not the key) and `ai mistral install` links it as an optional skill.
+
 ## [1.9.3] - 2026-11-24
 
 ### Fixed

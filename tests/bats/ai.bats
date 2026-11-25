@@ -28,6 +28,7 @@ setup() {
   SETTINGS="$CLAUDE_DIR/settings.json"
   SKILL_DIR="$CLAUDE_DIR/skills/timesheet"
   DASH_SKILL="$CLAUDE_DIR/skills/label-vier-dashboard-api/SKILL.md"
+  GTM_DIR="$CLAUDE_DIR/skills/gtm"
   PLUGINS="$TEST_TMP/plugins"
   mkdir -p "$PLUGINS"
 
@@ -91,8 +92,20 @@ stub_toolchain() {
   stub rtk
   stub toon
   stub basecamp
+  stub_python3
   stub terminal-notifier 'case "$1" in -diagnose) echo "    authorization authorized" ;; esac'
   touch "$PLUGINS/basecamp@37signals"
+}
+
+# python3 for the GTM skill: `python3 -m venv <dir>` only makes <dir>/bin with a
+# pip stub (no network); the venv's own python fails the import check, so pip
+# is always "run".
+stub_python3() {
+  stub python3 'if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
+  mkdir -p "$3/bin"
+  printf "#!/usr/bin/env bash\nprintf \"%%s\\n\" \"pip \$*\" >> \"\$STUB_LOG\"\n" > "$3/bin/pip"
+  chmod +x "$3/bin/pip"
+fi'
 }
 
 # A sandbox where every check passes: tokens present, auto-update "enabled".
@@ -557,6 +570,108 @@ EOF
   assert_output_contains "Up to date, skipped: $DASH_SKILL (version"
 }
 
+# --- the optional GTM/GA4 skill ----------------------------------------------
+
+@test "ai claude install skips the GTM skill when there is no terminal" {
+  stub_toolchain
+  run_ai claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Install the optional Google Tag Manager / GA4 skill (read-only containers and page views)? [Y/n] (no terminal to ask on, skipped)"
+  assert_output_contains "Skipped the GTM skill. Run this install again to add it later."
+  [ ! -e "$GTM_DIR" ]
+  ! grep -qE '^python3 ' "$STUB_LOG"
+}
+
+@test "ai claude install skips the GTM skill on 'n' and carries on" {
+  stub_toolchain
+  run_ai_with '_confirm() { echo "$1 -> n"; return 1; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Install the optional Google Tag Manager / GA4 skill (read-only containers and page views)? -> n"
+  assert_output_contains "Skipped the GTM skill."
+  [ ! -e "$GTM_DIR" ]
+  [ -f "$HOOK" ]
+}
+
+@test "ai claude install installs the GTM skill on 'y', sets up the venv and hints at the key" {
+  stub_toolchain
+  mkdir -p "$HOME/.config/labelvier"
+  echo '{"private_key":"SECRET-KEY-VALUE"}' > "$HOME/.config/labelvier/lv-reporting.json"
+
+  run_ai_with '_confirm() { echo "$1 -> y"; return 0; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Install the optional Google Tag Manager / GA4 skill (read-only containers and page views)? -> y"
+  local tpl="$TPL_DIR/skills/gtm" f
+  cmp -s "$tpl/SKILL.md.tpl" "$GTM_DIR/SKILL.md"
+  cmp -s "$tpl/requirements.txt.tpl" "$GTM_DIR/requirements.txt"
+  for f in gtm_common gtm_check gtm_export ga4_find_property ga4_top_pages; do
+    cmp -s "$tpl/scripts/$f.py.tpl" "$GTM_DIR/scripts/$f.py"
+  done
+  assert_stub_called '^python3 -m venv '"$GTM_DIR"'/.venv$'
+  assert_stub_called '^pip install --quiet -r '"$GTM_DIR"'/requirements.txt$'
+  assert_output_contains "Installed GTM skill dependencies in $GTM_DIR/.venv"
+  assert_output_contains "~/.config/labelvier/lv-reporting.json"
+  assert_output_contains "GTM_SERVICE_ACCOUNT_FILE"
+  # The key is neither copied nor printed.
+  refute_output_contains "SECRET-KEY-VALUE"
+  [ -z "$(find "$GTM_DIR" -name '*.json')" ]
+}
+
+@test "ai claude install only hints when python3 is missing for the GTM skill" {
+  stub_toolchain
+  run_ai_with '_confirm() { return 0; }; type() { if [ "$2" = python3 ]; then return 1; fi; builtin type "$@"; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  [ -f "$GTM_DIR/SKILL.md" ]
+  assert_output_contains "python3 is not installed. The GTM skill needs it"
+  [ ! -e "$GTM_DIR/.venv" ]
+}
+
+@test "ai claude install reports a failed pip for the GTM skill without aborting" {
+  stub_toolchain
+  stub python3 'exit 1'
+  run_ai_with '_confirm() { return 0; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Could not set up the GTM skill's Python environment."
+  assert_output_contains "python3 -m venv $GTM_DIR/.venv && $GTM_DIR/.venv/bin/pip install -r $GTM_DIR/requirements.txt"
+}
+
+@test "ai claude install with a GTM skill already there only refreshes it when outdated" {
+  stub_toolchain
+  mkdir -p "$GTM_DIR/scripts"
+  echo "<!-- labelvier-ai-version: 0 -->" > "$GTM_DIR/SKILL.md"
+  echo "old" > "$GTM_DIR/scripts/gtm_check.py"
+
+  run_ai claude install < /dev/null
+  [ "$status" -eq 0 ]
+  refute_output_contains "Install the optional Google Tag Manager"
+  assert_output_contains "GTM skill is outdated (installed: 0, available: $(template_version "$TPL_DIR/skills/gtm/SKILL.md.tpl")), updating."
+  cmp -s "$TPL_DIR/skills/gtm/SKILL.md.tpl" "$GTM_DIR/SKILL.md"
+  cmp -s "$TPL_DIR/skills/gtm/scripts/gtm_check.py.tpl" "$GTM_DIR/scripts/gtm_check.py"
+
+  # Up to date: left alone, until --force.
+  echo "local edit" > "$GTM_DIR/scripts/gtm_check.py"
+  run_ai claude install < /dev/null
+  assert_output_contains "Up to date, skipped: $GTM_DIR (version"
+  grep -qxF "local edit" "$GTM_DIR/scripts/gtm_check.py"
+
+  run_ai claude install --force < /dev/null
+  cmp -s "$TPL_DIR/skills/gtm/scripts/gtm_check.py.tpl" "$GTM_DIR/scripts/gtm_check.py"
+}
+
+@test "ai check reports the GTM skill as optional, current or outdated" {
+  stub_toolchain
+  run_ai check
+  assert_output_contains "$GTM_DIR (GTM skill, optional, not installed)"
+
+  mkdir -p "$GTM_DIR"
+  cp "$TPL_DIR/skills/gtm/SKILL.md.tpl" "$GTM_DIR/SKILL.md"
+  run_ai check
+  assert_output_contains "✓ $GTM_DIR (GTM skill, version $(template_version "$GTM_DIR/SKILL.md"))"
+
+  echo "<!-- labelvier-ai-version: 0 -->" > "$GTM_DIR/SKILL.md"
+  run_ai check
+  assert_output_contains "(GTM skill) (outdated: installed 0, available $(template_version "$TPL_DIR/skills/gtm/SKILL.md.tpl")"
+}
+
 @test "ai claude install saves pasted tokens in ~/.claude/.env, quoted and 0600" {
   type -P expect >/dev/null 2>&1 || skip "expect is not installed (needed for a pty)"
   stub_toolchain
@@ -580,6 +695,8 @@ EOF
     expect \"Paste your token here\"
     after 300
     send \"dash-key-123\r\"
+    expect \"Install the optional Google Tag Manager\"
+    send \"n\r\"
     expect eof
   "
   [ "$status" -eq 0 ]
@@ -605,6 +722,8 @@ EOF
     expect \"Paste your token here\"
     send \"\r\"
     expect \"Install the optional Label Vier Dashboard skill\"
+    send \"n\r\"
+    expect \"Install the optional Google Tag Manager\"
     send \"n\r\"
     expect eof
   "
@@ -732,6 +851,10 @@ EOF
 
 @test "ai claude uninstall removes everything install set up but keeps CLAUDE.md and the tokens" {
   make_everything_installed
+  # The GTM skill and the user's own service account key.
+  mkdir -p "$GTM_DIR/.venv" "$HOME/.config/labelvier"
+  cp "$TPL_DIR/skills/gtm/SKILL.md.tpl" "$GTM_DIR/SKILL.md"
+  echo '{}' > "$HOME/.config/labelvier/lv-reporting.json"
   echo "# personal" >> "$CLAUDE_DIR/CLAUDE.md"
   echo "@RTK.md" >> "$CLAUDE_DIR/CLAUDE.md"
   : > "$STUB_LOG"
@@ -742,6 +865,7 @@ EOF
   assert_output_contains "Removed $HOOK"
   assert_output_contains "Removed caveman plugin"
   assert_output_contains "Removed $SKILL_DIR"
+  assert_output_contains "Removed $GTM_DIR"
   assert_output_contains "Removed the labelvier snippet from $CLAUDE_DIR/CLAUDE.md"
   assert_output_contains "Removed @RTK.md from $CLAUDE_DIR/CLAUDE.md"
   assert_output_contains "Removed $CLAUDE_DIR/labelvier/GLOBAL.md"
@@ -755,6 +879,8 @@ EOF
   [ "$(hook_entries_in_settings)" = "0" ]
   [ "$(jq '.hooks.PreToolUse // empty' "$SETTINGS")" = "" ]
   [ ! -e "$SKILL_DIR" ]
+  [ ! -e "$GTM_DIR" ]
+  [ -f "$HOME/.config/labelvier/lv-reporting.json" ]
   [ ! -e "$CLAUDE_DIR/labelvier" ]
   [ ! -e "$PLUGINS/caveman@caveman" ]
   [ -f "$CLAUDE_DIR/CLAUDE.md" ]

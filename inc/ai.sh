@@ -27,6 +27,12 @@ ai() (
   local dashboard_skill_dir="$claude_dir/skills/label-vier-dashboard-api"
   local dashboard_skill_tpl="$claude_tpl_dir/skills/label-vier-dashboard-api/SKILL.md.tpl"
 
+  # Claude Code skill for Google Tag Manager / GA4 (read-only): SKILL.md,
+  # requirements and Python scripts, plus a venv created at install time.
+  local gtm_skill_dir="$claude_dir/skills/gtm"
+  local gtm_skill_tpl_dir="$claude_tpl_dir/skills/gtm"
+  local gtm_key_file="$HOME/.config/labelvier/lv-reporting.json"
+
   # Every template carries a "labelvier-ai-version: <n>" stamp. install/check
   # compare it with the installed copy, so outdated files get noticed and
   # refreshed. Bump the stamp in a template whenever its content changes.
@@ -477,6 +483,97 @@ ai() (
       "Create one in the dashboard: Nova → user menu → ${__blue}API keys${__reset} → Create API key (read-only unless the skill should edit contacts)."
   }
 
+  # "target file:template file" pairs of the GTM/GA4 skill.
+  function _gtm_skill_files() {
+    echo "$gtm_skill_dir/SKILL.md:$gtm_skill_tpl_dir/SKILL.md.tpl"
+    echo "$gtm_skill_dir/requirements.txt:$gtm_skill_tpl_dir/requirements.txt.tpl"
+    echo "$gtm_skill_dir/scripts/gtm_common.py:$gtm_skill_tpl_dir/scripts/gtm_common.py.tpl"
+    echo "$gtm_skill_dir/scripts/gtm_check.py:$gtm_skill_tpl_dir/scripts/gtm_check.py.tpl"
+    echo "$gtm_skill_dir/scripts/gtm_export.py:$gtm_skill_tpl_dir/scripts/gtm_export.py.tpl"
+    echo "$gtm_skill_dir/scripts/ga4_find_property.py:$gtm_skill_tpl_dir/scripts/ga4_find_property.py.tpl"
+    echo "$gtm_skill_dir/scripts/ga4_top_pages.py:$gtm_skill_tpl_dir/scripts/ga4_top_pages.py.tpl"
+  }
+
+  # Creates the skill's Python venv and installs its requirements. Never a
+  # hard failure: without python3 or when pip fails, say what to run by hand.
+  function _setup_gtm_venv() {
+    local venv="$gtm_skill_dir/.venv"
+    if ! type -P python3 >/dev/null 2>&1; then
+      echo -e "${__red}python3 is not installed.${__reset} The GTM skill needs it for its scripts. Install Python 3 (${__blue}brew install python${__reset}), then re-run this command."
+      return 0
+    fi
+    if [ -x "$venv/bin/python" ] && "$venv/bin/python" -c 'import googleapiclient, google.auth' >/dev/null 2>&1; then
+      echo -e "${__green}✓${__reset} GTM skill dependencies already installed"
+      return 0
+    fi
+    if python3 -m venv "$venv" && "$venv/bin/pip" install --quiet -r "$gtm_skill_dir/requirements.txt"; then
+      echo -e "${__green}Installed${__reset} GTM skill dependencies in $venv"
+    else
+      echo -e "${__red}Could not set up the GTM skill's Python environment.${__reset} Run it yourself: ${__blue}python3 -m venv $venv && $venv/bin/pip install -r $gtm_skill_dir/requirements.txt${__reset}"
+    fi
+  }
+
+  # Installs the optional GTM/GA4 skill (several files + a venv). When it is
+  # not installed yet, ask first (no terminal = skip). An up-to-date copy is
+  # only overwritten with --force; an outdated one is always refreshed. The
+  # service account key is never copied or read: only its location is hinted.
+  function _install_gtm_skill() {
+    local force="$1" target="$gtm_skill_dir/SKILL.md"
+
+    if [ ! -f "$gtm_skill_tpl_dir/SKILL.md.tpl" ]; then
+      echo -e "${__red}Template not found:${__reset} $gtm_skill_tpl_dir/SKILL.md.tpl"
+      return 1
+    fi
+
+    local file_status
+    file_status=$(_file_status "$target" "$gtm_skill_tpl_dir/SKILL.md.tpl")
+    if [ "$file_status" = "missing" ] && ! _confirm "Install the optional Google Tag Manager / GA4 skill (read-only containers and page views)?"; then
+      echo "Skipped the GTM skill. Run this install again to add it later."
+      return 0
+    fi
+
+    local refresh=0
+    if [ "$file_status" = "ok" ] && [ "$force" -ne 0 ]; then
+      refresh=1
+    elif [ "$file_status" = "outdated" ]; then
+      local old_version
+      old_version=$(_file_version "$target")
+      echo -e "GTM skill is outdated (installed: ${__bold}${old_version:-unversioned}${__reset}, available: ${__bold}$(_file_version "$gtm_skill_tpl_dir/SKILL.md.tpl")${__reset}), updating."
+    fi
+
+    if [ "$refresh" -eq 1 ]; then
+      echo -e "Up to date, skipped: $gtm_skill_dir (version $(_file_version "$target")) ${__blue}(--force to overwrite)${__reset}"
+    else
+      local pair file template
+      while IFS= read -r pair; do
+        file="${pair%%:*}"
+        template="${pair##*:}"
+        if [ ! -f "$template" ]; then
+          echo -e "${__red}Template not found:${__reset} $template"
+          continue
+        fi
+        mkdir -p "$(dirname "$file")"
+        cp "$template" "$file"
+        echo -e "${__green}Installed${__reset} $file"
+      done < <(_gtm_skill_files)
+    fi
+
+    _setup_gtm_venv
+
+    echo
+    echo -e "The GTM skill needs the Google service account key (lv-reporting)."
+    echo -e "Put it in ${__blue}${gtm_key_file/#$HOME/~}${__reset}, or point ${__bold}GTM_SERVICE_ACCOUNT_FILE${__reset} at it. Ask a colleague for it; it never goes in a repo."
+  }
+
+  # Removes the GTM skill directory (incl. venv). The key in
+  # ~/.config/labelvier is the user's own and is left alone.
+  function _remove_gtm_skill() {
+    if [ -d "$gtm_skill_dir" ]; then
+      rm -rf "$gtm_skill_dir"
+      echo -e "${__green}Removed${__reset} $gtm_skill_dir"
+    fi
+  }
+
   # Removes the dashboard skill directory. The key in ~/.claude/.env stays.
   function _remove_dashboard_skill() {
     if [ -d "$dashboard_skill_dir" ]; then
@@ -681,7 +778,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function claude
-  # @description Installs the global GLOBAL.md/CLI.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config (wired into your own CLAUDE.md; BACKEND.md loads LARAVEL.md on demand), the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
+  # @description Installs the global GLOBAL.md/CLI.md/WORDPRESS.md/ANGULAR.md/BACKEND.md config (wired into your own CLAUDE.md; BACKEND.md loads LARAVEL.md on demand), the timesheet skill, the optional dashboard and GTM/GA4 skills, the toon hook, rtk, fa and the caveman plugin. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function claude() {
     case "$1" in
@@ -712,7 +809,7 @@ ai() (
   # Shared between the full doc below and `claude <sub> --help`.
   function _claude_subcommand_description() {
     case "$1" in
-      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the optional dashboard skill, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
+      install) echo -e "${__bold}install${__reset} - Installs config files, the timesheet skill, the optional dashboard and GTM/GA4 skills, the toon hook, rtk, fa and the caveman plugin. Flags: --force, --skip-hook" ;;
       uninstall) echo -e "${__bold}uninstall${__reset} - Removes the toon hook and config files (asks for confirmation)" ;;
       *) echo -e "${__bold}$1${__reset}" ;;
     esac
@@ -784,6 +881,9 @@ ai() (
     _install_dashboard_skill "$force"
 
     echo
+    _install_gtm_skill "$force"
+
+    echo
     _require_rtk
 
     echo
@@ -810,6 +910,7 @@ ai() (
     echo -e "  - the caveman plugin and its marketplace registration, if installed"
     echo -e "  - the timesheet skill ($skill_dir), if installed"
     echo -e "  - the dashboard skill ($dashboard_skill_dir), if installed"
+    echo -e "  - the GTM skill ($gtm_skill_dir, incl. its venv; not your key in ~/.config/labelvier), if installed"
 
     local pair target
     while IFS= read -r pair; do
@@ -829,6 +930,7 @@ ai() (
     _remove_caveman
     _remove_skill
     _remove_dashboard_skill
+    _remove_gtm_skill
 
     # Delegate to rtk's own uninstall rather than reimplementing it — it
     # removes RTK.md, its settings.json hook entry, and usually the @RTK.md
@@ -855,7 +957,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function mistral
-  # @description Sets up Mistral Vibe: the GLOBAL/CLI/WORDPRESS/ANGULAR/BACKEND config in ~/.vibe/AGENTS.md, LARAVEL.md, the timesheet/dashboard/basecamp skills, rtk and caveman. Subcommands: install, uninstall.
+  # @description Sets up Mistral Vibe: the GLOBAL/CLI/WORDPRESS/ANGULAR/BACKEND config in ~/.vibe/AGENTS.md, LARAVEL.md, the timesheet/dashboard/GTM/basecamp skills, rtk and caveman. Subcommands: install, uninstall.
   # ---------------------------------------------------------------------------
   function mistral() {
     case "$1" in
@@ -981,6 +1083,7 @@ ai() (
   function _vibe_skill_links() {
     echo "timesheet:$skill_dir:required"
     echo "label-vier-dashboard-api:$dashboard_skill_dir:optional"
+    echo "gtm:$gtm_skill_dir:optional"
     echo "basecamp:$HOME/.agents/skills/basecamp:optional"
   }
 
@@ -1378,7 +1481,7 @@ ai() (
 
   # ---------------------------------------------------------------------------
   # @function check
-  # @description Checks basecamp, npm, fa, toon, rtk, the caveman plugin, the timesheet and dashboard skills, the Claude Code config and, when present, the Mistral Vibe config.
+  # @description Checks basecamp, npm, fa, toon, rtk, the caveman plugin, the timesheet, dashboard and GTM skills, the Claude Code config and, when present, the Mistral Vibe config.
   # ---------------------------------------------------------------------------
   function check() {
     local output
@@ -1523,6 +1626,16 @@ ai() (
       echo -e "${__red}✗${__reset} $dashboard_skill_dir (dashboard skill) ${__red}(outdated: installed $(_file_version "$dashboard_skill_dir/SKILL.md"), available $(_file_version "$dashboard_skill_tpl"); run: labelvier ai claude install)${__reset}"
     else
       echo -e "${__green}✓${__reset} $dashboard_skill_dir (dashboard skill, version $(_file_version "$dashboard_skill_dir/SKILL.md"))"
+    fi
+
+    local gtm_status
+    gtm_status=$(_file_status "$gtm_skill_dir/SKILL.md" "$gtm_skill_tpl_dir/SKILL.md.tpl")
+    if [ "$gtm_status" = "missing" ]; then
+      echo -e "- $gtm_skill_dir (GTM skill, optional, not installed)"
+    elif [ "$gtm_status" = "outdated" ]; then
+      echo -e "${__red}✗${__reset} $gtm_skill_dir (GTM skill) ${__red}(outdated: installed $(_file_version "$gtm_skill_dir/SKILL.md"), available $(_file_version "$gtm_skill_tpl_dir/SKILL.md.tpl"); run: labelvier ai claude install)${__reset}"
+    else
+      echo -e "${__green}✓${__reset} $gtm_skill_dir (GTM skill, version $(_file_version "$gtm_skill_dir/SKILL.md"))"
     fi
 
     if [ "$dashboard_status" != "missing" ]; then
