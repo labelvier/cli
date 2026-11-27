@@ -1,4 +1,4 @@
-<!-- labelvier-ai-version: 5 -->
+<!-- labelvier-ai-version: 6 -->
 # Label Vier CLI
 
 `labelvier` (shorthand `l4`) is the team's command tool. It is installed on every developer machine. Use it before you script something yourself or click through a hosting panel: releases, deploys, SiteGround sites and backups, GitOps for Laravel, cron, SSH aliases and storage are covered.
@@ -23,7 +23,7 @@ Read that help before you guess flags. Missing arguments are asked for interacti
 | `gitops setup\|deployer\|tests\|status` | GitOps for a Laravel project on SiteGround: merges into `develop` and pushes to `staging` deploy to staging through GitHub Actions and Deployer (see below) |
 | `siteground …` | SiteGround hosting through its API (see below) |
 | `uptime-kuma list\|add\|pause\|resume\|delete\|update` | Monitors on status.labelvier.nl (see below) |
-| `cron deploy <ssh-host>` | Upload `run_cron_jobs.sh` to a SiteGround server and set `DISABLE_WP_CRON` |
+| `cron deploy <ssh-host>` | Upload `run_cron_jobs.sh` to a SiteGround server, set `DISABLE_WP_CRON` and offer to add the cron job |
 | `ssh alias\|list\|search\|remove` | Manage Host aliases in `~/.ssh/config` |
 | `storage summary <host>` | Disk usage on a server; `convert-to-webp <host>` for uploads; `cleanup` for leftover dumps |
 | `migrate start\|staging\|load\|sync-status` | Move a site from a VPS or localhost to SiteGround |
@@ -54,8 +54,8 @@ Credentials and sessions live in `~/.config/labelvier/siteground`. Never print, 
 
 ### Real WordPress cron on SiteGround
 
-1. `labelvier cron deploy <ssh-alias>` uploads the runner and disables WP-Cron.
-2. `labelvier siteground site:cron <domain> --add "/bin/bash /home/customer/run_cron_jobs.sh" --at "*/5 * * * *"`.
+1. `labelvier cron deploy <ssh-alias>` uploads the runner and disables WP-Cron. In a terminal it then asks to add the cron job through SiteGround (and skips it when the site already has it).
+2. Without a terminal there is no question: add the job with `labelvier siteground site:cron <domain> --add "/bin/bash /home/customer/run_cron_jobs.sh" --at "*/5 * * * *"`.
 
 No SSH alias yet? Run `labelvier siteground site:ssh-key <domain>` first.
 
