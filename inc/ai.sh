@@ -513,10 +513,68 @@ ai() (
     fi
   }
 
+  # True when $1 is a readable JSON file with a client_email (a service
+  # account key). Never prints anything, so the key stays out of the output.
+  function _gtm_key_valid() {
+    [ -f "$1" ] || return 1
+    if type -P jq >/dev/null 2>&1; then
+      jq -e '.client_email | strings | length > 0' "$1" >/dev/null 2>&1
+    elif type -P python3 >/dev/null 2>&1; then
+      python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("client_email") else 1)' "$1" >/dev/null 2>&1
+    else
+      grep -q '"client_email"' "$1" 2>/dev/null
+    fi
+  }
+
+  # Makes sure the GTM scripts find the Google service account key (lv-reporting)
+  # at the fixed location. Asks for a path, checks that it is a service account
+  # key and copies it (chmod 600). The contents are never printed, and a missing
+  # terminal, empty answer or invalid file only leads to a hint: the install goes on.
+  function _setup_gtm_key() {
+    local hint="Put the key in ${__blue}${gtm_key_file/#$HOME/~}${__reset} (or point ${__bold}GTM_SERVICE_ACCOUNT_FILE${__reset} at it) before using the skill. Ask a colleague for it; it never goes in a repo."
+
+    echo
+    if _gtm_key_valid "$gtm_key_file"; then
+      echo -e "${__green}✓${__reset} GTM service account key found at ${gtm_key_file/#$HOME/~}"
+      return 0
+    fi
+
+    echo -e "The GTM skill needs the Google service account key (lv-reporting)."
+    local path rc=0
+    path=$(_ask_path "Path to the service account key (Enter to skip) [${gtm_key_file/#$HOME/~}]: ") || rc=$?
+    if [ "$rc" -eq 2 ]; then
+      echo -e "No terminal to ask on. $hint"
+      return 0
+    fi
+    if [ -z "$path" ]; then
+      echo -e "Skipped. $hint"
+      return 0
+    fi
+    path="${path/#\~/$HOME}"
+
+    if [ ! -f "$path" ]; then
+      echo -e "${__red}File not found:${__reset} $path. $hint"
+      return 0
+    fi
+    if ! _gtm_key_valid "$path"; then
+      echo -e "${__red}That is not a service account key${__reset} (no valid JSON with a client_email): $path. $hint"
+      return 0
+    fi
+
+    if [ "$path" -ef "$gtm_key_file" ]; then
+      echo -e "${__green}✓${__reset} GTM service account key found at ${gtm_key_file/#$HOME/~}"
+      return 0
+    fi
+    mkdir -p "$(dirname "$gtm_key_file")"
+    (umask 077; cp "$path" "$gtm_key_file")
+    chmod 600 "$gtm_key_file"
+    echo -e "${__green}Saved${__reset} the key in ${gtm_key_file/#$HOME/~}"
+  }
+
   # Installs the optional GTM/GA4 skill (several files + a venv). When it is
   # not installed yet, ask first (no terminal = skip). An up-to-date copy is
   # only overwritten with --force; an outdated one is always refreshed. The
-  # service account key is never copied or read: only its location is hinted.
+  # service account key is only copied from a path the user gives, never printed.
   function _install_gtm_skill() {
     local force="$1" target="$gtm_skill_dir/SKILL.md"
 
@@ -559,10 +617,7 @@ ai() (
     fi
 
     _setup_gtm_venv
-
-    echo
-    echo -e "The GTM skill needs the Google service account key (lv-reporting)."
-    echo -e "Put it in ${__blue}${gtm_key_file/#$HOME/~}${__reset}, or point ${__bold}GTM_SERVICE_ACCOUNT_FILE${__reset} at it. Ask a colleague for it; it never goes in a repo."
+    _setup_gtm_key
   }
 
   # Removes the GTM skill directory (incl. venv). The key in

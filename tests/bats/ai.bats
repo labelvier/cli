@@ -616,6 +616,93 @@ EOF
   [ -z "$(find "$GTM_DIR" -name '*.json')" ]
 }
 
+# The key question: _ask_path is overridden to give the answer, as
+# there is no terminal in the tests. The key's contents must never be printed.
+gtm_key_json() {
+  printf '{"type":"service_account","client_email":"lv@example.iam.gserviceaccount.com","private_key":"SECRET-KEY-VALUE"}\n' > "$1"
+}
+
+@test "ai claude install copies a valid service account key from the given path (mode 600)" {
+  stub_toolchain
+  local src="$BATS_TEST_TMPDIR/downloads/key.json"
+  mkdir -p "$(dirname "$src")"
+  gtm_key_json "$src"
+
+  run_ai_with '_confirm() { return 0; }; _ask_path() { echo "'"$src"'"; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  local dest="$HOME/.config/labelvier/lv-reporting.json"
+  cmp -s "$src" "$dest"
+  [ "$(stat -f '%Lp' "$dest" 2>/dev/null || stat -c '%a' "$dest")" = "600" ]
+  assert_output_contains "Saved the key in ~/.config/labelvier/lv-reporting.json"
+  refute_output_contains "SECRET-KEY-VALUE"
+}
+
+@test "ai claude install expands ~ in the key path" {
+  stub_toolchain
+  gtm_key_json "$HOME/mykey.json"
+
+  run_ai_with '_confirm() { return 0; }; _ask_path() { echo "~/mykey.json"; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  cmp -s "$HOME/mykey.json" "$HOME/.config/labelvier/lv-reporting.json"
+}
+
+@test "ai claude install does not ask when a valid key is already in place" {
+  stub_toolchain
+  mkdir -p "$HOME/.config/labelvier"
+  gtm_key_json "$HOME/.config/labelvier/lv-reporting.json"
+
+  run_ai_with '_confirm() { return 0; }; _ask_path() { echo "ASKED"; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "GTM service account key found at ~/.config/labelvier/lv-reporting.json"
+  refute_output_contains "ASKED"
+  refute_output_contains "SECRET-KEY-VALUE"
+}
+
+@test "ai claude install carries on when the key path does not exist" {
+  stub_toolchain
+  run_ai_with '_confirm() { return 0; }; _ask_path() { echo "/nonexistent/key.json"; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "File not found: /nonexistent/key.json"
+  [ ! -e "$HOME/.config/labelvier/lv-reporting.json" ]
+  [ -f "$GTM_DIR/SKILL.md" ]
+  [ -f "$HOOK" ]
+}
+
+@test "ai claude install rejects a key file that is not valid JSON or has no client_email" {
+  stub_toolchain
+  local bad="$BATS_TEST_TMPDIR/bad.json"
+  echo 'not json, SECRET-KEY-VALUE' > "$bad"
+  run_ai_with '_confirm() { return 0; }; _ask_path() { echo "'"$bad"'"; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "That is not a service account key"
+  refute_output_contains "SECRET-KEY-VALUE"
+  [ ! -e "$HOME/.config/labelvier/lv-reporting.json" ]
+
+  echo '{"private_key":"SECRET-KEY-VALUE"}' > "$bad"
+  run_ai_with '_confirm() { return 0; }; _ask_path() { echo "'"$bad"'"; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "That is not a service account key"
+  refute_output_contains "SECRET-KEY-VALUE"
+  [ ! -e "$HOME/.config/labelvier/lv-reporting.json" ]
+}
+
+@test "ai claude install skips the key question on empty input" {
+  stub_toolchain
+  run_ai_with '_confirm() { return 0; }; _ask_path() { echo ""; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "Skipped. Put the key in ~/.config/labelvier/lv-reporting.json"
+  [ ! -e "$HOME/.config/labelvier/lv-reporting.json" ]
+}
+
+@test "ai claude install only hints at the key when there is no terminal" {
+  stub_toolchain
+  run_ai_with '_confirm() { return 0; }' claude install < /dev/null
+  [ "$status" -eq 0 ]
+  assert_output_contains "No terminal to ask on. Put the key in ~/.config/labelvier/lv-reporting.json"
+  assert_output_contains "GTM_SERVICE_ACCOUNT_FILE"
+  [ ! -e "$HOME/.config/labelvier/lv-reporting.json" ]
+}
+
 @test "ai claude install only hints when python3 is missing for the GTM skill" {
   stub_toolchain
   run_ai_with '_confirm() { return 0; }; type() { if [ "$2" = python3 ]; then return 1; fi; builtin type "$@"; }' claude install < /dev/null

@@ -186,6 +186,15 @@ function _confirm() {
   esac
 }
 
+# Asks for a file path on the terminal (prompt on stderr, the answer on stdout).
+# $1 is the prompt. Returns 2 when there is no terminal to ask on.
+function _ask_path() {
+  (: < /dev/tty) 2>/dev/null || return 2
+  local answer
+  read -r -p "$1" answer < /dev/tty
+  echo "$answer"
+}
+
 # nvm is a shell function, not a binary, so look for its script and source it
 # into this shell (that also puts nvm's default Node on PATH). Homebrew's nvm
 # lives outside NVM_DIR and is only loaded by the source line in the shell
