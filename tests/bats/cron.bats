@@ -9,8 +9,28 @@ setup() {
   stub ssh 'case "$*" in *find*) echo /home/customer/www/example.com/public_html ;; esac'
   stub scp
   stub rsync
+  # SiteGround: no cron jobs yet, adding one succeeds.
+  stub siteground-stub 'case "$*" in *--json*) echo "[]" ;; esac'
+  export CRON_SITEGROUND=siteground-stub
 }
 teardown() { teardown_sandbox; }
+
+# Runs the CLI without a controlling terminal, so _confirm cannot ask.
+run_cli() {
+  run perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' "$CLI" "$@" < /dev/null
+}
+
+# Runs `cron <args>` without a terminal after eval-ing <code> (an override of _confirm).
+run_cron_with() {
+  local code="$1"
+  shift
+  run perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' \
+    bash -c 'source "$1"; load_cli; eval "$2"; shift 2; cron "$@"' _ \
+    "$CLI_ROOT/tests/bats/test_helper.bash" "$code" "$@" < /dev/null
+}
+
+YES='_confirm() { echo "$1 -> y"; return 0; }'
+NO='_confirm() { echo "$1 -> n"; return 1; }'
 
 @test "bare cron prints its documentation" {
   run_cli cron
@@ -66,6 +86,55 @@ teardown() { teardown_sandbox; }
   [ "$status" -eq 0 ]
   assert_output_contains "Success!"
   assert_output_contains "*/5 * * * * /bin/bash /home/customer/run_cron_jobs.sh"
+}
+
+@test "cron deploy without a terminal skips the SiteGround question and prints the line" {
+  run_cli cron deploy myhost
+  [ "$status" -eq 0 ]
+  assert_output_contains "Add this cron job to example.com through SiteGround now? [Y/n] (no terminal to ask on, skipped)"
+  assert_output_contains "Add the following cronjob to the server:"
+  refute_stub_called '^siteground-stub'
+}
+
+@test "cron deploy adds the cron job through SiteGround on yes" {
+  run_cron_with "$YES" deploy myhost
+  [ "$status" -eq 0 ]
+  assert_output_contains "Add this cron job to example.com through SiteGround now? -> y"
+  assert_stub_called '^siteground-stub site:cron example\.com --json$'
+  assert_stub_called '^siteground-stub site:cron example\.com --add /bin/bash /home/customer/run_cron_jobs\.sh --at \*/5 \* \* \* \*$'
+  refute_output_contains "Add the following cronjob to the server:"
+}
+
+@test "cron deploy does not touch SiteGround on no and prints the line" {
+  run_cron_with "$NO" deploy myhost
+  [ "$status" -eq 0 ]
+  refute_stub_called '^siteground-stub'
+  assert_output_contains "Add the following cronjob to the server:"
+}
+
+@test "cron deploy does not add the cron job twice" {
+  stub siteground-stub 'case "$*" in *--json*) echo "[{\"cmd\": \"/bin/bash /home/customer/run_cron_jobs.sh\"}]" ;; esac'
+  run_cron_with "$YES" deploy myhost
+  [ "$status" -eq 0 ]
+  assert_output_contains "example.com already runs /bin/bash /home/customer/run_cron_jobs.sh, nothing added."
+  refute_stub_called '--add'
+}
+
+@test "cron deploy falls back to the line when SiteGround cannot list the cron jobs" {
+  stub siteground-stub 'exit 1'
+  run_cron_with "$YES" deploy myhost
+  [ "$status" -eq 0 ]
+  assert_output_contains "Could not read the cron jobs of example.com."
+  refute_stub_called '--add'
+  assert_output_contains "*/5 * * * * /bin/bash /home/customer/run_cron_jobs.sh"
+}
+
+@test "cron deploy falls back to the line when adding fails" {
+  stub siteground-stub 'case "$*" in *--json*) echo "[]" ;; *) exit 1 ;; esac'
+  run_cron_with "$YES" deploy myhost
+  [ "$status" -eq 0 ]
+  assert_output_contains "Adding the cron job to example.com failed."
+  assert_output_contains "Add the following cronjob to the server:"
 }
 
 @test "cron deploy stops when no project folder is found on the host" {

@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `ai claude install` offers the optional GTM/GA4 skill (`gtm`): read-only scripts for Google Tag Manager containers and GA4 page views, via the `lv-reporting` service account. It is asked first (skipped without a terminal), installed in `~/.claude/skills/gtm` with its own Python venv (a missing `python3` or a failed `pip` only gives a hint), refreshed when outdated and overwritten only with `--force`. The service account key is not shipped: it belongs in `~/.config/labelvier/lv-reporting.json` (or `GTM_SERVICE_ACCOUNT_FILE`). `ai check` reports the skill, `ai claude uninstall` removes it (not the key) and `ai mistral install` links it as an optional skill.
 
+## [1.10.0] - 2026-11-27
+
+### Added
+- `cron deploy` asks, after uploading the runner, to add the `*/5 * * * * /bin/bash /home/customer/run_cron_jobs.sh` cron job through `labelvier siteground site:cron`. It skips the job when the site already has it. Without a terminal, when you answer no or when SiteGround fails, it prints the line to add by hand, as before.
+
+### Changed
+- The `CLI.md` instructions for AI agents (version 6) describe this. Run `labelvier ai update` to get them.
+
 ## [1.9.3] - 2026-11-24
 
 ### Fixed
